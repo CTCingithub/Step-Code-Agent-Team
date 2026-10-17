@@ -93,7 +93,10 @@ export class MemberRpc {
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
 			shell: false,
-			stdio: ["ignore", "pipe", "pipe"],
+			// stdin MUST be a pipe: the RPC protocol drives the member over it.
+			// ("ignore" points the child's stdin at /dev/null, so prompt writes
+			// silently vanish and the member exits on EOF.)
+			stdio: ["pipe", "pipe", "pipe"],
 			...(env ? { env: { ...process.env, ...env } } : {}),
 		});
 		const rpc = new MemberRpc(proc, handlers);
