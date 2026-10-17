@@ -16,6 +16,13 @@ import * as net from "node:net";
 import * as path from "node:path";
 import type { TeamManager } from "./members.ts";
 
+/** Opt-in diagnostics for the messaging layer (set STEPCODE_TEAM_DEBUG=1). */
+const DEBUG = process.env.STEPCODE_TEAM_DEBUG === "1" || process.env.STEPCODE_TEAM_DEBUG === "true";
+
+function debugLog(...args: unknown[]): void {
+	if (DEBUG) console.error("[stepcode-team]", ...args);
+}
+
 export class TeamServer {
 	private server: net.Server | null = null;
 
@@ -45,14 +52,24 @@ export class TeamServer {
 					if (line.trim()) void this.handle(conn, line);
 				}
 			});
-			conn.on("error", () => {
-				/* member hung up; nothing to clean up per-connection */
+			conn.on("error", (err: Error) => {
+				// Member hung up mid-request; nothing to clean up per-connection.
+				debugLog("connection error:", err.message);
 			});
 		});
-		this.server.on("error", () => {
-			/* keep the leader alive even if the socket misbehaves */
+		this.server.on("error", (err: Error) => {
+			// Keep the leader alive even if the socket misbehaves, but leave a
+			// trace: a silent listen() failure would break messaging invisibly.
+			debugLog("server error:", err.message);
 		});
-		this.server.listen(this.socketPath);
+		this.server.listen(this.socketPath, () => {
+			try {
+				// Only the owner may drive members (the socket spends the owner's quota).
+				fs.chmodSync(this.socketPath, 0o600);
+			} catch (err) {
+				debugLog("chmod socket failed:", err instanceof Error ? err.message : String(err));
+			}
+		});
 	}
 
 	stop(): void {

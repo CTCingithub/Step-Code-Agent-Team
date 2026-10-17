@@ -18,6 +18,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface AgentPreset {
 	name: string;
@@ -30,8 +31,9 @@ export interface AgentPreset {
 /** Absolute path of the directory containing this extension's modules. */
 export function extensionDir(): string {
 	try {
-		// ESM (jiti default for .ts entry points)
-		return path.dirname(new URL(import.meta.url).pathname);
+		// ESM (jiti default for .ts entry points). fileURLToPath (not
+		// URL.pathname) so paths with spaces or non-ASCII survive.
+		return path.dirname(fileURLToPath(import.meta.url));
 	} catch {
 		// CJS fallback
 		return eval("__dirname") as string;

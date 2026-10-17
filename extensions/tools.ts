@@ -9,8 +9,8 @@
 import { Type } from "typebox";
 import { StringEnum } from "@step-harness/providers";
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
-import type { TeamManager } from "./members.ts";
-import { emptyUsage, type MemberUsage } from "./registry.ts";
+import type { SendOptions, TeamManager } from "./members.ts";
+import type { MemberUsage } from "./registry.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
 
 type GetManager = (ctx: ExtensionContext) => TeamManager;
@@ -26,9 +26,21 @@ function formatUsage(usage: MemberUsage): string {
 
 const PER_TASK_OUTPUT_CAP = 50 * 1024;
 
-/** Cumulative team spend threshold (USD) above which responses carry a warning. */
+/**
+ * Cumulative team spend threshold (USD) above which responses carry a warning.
+ * `STEPCODE_TEAM_COST_WARN` overrides the default (1); an explicit 0 disables
+ * the guardrail; invalid values fall back to the default.
+ */
 function costWarning(cost: number): string {
-	const threshold = Number.parseFloat(process.env.STEPCODE_TEAM_COST_WARN ?? "") || 1;
+	const raw = process.env.STEPCODE_TEAM_COST_WARN;
+	let threshold = 1;
+	if (raw !== undefined && raw.trim() !== "") {
+		const parsed = Number.parseFloat(raw);
+		if (Number.isFinite(parsed)) {
+			if (parsed <= 0) return "";
+			threshold = parsed;
+		}
+	}
 	if (cost < threshold) return "";
 	return `\n\n[cost guardrail] Team spend has reached $${cost.toFixed(4)} (threshold $${threshold.toFixed(2)}). Consider disbanding idle members or finishing up.`;
 }
@@ -37,7 +49,7 @@ function truncateOutput(text: string): string {
 	const byteLength = Buffer.byteLength(text, "utf8");
 	if (byteLength <= PER_TASK_OUTPUT_CAP) return text;
 	const truncated = text.slice(0, PER_TASK_OUTPUT_CAP);
-	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. Full output preserved in tool details.]`;
+	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. The full text is in the tool result details (fullText).]`;
 }
 
 export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): void {
@@ -105,11 +117,26 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		}),
 		renderCall: renderTeamCall("team_send"),
 		renderResult: renderTeamResult("team_send"),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const manager = getManager(ctx);
 
+			if (params.taskId && params.mode === "oneshot") {
+				throw new Error('team_send: taskId and mode "oneshot" are mutually exclusive.');
+			}
+
+			const options: SendOptions = {
+				signal,
+				onProgress: onUpdate
+					? (text) =>
+							onUpdate({
+								content: [{ type: "text", text: text || "(member is working...)" }],
+								details: { teamId: manager.teamId, member: params.member, streaming: true },
+							})
+					: undefined,
+			};
+
 			if (params.taskId) {
-				const { task, text } = await manager.startTask(params.taskId, params.member, params.message);
+				const { task, text } = await manager.startTask(params.taskId, params.member, params.message, options);
 				return {
 					content: [
 						{
@@ -121,14 +148,14 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 							].join("\n"),
 						},
 					],
-					details: { teamId: manager.teamId, task, member: params.member },
+					details: { teamId: manager.teamId, task, member: params.member, fullText: text },
 				};
 			}
 
 			const result =
 				params.mode === "oneshot"
-					? await manager.sendOneshot(params.member, params.message)
-					: await manager.sendMessage(params.member, params.message);
+					? await manager.sendOneshot(params.member, params.message, options)
+					: await manager.sendMessage(params.member, params.message, options);
 			return {
 				content: [
 					{
@@ -141,7 +168,13 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 						].join("\n"),
 					},
 				],
-				details: { teamId: manager.teamId, member: result.member, usage: result.usage, resumed: result.resumed },
+				details: {
+					teamId: manager.teamId,
+					member: result.member,
+					usage: result.usage,
+					resumed: result.resumed,
+					fullText: result.text,
+				},
 			};
 		},
 	});
@@ -171,7 +204,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		}),
 		renderCall: renderTeamCall("team_task"),
 		renderResult: renderTeamResult("team_task"),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const manager = getManager(ctx);
 
 			if (params.action === "create") {
@@ -213,7 +246,17 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 			if (!params.id) throw new Error(`team_task ${params.action} requires a task id.`);
 
 			if (params.action === "start") {
-				const { task, text } = await manager.startTask(params.id, params.assignee);
+				const options: SendOptions = {
+					signal,
+					onProgress: onUpdate
+						? (text) =>
+								onUpdate({
+									content: [{ type: "text", text: text || "(member is working...)" }],
+									details: { teamId: manager.teamId, streaming: true },
+								})
+						: undefined,
+				};
+				const { task, text } = await manager.startTask(params.id, params.assignee, undefined, options);
 				return {
 					content: [
 						{
@@ -221,7 +264,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 							text: [`Task ${task.id} [${task.status}] @${task.assignee}:`, "", truncateOutput(text || "(no output)")].join("\n"),
 						},
 					],
-					details: { teamId: manager.teamId, task },
+					details: { teamId: manager.teamId, task, fullText: text },
 				};
 			}
 
