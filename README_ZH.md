@@ -115,7 +115,9 @@ printf '{"id":"1","type":"get_state"}\n' \
   | grep '\[smoke\]'
 ```
 
-（将 `smoke-phase1.ts` 换成 `smoke-phase2.ts` / `smoke-phase3.ts` 即对应任务板与消息探针。）全部在 `sandbox/` 内运行，与真实 `~/.stepcode` 状态隔离。涉及模型调用的路径按下方清单在沙箱会话中人工验证。
+（将 `smoke-phase1.ts` 换成 `smoke-phase2.ts` / `smoke-phase3.ts` 即对应任务板与消息探针。）全部在 `sandbox/` 内运行，与真实 `~/.stepcode` 状态隔离。
+
+> **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 
 ## 许可证
 
@@ -125,7 +127,7 @@ MIT — 见 [LICENSE](LICENSE)。
 
 开发计划 Phase 0–5 已全部实现。协议层行为（spawn、握手、注册表持久化、任务图、
 socket 往返）已由零 token 冒烟探针（`sandbox/smoke-phase*.ts`）验证通过。
-涉及模型调用的路径请按以下步骤由你本人在沙箱中验证：
+涉及模型调用的路径已在沙箱内用测试 key 验证通过（成员回复、同进程上下文记忆、按 session-id 重启恢复、经 shim 的成员间直达消息、队长工具调用端到端链路）。以下命令可供人工复验：
 
 ```bash
 # 1. 启动沙箱会话（先设置密钥）

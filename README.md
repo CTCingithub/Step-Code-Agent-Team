@@ -120,8 +120,11 @@ printf '{"id":"1","type":"get_state"}\n' \
 
 (swap `smoke-phase1.ts` for `smoke-phase2.ts` / `smoke-phase3.ts` for the task
 board and messaging probes). Everything runs inside `sandbox/`, isolated from
-your real `~/.stepcode` state. Model-touching paths are validated manually in a
-sandbox session — see the checklist in README_ZH.md.
+your real `~/.stepcode` state.
+
+> **Headless runs:** `step -p` blocks tools that spawn processes or modify the
+> workspace unless a permission preset is configured. For unattended runs, add
+> `--approval-mode auto` (or `--non-interactive-approval allow`).
 
 ## License
 
@@ -129,8 +132,12 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-Phases 0–5 of the development plan are implemented. Protocol-level behavior
-(spawn, handshake, registry persistence, task graph, socket round-trip) is
-validated by zero-token smoke probes (`sandbox/smoke-phase*.ts`). Model-touching
-paths (real prompts, message dispatch, resume-after-restart) are validated by
-running a session — see `README_ZH.md` for the exact commands.
+Phases 0–5 of the development plan are implemented and validated:
+
+- **Protocol layer** (zero-token smoke probes, `sandbox/smoke-phase*.ts`):
+  spawn, handshake, registry persistence, task graph, socket round-trip,
+  preset loading.
+- **Model-touching paths** (validated in the sandbox with a test key): member
+  replies, context memory within a live member, resume after respawn via
+  session id, member-to-member messaging through the shim, and end-to-end
+  leader tool-calling (`team_create_member` → `team_send` → verbatim reply).
