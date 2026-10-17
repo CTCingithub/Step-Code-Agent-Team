@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Local dev sandbox (isolated agent dir, sessions, throwaway project)
+sandbox/
+
+# Local agent state (session plans, local config)
+.stepcode/
+
+# Logs and OS files
+*.log
+.DS_Store
