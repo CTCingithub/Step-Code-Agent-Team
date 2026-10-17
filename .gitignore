@@ -7,6 +7,9 @@ sandbox/
 # Local agent state (session plans, local config)
 .stepcode/
 
+# Local credentials (test API keys — never commit)
+local/
+
 # Logs and OS files
 *.log
 .DS_Store
