@@ -59,7 +59,8 @@ export class MemberRpc {
 	private handshakeDone = false;
 	private handshakeWaiters: Array<() => void> = [];
 	private settleWaiters: Array<() => void> = [];
-	private closeWaiters: Array<(code: number | null) => void> = [];
+	private closeWaiters = new Set<(code: number | null) => void>();
+	private interimListeners = new Set<(text: string) => void>();
 	private lastAssistantText = "";
 	private usage: MemberUsage = emptyUsage();
 
@@ -100,7 +101,13 @@ export class MemberRpc {
 			...(env ? { env: { ...process.env, ...env } } : {}),
 		});
 		const rpc = new MemberRpc(proc, handlers);
-		await rpc.waitForHandshake();
+		try {
+			await rpc.waitForHandshake();
+		} catch (err) {
+			// Never leave an orphaned process behind on a failed handshake.
+			rpc.kill();
+			throw err;
+		}
 		return rpc;
 	}
 
@@ -161,7 +168,10 @@ export class MemberRpc {
 					}
 					for (const part of msg.content ?? []) {
 						const p = part as { type?: string; text?: string };
-						if (p.type === "text" && p.text) this.lastAssistantText = p.text;
+						if (p.type === "text" && p.text) {
+							this.lastAssistantText = p.text;
+							for (const listener of this.interimListeners) listener(p.text);
+						}
 					}
 				}
 				break;
@@ -191,16 +201,32 @@ export class MemberRpc {
 		this.markHandshake();
 		this.flushSettleWaiters();
 		const closeWaiters = this.closeWaiters;
-		this.closeWaiters = [];
+		this.closeWaiters = new Set();
 		for (const w of closeWaiters) w(code);
 	}
 
-	/** Resolves when the member process exits; rejects never. */
-	waitForClose(): Promise<number | null> {
-		if (this.closed) return Promise.resolve(null);
-		return new Promise((resolve) => {
-			this.closeWaiters.push(resolve);
+	/**
+	 * Resolves when the member process exits; rejects never.
+	 * Returns a cancel handle so callers deregister after a lost race instead
+	 * of leaking a waiter for the process lifetime.
+	 */
+	waitForClose(): { promise: Promise<number | null>; cancel: () => void } {
+		if (this.closed) return { promise: Promise.resolve(null), cancel: () => {} };
+		let resolve!: (code: number | null) => void;
+		const promise = new Promise<number | null>((r) => {
+			resolve = r;
 		});
+		const waiter = (code: number | null) => resolve(code);
+		this.closeWaiters.add(waiter);
+		return { promise, cancel: () => this.closeWaiters.delete(waiter) };
+	}
+
+	/** Subscribe to interim assistant text during a run. Returns an unsubscribe fn. */
+	onInterim(listener: (text: string) => void): () => void {
+		this.interimListeners.add(listener);
+		return () => {
+			this.interimListeners.delete(listener);
+		};
 	}
 
 	private failPending(err: Error): void {
@@ -212,7 +238,8 @@ export class MemberRpc {
 	}
 
 	private waitForHandshake(): Promise<void> {
-		if (this.handshakeDone || this.closed) return Promise.resolve();
+		if (this.handshakeDone) return Promise.resolve();
+		if (this.closed) return Promise.reject(new Error("member process exited before handshake completed"));
 		return new Promise((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.handshakeWaiters = this.handshakeWaiters.filter((w) => w !== done);
@@ -247,9 +274,16 @@ export class MemberRpc {
 		});
 	}
 
-	/** Send a prompt and wait until the agent run is fully settled. Returns the text and the usage delta of this run. */
-	async promptAndSettle(message: string): Promise<{ text: string; usage: MemberUsage }> {
+	/**
+	 * Send a prompt and wait until the agent run is fully settled.
+	 * Returns the final text and the usage delta of this run.
+	 * `signal` cooperatively aborts the member run (docs/rpc.md `abort`).
+	 */
+	async promptAndSettle(message: string, signal?: AbortSignal): Promise<{ text: string; usage: MemberUsage }> {
 		if (this.closed) throw new Error("member process is not running");
+		if (signal?.aborted) throw new Error("member run aborted before start");
+		// Never leak the previous run's text into this one.
+		this.lastAssistantText = "";
 		const usageBefore = { ...this.usage };
 		const settleWaiter = new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(() => {
@@ -262,16 +296,30 @@ export class MemberRpc {
 			};
 			this.settleWaiters.push(done);
 		});
-		// If the member dies mid-run, the close handler rejects pending requests;
-		// surface that here too by racing a close promise.
-		const closeWaiter = this.waitForClose().then((code) => {
+		// If the member dies mid-run, surface that via a close race.
+		const close = this.waitForClose();
+		const closeWaiter = close.promise.then((code) => {
 			throw new Error(`member process exited during run (code ${code ?? "null"})`);
+		});
+		// Leader-side cancellation: ask the member to stop, then fail the run.
+		let removeAbortListener = (): void => {};
+		const abortWaiter = new Promise<never>((_resolve, reject) => {
+			if (!signal) return;
+			const onAbort = () => {
+				this.abortRun();
+				reject(new Error("member run aborted by leader"));
+			};
+			signal.addEventListener("abort", onAbort, { once: true });
+			removeAbortListener = () => signal.removeEventListener("abort", onAbort);
 		});
 		try {
 			await this.send({ type: "prompt", message });
-			await Promise.race([settleWaiter, closeWaiter]);
+			await Promise.race([settleWaiter, closeWaiter, abortWaiter]);
 		} finally {
+			removeAbortListener();
+			close.cancel();
 			closeWaiter.catch(() => {});
+			abortWaiter.catch(() => {});
 		}
 		return { text: this.lastAssistantText, usage: usageDelta(usageBefore, this.usage) };
 	}
@@ -295,5 +343,24 @@ export class MemberRpc {
 		setTimeout(() => {
 			if (!this.proc.killed) this.proc.kill("SIGKILL");
 		}, 5000).unref();
+	}
+
+	/**
+	 * Hard shutdown that waits (bounded) for the process to actually exit.
+	 * Used after a failed run so the next dispatch cannot overlap with a
+	 * still-live process that shares the same session id.
+	 */
+	async killAndWait(timeoutMs = 3000): Promise<void> {
+		if (this.closed) return;
+		if (!this.proc.killed) this.proc.kill("SIGTERM");
+		const close = this.waitForClose();
+		let timer: NodeJS.Timeout;
+		const timeout = new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, timeoutMs);
+		});
+		await Promise.race([close.promise, timeout]);
+		clearTimeout(timer);
+		close.cancel();
+		if (!this.closed && !this.proc.killed) this.proc.kill("SIGKILL");
 	}
 }

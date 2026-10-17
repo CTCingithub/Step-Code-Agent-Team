@@ -46,6 +46,13 @@ export interface SendResult {
 	resumed: boolean;
 }
 
+export interface SendOptions {
+	/** Leader-side cancellation (Esc). */
+	signal?: AbortSignal;
+	/** Interim member text, for streaming tool updates. */
+	onProgress?: (text: string) => void;
+}
+
 export interface CreateTaskParams {
 	title: string;
 	detail?: string;
@@ -67,6 +74,10 @@ export class TeamManager {
 	private inFlight = 0;
 	private slotWaiters: Array<() => void> = [];
 	private lastActivity = new Map<string, number>();
+	/** Serializes createMember per member name (prevents duplicate records). */
+	private memberLocks = new Map<string, Promise<unknown>>();
+	/** Dedupes concurrent spawns of the same member (same session id). */
+	private spawning = new Map<string, Promise<MemberRpc>>();
 
 	private constructor(
 		private reg: TeamRegistry,
@@ -133,6 +144,8 @@ export class TeamManager {
 		const reaped: string[] = [];
 		for (const member of this.reg.members) {
 			if (member.status !== "idle") continue;
+			// A queued dispatch is about to use this member; don't reap it.
+			if (this.queues.has(member.name)) continue;
 			const last = this.lastActivity.get(member.name) ?? 0;
 			if (now - last < maxIdleMs) continue;
 			const rpc = this.rpcs.get(member.name);
@@ -155,7 +168,26 @@ export class TeamManager {
 				`Invalid member name "${params.name}". Use lowercase letters, digits, "-" or "_", starting with a letter (max 32 chars).`,
 			);
 		}
+		// Serialize per name: two concurrent creates must not both append a record.
+		return this.withMemberLock(name, () => this.createMemberLocked(name, params));
+	}
 
+	private withMemberLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+		const prev = this.memberLocks.get(name) ?? Promise.resolve();
+		const run = prev
+			.catch(() => {})
+			.then(() => fn())
+			.finally(() => {
+				if (this.memberLocks.get(name) === run) this.memberLocks.delete(name);
+			});
+		this.memberLocks.set(name, run);
+		return run;
+	}
+
+	private async createMemberLocked(
+		name: string,
+		params: CreateMemberParams,
+	): Promise<{ member: MemberRecord; created: boolean }> {
 		const existing = this.findMember(name);
 		if (existing) {
 			// Idempotent: ensure it is alive, but never duplicate.
@@ -235,10 +267,27 @@ export class TeamManager {
 		return args;
 	}
 
-	private async ensureLive(member: MemberRecord): Promise<MemberRpc> {
+	/**
+	 * Returns a live member process, spawning at most one per member name.
+	 * Concurrent callers (e.g. createMember and sendMessage racing inside one
+	 * tool batch) join the same in-flight spawn instead of starting duplicate
+	 * processes that would share one session id.
+	 */
+	private ensureLive(member: MemberRecord): Promise<MemberRpc> {
 		const existing = this.rpcs.get(member.name);
-		if (existing && !existing.isClosed()) return existing;
+		if (existing && !existing.isClosed()) return Promise.resolve(existing);
 
+		const inFlight = this.spawning.get(member.name);
+		if (inFlight) return inFlight;
+
+		const run = this.doSpawn(member).finally(() => {
+			if (this.spawning.get(member.name) === run) this.spawning.delete(member.name);
+		});
+		this.spawning.set(member.name, run);
+		return run;
+	}
+
+	private async doSpawn(member: MemberRecord): Promise<MemberRpc> {
 		fs.mkdirSync(memberSessionsDir(this.reg.teamId), { recursive: true });
 		const handlers: MemberRpcHandlers = {
 			onClose: () => {
@@ -252,6 +301,12 @@ export class TeamManager {
 		const rpc = await MemberRpc.spawn(this.buildSpawnArgs(member), this.cwd, handlers, {
 			STEPCODE_TEAM_SOCK: this.socketPath,
 		});
+		// Defensive: another spawn may have won while we were awaiting.
+		const existing = this.rpcs.get(member.name);
+		if (existing && !existing.isClosed()) {
+			rpc.kill();
+			return existing;
+		}
 		this.rpcs.set(member.name, rpc);
 		this.touch(member.name);
 		member.pid = rpc.pid;
@@ -260,7 +315,7 @@ export class TeamManager {
 		return rpc;
 	}
 
-	async sendMessage(name: string, message: string): Promise<SendResult> {
+	async sendMessage(name: string, message: string, options: SendOptions = {}): Promise<SendResult> {
 		const member = this.findMember(name);
 		if (!member) {
 			const available = this.reg.members.map((m) => m.name).join(", ") || "none";
@@ -268,24 +323,31 @@ export class TeamManager {
 		}
 
 		// Per-member serialization: prompts to one member run one at a time;
-		// parallelism happens across members.
+		// parallelism happens across members. A failed predecessor must not
+		// poison the queue, hence the catch before chaining.
 		const prev = this.queues.get(name) ?? Promise.resolve();
-		const run = prev.then(() => this.dispatch(member, message)).finally(() => {
-			if (this.queues.get(name) === run) this.queues.delete(name);
-		});
+		const run = prev
+			.catch(() => {})
+			.then(() => this.dispatch(member, message, options))
+			.finally(() => {
+				if (this.queues.get(name) === run) this.queues.delete(name);
+			});
 		this.queues.set(name, run);
 		return run;
 	}
 
-	private async dispatch(member: MemberRecord, message: string): Promise<SendResult> {
+	private async dispatch(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {
+		const signal = options.signal;
+		if (signal?.aborted) throw new Error("member dispatch aborted before start");
 		const wasDead = !this.rpcs.get(member.name) || this.rpcs.get(member.name)!.isClosed();
 		const rpc = await this.ensureLive(member);
 		this.touch(member.name);
 		member.status = "running";
 		this.save();
 		await this.acquireSlot();
+		const unsubscribe = options.onProgress ? rpc.onInterim(options.onProgress) : () => {};
 		try {
-			const { text, usage } = await rpc.promptAndSettle(message);
+			const { text, usage } = await rpc.promptAndSettle(message, signal);
 			member.usage = addUsage(member.usage, usage);
 			member.status = "idle";
 			this.save();
@@ -293,8 +355,14 @@ export class TeamManager {
 		} catch (err) {
 			member.status = "dead";
 			this.save();
+			// The member may still be mid-run (timeout/abort). Kill it and wait
+			// for exit so the next dispatch respawns a clean process instead of
+			// interleaving runs on one session id.
+			this.rpcs.delete(member.name);
+			await rpc.killAndWait();
 			throw err;
 		} finally {
+			unsubscribe();
 			this.releaseSlot();
 		}
 	}
@@ -335,7 +403,12 @@ export class TeamManager {
 	}
 
 	/** Dispatch a ready task to a member and wait for completion (one retry on failure). */
-	async startTask(id: string, assignee?: string, message?: string): Promise<{ task: TaskRecord; text: string }> {
+	async startTask(
+		id: string,
+		assignee?: string,
+		message?: string,
+		options: SendOptions = {},
+	): Promise<{ task: TaskRecord; text: string }> {
 		const task = this.findTask(id);
 		if (task.status !== "ready") {
 			const blockers = task.blockedBy.join(", ") || "none";
@@ -355,19 +428,31 @@ export class TeamManager {
 		const prompt = message?.trim() || taskPrompt(task);
 		let lastError: unknown;
 		for (let attempt = 0; attempt < 2; attempt++) {
+			if (options.signal?.aborted) break;
 			try {
-				const result = await this.sendMessage(target, prompt);
+				const result = await this.sendMessage(target, prompt, options);
 				return { task: this.completeTask(id, result.text), text: result.text };
 			} catch (err) {
 				lastError = err;
+				if (options.signal?.aborted) break;
 			}
 		}
-		this.failTask(id, lastError instanceof Error ? lastError.message : String(lastError));
+		const aborted = options.signal?.aborted === true;
+		this.failTask(id, aborted ? "aborted by leader" : lastError instanceof Error ? lastError.message : String(lastError));
+		if (aborted) throw new Error("Task dispatch aborted by leader.");
 		throw lastError instanceof Error ? lastError : new Error(String(lastError));
+	}
+
+	/** Only non-terminal tasks may be closed manually. */
+	private assertCloseable(task: TaskRecord, action: string): void {
+		if (task.status === "done" || task.status === "failed") {
+			throw new Error(`Task "${task.id}" is already "${task.status}"; cannot ${action}.`);
+		}
 	}
 
 	completeTask(id: string, result: string): TaskRecord {
 		const task = this.findTask(id);
+		this.assertCloseable(task, "mark done");
 		task.status = "done";
 		task.result = result;
 		recomputeReady(this.reg.tasks);
@@ -377,6 +462,7 @@ export class TeamManager {
 
 	failTask(id: string, reason: string): TaskRecord {
 		const task = this.findTask(id);
+		this.assertCloseable(task, "mark failed");
 		task.status = "failed";
 		task.result = reason;
 		recomputeReady(this.reg.tasks);
@@ -391,25 +477,32 @@ export class TeamManager {
 	 * the member's config, no persistent process or session. For short,
 	 * fire-and-forget work where context continuity does not matter.
 	 */
-	async sendOneshot(name: string, message: string): Promise<SendResult> {
+	async sendOneshot(name: string, message: string, options: SendOptions = {}): Promise<SendResult> {
 		const member = this.findMember(name);
 		if (!member) {
 			const available = this.reg.members.map((m) => m.name).join(", ") || "none";
 			throw new Error(`Unknown member "${name}". Available members: ${available}.`);
 		}
+		if (options.signal?.aborted) throw new Error("oneshot dispatch aborted before start");
 		const args = ["-p", "--mode", "json", "--no-session", "--no-extensions"];
 		if (member.model) args.push("--model", member.model);
 		if (member.tools && member.tools.length > 0) args.push("--tools", member.tools.join(","));
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
 		args.push(message);
 
-		const { text, usage } = await this.runOneshot(args);
-		member.usage = addUsage(member.usage, usage);
-		this.save();
-		return { member: member.name, text, usage: member.usage, resumed: false };
+		// Oneshots count against the same concurrency budget as persistent runs.
+		await this.acquireSlot();
+		try {
+			const { text, usage } = await this.runOneshot(args, options.signal);
+			member.usage = addUsage(member.usage, usage);
+			this.save();
+			return { member: member.name, text, usage: member.usage, resumed: false };
+		} finally {
+			this.releaseSlot();
+		}
 	}
 
-	private runOneshot(args: string[]): Promise<{ text: string; usage: MemberUsage }> {
+	private runOneshot(args: string[], signal?: AbortSignal): Promise<{ text: string; usage: MemberUsage }> {
 		const invocation = getStepInvocation(args);
 		return new Promise((resolve, reject) => {
 			const proc = spawn(invocation.command, invocation.args, {
@@ -420,11 +513,21 @@ export class TeamManager {
 			let buffer = "";
 			let text = "";
 			let stderr = "";
+			let aborted = false;
 			const usage = emptyUsage();
 			const timer = setTimeout(() => {
 				proc.kill("SIGTERM");
 				reject(new Error("oneshot dispatch timed out"));
 			}, ONESHOT_TIMEOUT_MS);
+
+			const onAbort = (): void => {
+				aborted = true;
+				proc.kill("SIGTERM");
+			};
+			if (signal) {
+				if (signal.aborted) onAbort();
+				else signal.addEventListener("abort", onAbort, { once: true });
+			}
 
 			const consumeLine = (line: string): void => {
 				if (!line.trim()) return;
@@ -466,12 +569,18 @@ export class TeamManager {
 			});
 			proc.on("close", (code) => {
 				clearTimeout(timer);
+				signal?.removeEventListener("abort", onAbort);
 				consumeLine(buffer); // flush trailing partial line
+				if (aborted) {
+					reject(new Error("oneshot dispatch aborted"));
+					return;
+				}
 				if (code === 0) resolve({ text, usage });
 				else reject(new Error(`oneshot exited with code ${code ?? "null"}: ${stderr.slice(-500)}`));
 			});
 			proc.on("error", (err: Error) => {
 				clearTimeout(timer);
+				signal?.removeEventListener("abort", onAbort);
 				reject(new Error(`oneshot spawn failed: ${err.message}`));
 			});
 		});
@@ -494,28 +603,51 @@ export class TeamManager {
 		if (next) next();
 	}
 
+	private killMember(member: MemberRecord): void {
+		const rpc = this.rpcs.get(member.name);
+		if (rpc) {
+			rpc.kill();
+			this.rpcs.delete(member.name);
+		}
+	}
+
 	async disband(name?: string): Promise<string[]> {
-		const targets = name ? [this.findMember(name)].filter(Boolean) : this.reg.members;
-		const killed: string[] = [];
-		for (const member of targets as MemberRecord[]) {
-			const rpc = this.rpcs.get(member.name);
-			if (rpc) {
-				rpc.kill();
-				this.rpcs.delete(member.name);
+		if (name) {
+			const member = this.findMember(name);
+			if (!member) {
+				const available = this.reg.members.map((m) => m.name).join(", ") || "none";
+				throw new Error(`Unknown member "${name}". Available members: ${available}.`);
 			}
+			this.killMember(member);
+			member.status = "dead";
+			member.pid = -1;
+			this.save();
+			return [member.name];
+		}
+		const killed: string[] = [];
+		for (const member of this.reg.members) {
+			this.killMember(member);
 			if (member.status !== "dead") {
 				member.status = "dead";
 				member.pid = -1;
 			}
 			killed.push(member.name);
 		}
-		if (!name) this.reg.members = [];
+		this.reg.members = [];
 		this.save();
 		return killed;
 	}
 
 	/** session_shutdown: stop children so no orphans survive the leader. */
 	shutdown(): void {
+		// Reflect reality in the registry: after this call no member is alive.
+		for (const member of this.reg.members) {
+			if (member.status !== "dead") {
+				member.status = "dead";
+				member.pid = -1;
+			}
+		}
+		this.save();
 		for (const rpc of this.rpcs.values()) rpc.kill();
 		this.rpcs.clear();
 	}
