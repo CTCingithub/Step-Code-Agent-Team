@@ -12,6 +12,8 @@ sandbox/*/teams/
 sandbox/*/teams-*/
 sandbox/*/live-context/
 sandbox/project/data/
+# Local build of the pinned Step-Code submodule (see sandbox/build-step.sh)
+sandbox/step-build/
 
 # Local agent state (session plans, local config)
 .stepcode/

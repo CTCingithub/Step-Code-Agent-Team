@@ -5,7 +5,11 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$DIR/agent/sessions"
 
+# shellcheck source=/dev/null
+source "$DIR/step-bin.sh"
+STEP_BIN="$(resolve_step_bin)"
+
 printf '{"id":"1","type":"get_state"}\n' \
-  | timeout 30 step --mode rpc --session-id probe --session-dir "$DIR/agent/sessions" 2>/dev/null \
+  | timeout 30 "$STEP_BIN" --mode rpc --session-id probe --session-dir "$DIR/agent/sessions" 2>/dev/null \
   | grep '"command":"get_state"' \
   && echo "PROBE OK"
