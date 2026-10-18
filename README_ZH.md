@@ -123,6 +123,17 @@ printf '{"id":"1","type":"get_state"}\n' \
 
 MIT — 见 [LICENSE](LICENSE)。
 
+## 平台约束
+
+本插件仅面向 **Step Code**，只使用标准扩展 API：`pi.registerTool` /
+`pi.registerCommand` / `ctx.ui.notify` / 工具的 `renderCall` + `renderResult`
+（pi-tui `Text`）/ `onUpdate` 流式回调。
+
+它**不依赖** DeepSeek Harness 的 "better sidebar" 插件——也不依赖任何 DSH
+专属插件——因为 Step Code 中不存在这些插件。未来如需类似侧边栏的界面，必须基于
+Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自动退化为空操作，
+核心团队功能不受影响。
+
 ## 状态与验证
 
 开发计划 Phase 0–5 已全部实现。协议层行为（spawn、握手、注册表持久化、任务图、

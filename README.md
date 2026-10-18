@@ -130,6 +130,18 @@ your real `~/.stepcode` state.
 
 MIT — see [LICENSE](LICENSE).
 
+## Platform constraints
+
+This plugin targets **Step Code only** and uses exclusively standard extension
+APIs: `pi.registerTool` / `pi.registerCommand` / `ctx.ui.notify` / tool
+`renderCall` + `renderResult` (pi-tui `Text`) / `onUpdate` streaming.
+
+It does **not** depend on the DeepSeek Harness "better sidebar" plugin — or any
+other DSH-only plugin — because no such plugin exists in Step Code. If a
+sidebar-like UI is ever added, it must be built on Step Code native APIs, or
+sit behind an optional interface that degrades to a no-op when the dependency
+is absent, so the core team functionality always runs.
+
 ## Status
 
 Phases 0–5 of the development plan are implemented and validated:
