@@ -53,6 +53,11 @@ export function shimPath(): string {
 	return path.join(packageRoot(), "bin", "stepcode-team.mjs");
 }
 
+/** Absolute path to the extension entry (loaded into sub-leader members via -e). */
+export function extensionEntryPath(): string {
+	return path.join(extensionDir(), "index.ts");
+}
+
 interface Frontmatter {
 	[key: string]: string;
 }

@@ -45,6 +45,12 @@ export interface MembersConfig {
 	max: number;
 	defaultRole: string;
 	defaultTools: string[] | null;
+	/**
+	 * Maximum team-tree depth (leader = 0, its members = 1). At the default of
+	 * 1, members cannot spawn sub-teams. Deeper values grant members their own
+	 * sub-team by loading this extension in the member process.
+	 */
+	maxRecursionDepth: number;
 }
 
 export interface DispatchConfig {
@@ -128,8 +134,8 @@ export function defaultConfig(): PluginConfig {
 			autonomousSelection: false,
 			autonomousThinking: false,
 		},
-		members: { max: 8, defaultRole: "worker", defaultTools: null },
-		dispatch: { maxConcurrent: 4, timeoutMs: 180_000, handshakeTimeoutMs: 15_000, retries: 1 },
+		members: { max: 8, defaultRole: "worker", defaultTools: null, maxRecursionDepth: 1 },
+		dispatch: { maxConcurrent: 5, timeoutMs: 180_000, handshakeTimeoutMs: 15_000, retries: 1 },
 		oneshot: { timeoutMs: 180_000 },
 		cost: { warnThreshold: 1 },
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
@@ -286,6 +292,7 @@ function validate(config: PluginConfig): string[] {
 	expectBoolean(asRecord(config.models), "autonomousThinking", d.models.autonomousThinking, warnings);
 
 	expectIntRange(asRecord(config.members), "max", d.members.max, 1, 64, warnings);
+	expectIntRange(asRecord(config.members), "maxRecursionDepth", d.members.maxRecursionDepth, 1, 4, warnings);
 	if (typeof config.members.defaultRole !== "string" || !config.members.defaultRole.trim()) {
 		config.members.defaultRole = d.members.defaultRole;
 		warnings.push("members.defaultRole");

@@ -28,7 +28,7 @@ import {
 	saveRegistry,
 	teamDir,
 } from "./registry.ts";
-import { type AgentPreset, loadPreset, shimPath } from "./presets.ts";
+import { type AgentPreset, extensionEntryPath, loadPreset, shimPath } from "./presets.ts";
 import { nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
 import {
 	DEFAULT_MEMBER_THINKING,
@@ -85,6 +85,13 @@ const MEMBER_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
 function debugNote(message: string): void {
 	if (getConfig().debug) console.error(`[stepcode-agent-team] ${message}`);
+}
+
+/** Depth of this process in the team tree (the leader session is 0). */
+export function currentDepth(): number {
+	const raw = process.env.STEPCODE_TEAM_DEPTH;
+	const parsed = raw === undefined ? 0 : Number.parseInt(raw, 10);
+	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function sanitizeTeamId(sessionId: string): string {
@@ -334,7 +341,15 @@ export class TeamManager {
 		member.systemPromptFile = file;
 	}
 
-	private buildSpawnArgs(member: MemberRecord): string[] {
+	/**
+	 * Spawn arguments and environment for a member process. When the member's
+	 * depth is below maxRecursionDepth it is granted its own sub-team: this
+	 * extension is loaded and auto-activated. Otherwise the member stays
+	 * isolated (--no-extensions, no recursive teams).
+	 */
+	private buildSpawnArgs(member: MemberRecord): { args: string[]; env: Record<string, string> } {
+		const childDepth = currentDepth() + 1;
+		const canOrchestrate = childDepth < getConfig().members.maxRecursionDepth;
 		const args = [
 			"--mode",
 			"rpc",
@@ -342,14 +357,24 @@ export class TeamManager {
 			member.sessionId,
 			"--session-dir",
 			memberSessionsDir(this.reg.teamId),
-			// Isolation: members must not load this extension (no recursive teams).
-			"--no-extensions",
 		];
+		const env: Record<string, string> = {
+			STEPCODE_TEAM_SOCK: this.socketPath,
+			STEPCODE_TEAM_MEMBER: member.name,
+			STEPCODE_TEAM_DEPTH: String(childDepth),
+		};
+		if (canOrchestrate) {
+			args.push("-e", extensionEntryPath());
+			env.STEPCODE_TEAM_AUTOACTIVATE = "1";
+		} else {
+			// Isolation: members must not load this extension (no recursive teams).
+			args.push("--no-extensions");
+		}
 		if (member.model) args.push("--model", member.model);
 		if (member.thinking) args.push("--thinking", member.thinking);
 		if (member.tools && member.tools.length > 0) args.push("--tools", member.tools.join(","));
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
-		return args;
+		return { args, env };
 	}
 
 	/**
@@ -384,9 +409,10 @@ export class TeamManager {
 			},
 		};
 		const config = getConfig();
-		const rpc = await MemberRpc.spawn(this.buildSpawnArgs(member), this.cwd, {
+		const { args, env } = this.buildSpawnArgs(member);
+		const rpc = await MemberRpc.spawn(args, this.cwd, {
 			handlers,
-			env: { STEPCODE_TEAM_SOCK: this.socketPath, STEPCODE_TEAM_MEMBER: member.name },
+			env,
 			handshakeTimeoutMs: config.dispatch.handshakeTimeoutMs,
 			requestTimeoutMs: config.dispatch.timeoutMs,
 		});
@@ -429,14 +455,18 @@ export class TeamManager {
 		const signal = options.signal;
 		if (signal?.aborted) throw new Error("member dispatch aborted before start");
 		this.assertTopologyDeclared();
-		const wasDead = !this.rpcs.get(member.name) || this.rpcs.get(member.name)!.isClosed();
-		const rpc = await this.ensureLive(member);
-		this.touch(member.name);
-		member.status = "running";
-		this.save();
+		// Concurrency gate BEFORE the process starts: beyond maxConcurrent this
+		// member waits for a running peer to finish before it starts at all.
 		await this.acquireSlot();
-		const unsubscribe = options.onProgress ? rpc.onInterim(options.onProgress) : () => {};
+		let rpc: MemberRpc | null = null;
+		let unsubscribe = (): void => {};
 		try {
+			const wasDead = !this.rpcs.get(member.name) || this.rpcs.get(member.name)!.isClosed();
+			rpc = await this.ensureLive(member);
+			this.touch(member.name);
+			member.status = "running";
+			this.save();
+			if (options.onProgress) unsubscribe = rpc.onInterim(options.onProgress);
 			const { text, usage } = await rpc.promptAndSettle(message, signal);
 			member.usage = addUsage(member.usage, usage);
 			member.status = "idle";
@@ -448,8 +478,10 @@ export class TeamManager {
 			// The member may still be mid-run (timeout/abort). Kill it and wait
 			// for exit so the next dispatch respawns a clean process instead of
 			// interleaving runs on one session id.
-			this.rpcs.delete(member.name);
-			await rpc.killAndWait();
+			if (rpc) {
+				this.rpcs.delete(member.name);
+				await rpc.killAndWait();
+			}
 			throw err;
 		} finally {
 			unsubscribe();
