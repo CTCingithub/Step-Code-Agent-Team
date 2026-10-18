@@ -1,0 +1,89 @@
+# 交接文档（Handoff）
+
+> 目的：让其他 session 阅读本文后即可无缝继续开发。
+> 配套文档：`DEVELOPMENT-HISTORY.md`（开发历程）、`README.md` / `README_ZH.md`（使用说明）、`docs/CONFIGURATION.md`（配置参考）、`sandbox/TEST-PLAN.md`（测试计划与缺陷清单，仅在本地沙箱）。
+
+## 1. 项目现状（截至 2026-10-18）
+
+Step Code 的智能体团队插件，对标 DeepSeek Harness agent teams，**功能已完整实现并通过沙箱全量测试**：
+
+- **默认关闭激活**：团队工具加载时即被声明不可用；`/agent-team` 命令或 prompt 关键词（`input` + `before_agent_start` 双钩子）才激活
+- **成员生命周期**：长驻 `step --mode rpc` 子进程；同 session-id 重启即续聊；并发/递归/拓扑/成本全链路护栏
+- **通信拓扑**：star/pipeline/mesh/ring/custom 五形状，server 层强制，`team_set_topology` 声明
+- **递归深度**：`maxRecursionDepth`（默认 1），子队长经 env 授予并自动激活
+- **配置文件**：`<agentDir>/stepcode-agent-team.json`（沙箱经 `STEP_CODING_AGENT_DIR` 隔离）
+
+## 2. 架构地图
+
+```
+队长会话（index.ts：加载配置→注册工具→setUnavailableTools 关门；
+  /agent-team 命令 / input / before_agent_start 触发激活；
+  激活后：释放工具 + TeamServer + idle 收割定时器）
+  │
+  ├── tools.ts ── 6 个 LLM 工具（create_member/send/task/set_topology/disband/status）
+  ├── members.ts ── TeamManager：spawn 互斥、模型/思考解析、拓扑方法、
+  │    并发门（nested 绕过）、任务调度（重试）、oneshot、reaper
+  ├── rpc-client.ts ── JSONL 客户端（严格 \n 分行、id 关联、握手、abort、killAndWait）
+  ├── team-server.ts ── Unix socket：拓扑强制 + status(mayMessage)
+  ├── topology.ts ── 五形状构造/校验/解析
+  ├── config.ts ── 默认值/文件合并/校验/环境变量覆盖/缓存
+  ├── registry.ts ── 团队状态持久化（原子写、storage.dir、旧版兼容）
+  ├── presets.ts ── agents/*.md 预设、扩展入口路径
+  └── render.ts ── TUI 渲染
+bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
+```
+
+数据流：队长派活 → `acquireSlot`（nested 除外）→ spawn/复用成员 → `promptAndSettle` 等 `agent_settled` → 结果回写 registry。
+
+## 3. 关键文件索引
+
+| 文件 | 职责 | 修改高频点 |
+|---|---|---|
+| `extensions/members.ts` | 成员/任务/拓扑核心逻辑 | 模型解析、并发门、prompt 生成 |
+| `extensions/config.ts` | 配置 schema 与校验 | 新增配置项必改此处 + docs/CONFIGURATION.md |
+| `extensions/index.ts` | 激活接线 | 触发方式、启动副作用 |
+| `extensions/topology.ts` | 拓扑模型 | 新形状 |
+| `extensions/team-server.ts` | 消息强制 | 协议变更 |
+| `sandbox/smoke-phase*.ts` | 回归探针（1–12） | 新功能必须配套探针 |
+
+## 4. 已知限制
+
+- **项目级配置未接入**：loader 已预留 `projectDir`/`trusted` 参数但未接线（信任信息只在事件处理器可用，会破坏"注册前加载配置"的时序）
+- **LLM 行为不可完全控**：成员可能弃用工具转去排查环境（协调提示已加固，无法根除）
+- **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到
+- **沙箱探针在 gitignore 内**：phase1–12 与 TEST-PLAN.md 未入库，换环境需按其中 JSON 模板重建配置
+- **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）
+
+## 5. 建议下一步（按优先级）
+
+1. 把沙箱探针固化为 CI 冒烟集：零 token 层（phase1/2/3/5/6/7/8/9）可直接自动化；LLM 层需测试 key
+2. 项目级配置接入：`<cwd>/.stepcode/stepcode-agent-teams.json`，trust 门控
+3. TUI 渲染人工验证：`/agent-team` 面板、流式进度、renderCall/renderResult
+4. `step install ./` 端到端安装验证（会改真实 settings，由用户执行）
+5. 观察真实使用中 LLM 对拓扑/递归的遵循度，迭代工具描述与 SKILL 指南
+
+## 6. 验证方法
+
+```bash
+# 零 token 冒烟（协议/配置/拓扑/深度，不调模型）
+for p in 1 2 3 5 6 7 8 9; do
+  printf '{"id":"1","type":"get_state"}\n' | STEP_CODING_AGENT_DIR="$PWD/sandbox/agent" \
+    step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase$p.ts" \
+    --mode rpc --session-id "reg$p" --session-dir "$PWD/sandbox/agent/sessions" 2>&1 \
+    | grep -E 'FAIL|DONE'
+done
+
+# LLM 路径（先 export STEP_API_KEY，密钥位置见 local/test-api-key.md）
+sleep 300 | step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase4.ts" \
+  --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
+```
+
+专项配置运行：phase10 用 `sandbox/cfg-conc` / `sandbox/cfg-deadlock`，phase11 用 `sandbox/cfg-deep2`，phase9 用 `sandbox/cfg-misc`；配置若丢失，按 `sandbox/TEST-PLAN.md` 第三节矩阵中的 JSON 重建。
+
+## 7. 开发约定
+
+- **提交**：分批 conventional commit + push + 本地/远程 HEAD 一致性验证（用户已授权自主执行）
+- **测试先行**：新功能先写失败探针再修复；沙箱探针按 phase 编号递增
+- **危险操作**（npm install / step install / git / 杀进程）由用户执行
+- **密钥**：只在 `local/`（gitignore），经环境变量传递，绝不入库
+
