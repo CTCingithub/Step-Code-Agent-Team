@@ -28,13 +28,21 @@ import {
 	saveRegistry,
 	teamDir,
 } from "./registry.ts";
-import { loadPreset, shimPath } from "./presets.ts";
+import { type AgentPreset, loadPreset, shimPath } from "./presets.ts";
 import { nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
+import {
+	DEFAULT_MEMBER_THINKING,
+	type PluginConfig,
+	type ThinkingLevel,
+	VALID_THINKING,
+	getConfig,
+} from "./config.ts";
 
 export interface CreateMemberParams {
 	name: string;
 	role?: string;
 	model?: string;
+	thinking?: string;
 	tools?: string[];
 	systemPrompt?: string;
 }
@@ -61,9 +69,10 @@ export interface CreateTaskParams {
 }
 
 const MEMBER_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
-const MAX_MEMBERS = 8;
-const MAX_CONCURRENCY = 4;
-const ONESHOT_TIMEOUT_MS = 180_000;
+
+function debugNote(message: string): void {
+	if (getConfig().debug) console.error(`[stepcode-agent-team] ${message}`);
+}
 
 function sanitizeTeamId(sessionId: string): string {
 	const cleaned = sessionId.replace(/[^\w.-]+/g, "_").slice(0, 48);
@@ -161,7 +170,7 @@ export class TeamManager {
 		return reaped;
 	}
 
-	async createMember(params: CreateMemberParams): Promise<{ member: MemberRecord; created: boolean }> {
+	async createMember(params: CreateMemberParams, leaderModel?: string): Promise<{ member: MemberRecord; created: boolean }> {
 		const name = params.name.trim();
 		if (!MEMBER_NAME_RE.test(name)) {
 			throw new Error(
@@ -169,7 +178,7 @@ export class TeamManager {
 			);
 		}
 		// Serialize per name: two concurrent creates must not both append a record.
-		return this.withMemberLock(name, () => this.createMemberLocked(name, params));
+		return this.withMemberLock(name, () => this.createMemberLocked(name, params, leaderModel));
 	}
 
 	private withMemberLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
@@ -187,6 +196,7 @@ export class TeamManager {
 	private async createMemberLocked(
 		name: string,
 		params: CreateMemberParams,
+		leaderModel?: string,
 	): Promise<{ member: MemberRecord; created: boolean }> {
 		const existing = this.findMember(name);
 		if (existing) {
@@ -195,19 +205,27 @@ export class TeamManager {
 			return { member: { ...existing }, created: false };
 		}
 
-		if (this.reg.members.length >= MAX_MEMBERS) {
-			throw new Error(`Team is full (max ${MAX_MEMBERS} members). Disband one first.`);
+		const config = getConfig();
+		if (this.reg.members.length >= config.members.max) {
+			throw new Error(`Team is full (max ${config.members.max} members). Disband one first.`);
 		}
 
 		// A role may reference a bundled preset (agents/<role>.md); explicit params win.
-		const preset = params.role ? loadPreset(params.role) : undefined;
+		// Without an explicit role, members default to the configured role.
+		const role = params.role?.trim() || config.members.defaultRole;
+		const preset = loadPreset(role);
 		const systemPrompt = params.systemPrompt?.trim() || preset?.systemPrompt;
 
 		const record: MemberRecord = {
 			name,
-			role: params.role?.trim() || name,
-			model: params.model ?? preset?.model,
-			tools: (params.tools && params.tools.length > 0 ? [...params.tools] : undefined) ?? preset?.tools,
+			role,
+			model: this.resolveMemberModel(name, params.model, preset, leaderModel, config),
+			thinking: this.resolveThinking(params.thinking),
+			tools:
+				(params.tools && params.tools.length > 0 ? [...params.tools] : undefined) ??
+				preset?.tools ??
+				config.members.defaultTools ??
+				undefined,
 			sessionId: `team-${this.reg.teamId}-${name}`,
 			systemPromptFile: undefined,
 			pid: -1,
@@ -224,6 +242,56 @@ export class TeamManager {
 
 		await this.ensureLive(record);
 		return { member: { ...record }, created: true };
+	}
+
+	/**
+	 * Member model resolution:
+	 * - autonomousSelection off: every member uses the conversation's model
+	 *   (preset and explicit requests are ignored).
+	 * - on: explicit param → preset model → conversation model; an explicit
+	 *   model outside models.available is rejected; a preset model outside the
+	 *   list degrades to the first available entry.
+	 */
+	private resolveMemberModel(
+		name: string,
+		requested: string | undefined,
+		preset: AgentPreset | undefined,
+		leaderModel: string | undefined,
+		config: PluginConfig,
+	): string | undefined {
+		if (!config.models.autonomousSelection) {
+			if (requested && requested !== leaderModel) {
+				debugNote(
+					`member "${name}": ignoring model "${requested}" — autonomous model selection is off; using the conversation model`,
+				);
+			}
+			return leaderModel ?? config.models.available[0];
+		}
+		const chosen = requested ?? preset?.model;
+		if (!chosen) return leaderModel ?? config.models.available[0];
+		if (config.models.available.includes(chosen)) return chosen;
+		if (requested) {
+			throw new Error(
+				`Model "${requested}" is not in the team's available models (${config.models.available.join(", ")}). ` +
+					"Add it to models.available in the plugin config, or omit the model parameter.",
+			);
+		}
+		debugNote(`member "${name}": preset model "${chosen}" is not in models.available; using "${config.models.available[0]}"`);
+		return config.models.available[0];
+	}
+
+	/**
+	 * Member thinking level: an explicit, valid level always wins; otherwise
+	 * the default (high) applies in both modes.
+	 */
+	private resolveThinking(requested: string | undefined): ThinkingLevel {
+		if (requested) {
+			if (!(VALID_THINKING as readonly string[]).includes(requested)) {
+				throw new Error(`Invalid thinking level "${requested}". Valid levels: ${VALID_THINKING.join(", ")}.`);
+			}
+			return requested as ThinkingLevel;
+		}
+		return DEFAULT_MEMBER_THINKING;
 	}
 
 	/**
@@ -262,6 +330,7 @@ export class TeamManager {
 			"--no-extensions",
 		];
 		if (member.model) args.push("--model", member.model);
+		if (member.thinking) args.push("--thinking", member.thinking);
 		if (member.tools && member.tools.length > 0) args.push("--tools", member.tools.join(","));
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
 		return args;
@@ -298,8 +367,12 @@ export class TeamManager {
 				}
 			},
 		};
-		const rpc = await MemberRpc.spawn(this.buildSpawnArgs(member), this.cwd, handlers, {
-			STEPCODE_TEAM_SOCK: this.socketPath,
+		const config = getConfig();
+		const rpc = await MemberRpc.spawn(this.buildSpawnArgs(member), this.cwd, {
+			handlers,
+			env: { STEPCODE_TEAM_SOCK: this.socketPath },
+			handshakeTimeoutMs: config.dispatch.handshakeTimeoutMs,
+			requestTimeoutMs: config.dispatch.timeoutMs,
 		});
 		// Defensive: another spawn may have won while we were awaiting.
 		const existing = this.rpcs.get(member.name);
@@ -427,7 +500,7 @@ export class TeamManager {
 
 		const prompt = message?.trim() || taskPrompt(task);
 		let lastError: unknown;
-		for (let attempt = 0; attempt < 2; attempt++) {
+		for (let attempt = 0; attempt <= getConfig().dispatch.retries; attempt++) {
 			if (options.signal?.aborted) break;
 			try {
 				const result = await this.sendMessage(target, prompt, options);
@@ -486,6 +559,7 @@ export class TeamManager {
 		if (options.signal?.aborted) throw new Error("oneshot dispatch aborted before start");
 		const args = ["-p", "--mode", "json", "--no-session", "--no-extensions"];
 		if (member.model) args.push("--model", member.model);
+		if (member.thinking) args.push("--thinking", member.thinking);
 		if (member.tools && member.tools.length > 0) args.push("--tools", member.tools.join(","));
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
 		args.push(message);
@@ -518,7 +592,7 @@ export class TeamManager {
 			const timer = setTimeout(() => {
 				proc.kill("SIGTERM");
 				reject(new Error("oneshot dispatch timed out"));
-			}, ONESHOT_TIMEOUT_MS);
+			}, getConfig().oneshot.timeoutMs);
 
 			const onAbort = (): void => {
 				aborted = true;
@@ -589,7 +663,7 @@ export class TeamManager {
 	// ------------------------------------------------------------------ slots
 
 	private async acquireSlot(): Promise<void> {
-		if (this.inFlight < MAX_CONCURRENCY) {
+		if (this.inFlight < getConfig().dispatch.maxConcurrent) {
 			this.inFlight += 1;
 			return;
 		}

@@ -15,12 +15,11 @@ import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
 import type { TeamManager } from "./members.ts";
+import { getConfig } from "./config.ts";
 
-/** Opt-in diagnostics for the messaging layer (set STEPCODE_TEAM_DEBUG=1). */
-const DEBUG = process.env.STEPCODE_TEAM_DEBUG === "1" || process.env.STEPCODE_TEAM_DEBUG === "true";
-
+/** Opt-in diagnostics for the messaging layer (config.debug, or STEPCODE_TEAM_DEBUG). */
 function debugLog(...args: unknown[]): void {
-	if (DEBUG) console.error("[stepcode-team]", ...args);
+	if (getConfig().debug) console.error("[stepcode-team]", ...args);
 }
 
 export class TeamServer {

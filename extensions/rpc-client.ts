@@ -64,7 +64,14 @@ export class MemberRpc {
 	private lastAssistantText = "";
 	private usage: MemberUsage = emptyUsage();
 
-	private constructor(proc: ChildProcess, handlers: MemberRpcHandlers) {
+	private constructor(
+		proc: ChildProcess,
+		handlers: MemberRpcHandlers,
+		private readonly timeouts: { requestMs: number; handshakeMs: number } = {
+			requestMs: REQUEST_TIMEOUT_MS,
+			handshakeMs: HANDSHAKE_TIMEOUT_MS,
+		},
+	) {
 		this.proc = proc;
 		this.pid = proc.pid ?? -1;
 		this.handlers = handlers;
@@ -89,7 +96,17 @@ export class MemberRpc {
 		});
 	}
 
-	static async spawn(args: string[], cwd: string, handlers: MemberRpcHandlers = {}, env?: Record<string, string>): Promise<MemberRpc> {
+	static async spawn(
+		args: string[],
+		cwd: string,
+		options: {
+			handlers?: MemberRpcHandlers;
+			env?: Record<string, string>;
+			handshakeTimeoutMs?: number;
+			requestTimeoutMs?: number;
+		} = {},
+	): Promise<MemberRpc> {
+		const { handlers = {}, env, handshakeTimeoutMs, requestTimeoutMs } = options;
 		const invocation = getStepInvocation(args);
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
@@ -100,7 +117,10 @@ export class MemberRpc {
 			stdio: ["pipe", "pipe", "pipe"],
 			...(env ? { env: { ...process.env, ...env } } : {}),
 		});
-		const rpc = new MemberRpc(proc, handlers);
+		const rpc = new MemberRpc(proc, handlers, {
+			requestMs: requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+			handshakeMs: handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS,
+		});
 		try {
 			await rpc.waitForHandshake();
 		} catch (err) {
@@ -244,7 +264,7 @@ export class MemberRpc {
 			const timer = setTimeout(() => {
 				this.handshakeWaiters = this.handshakeWaiters.filter((w) => w !== done);
 				reject(new Error("member handshake timeout"));
-			}, HANDSHAKE_TIMEOUT_MS);
+			}, this.timeouts.handshakeMs);
 			const done = () => {
 				clearTimeout(timer);
 				resolve();
@@ -262,7 +282,7 @@ export class MemberRpc {
 			const timer = setTimeout(() => {
 				this.pending.delete(id);
 				reject(new Error(`RPC timeout for command "${String(command.type)}"`));
-			}, REQUEST_TIMEOUT_MS);
+			}, this.timeouts.requestMs);
 			this.pending.set(id, { resolve, reject, timer });
 			try {
 				this.proc.stdin?.write(`${JSON.stringify({ id, ...command })}\n`);
@@ -289,7 +309,7 @@ export class MemberRpc {
 			const timer = setTimeout(() => {
 				this.settleWaiters = this.settleWaiters.filter((w) => w !== done);
 				reject(new Error("timeout waiting for member to settle"));
-			}, REQUEST_TIMEOUT_MS);
+			}, this.timeouts.requestMs);
 			const done = () => {
 				clearTimeout(timer);
 				resolve();

@@ -11,6 +11,9 @@ import { StringEnum } from "@step-harness/providers";
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
 import type { SendOptions, TeamManager } from "./members.ts";
 import type { MemberUsage } from "./registry.ts";
+import type { PluginConfig } from "./config.ts";
+import { VALID_THINKING } from "./config.ts";
+import { isActive } from "./activation.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
 
 type GetManager = (ctx: ExtensionContext) => TeamManager;
@@ -27,21 +30,12 @@ function formatUsage(usage: MemberUsage): string {
 const PER_TASK_OUTPUT_CAP = 50 * 1024;
 
 /**
- * Cumulative team spend threshold (USD) above which responses carry a warning.
- * `STEPCODE_TEAM_COST_WARN` overrides the default (1); an explicit 0 disables
- * the guardrail; invalid values fall back to the default.
+ * Cumulative team spend warning (threshold from config; 0 disables).
+ * Env override (STEPCODE_TEAM_COST_WARN) is applied by the config loader.
  */
-function costWarning(cost: number): string {
-	const raw = process.env.STEPCODE_TEAM_COST_WARN;
-	let threshold = 1;
-	if (raw !== undefined && raw.trim() !== "") {
-		const parsed = Number.parseFloat(raw);
-		if (Number.isFinite(parsed)) {
-			if (parsed <= 0) return "";
-			threshold = parsed;
-		}
-	}
-	if (cost < threshold) return "";
+function costWarning(config: PluginConfig, cost: number): string {
+	const threshold = config.cost.warnThreshold;
+	if (threshold <= 0 || cost < threshold) return "";
 	return `\n\n[cost guardrail] Team spend has reached $${cost.toFixed(4)} (threshold $${threshold.toFixed(2)}). Consider disbanding idle members or finishing up.`;
 }
 
@@ -52,7 +46,16 @@ function truncateOutput(text: string): string {
 	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. The full text is in the tool result details (fullText).]`;
 }
 
-export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): void {
+/** Defense in depth: team tools are unavailable until the plugin is activated. */
+function assertActive(): void {
+	if (!isActive()) {
+		throw new Error(
+			"Agent team plugin is not active. Activate it with /agent-team or mention the agent team in your message.",
+		);
+	}
+}
+
+export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, config: PluginConfig): void {
 	pi.registerTool({
 		name: "team_create_member",
 		label: "Create Team Member",
@@ -63,8 +66,25 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		].join(" "),
 		parameters: Type.Object({
 			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
-			role: Type.Optional(Type.String({ description: "Role label, e.g. scout, worker, reviewer" })),
-			model: Type.Optional(Type.String({ description: "Model pattern or id; defaults to the leader's model" })),
+			role: Type.Optional(
+				Type.String({
+					description: "Role label; a bundled preset (scout/planner/worker/reviewer) applies its system prompt, tools, and model",
+				}),
+			),
+			model: Type.Optional(
+				Type.String({
+					description: config.models.autonomousSelection
+						? `Model for the member. Choose from the team's available models: ${config.models.available.join(", ")}`
+						: "Ignored while autonomous model selection is disabled — members use the conversation's current model",
+				}),
+			),
+			thinking: Type.Optional(
+				StringEnum(VALID_THINKING, {
+					description: config.models.autonomousThinking
+						? `Thinking level for the member — choose per task: ${VALID_THINKING.join(", ")}`
+						: "Thinking level for the member (default: high)",
+				}),
+			),
 			tools: Type.Optional(Type.Array(Type.String(), { description: "Tool allowlist; defaults to all tools" })),
 			systemPrompt: Type.Optional(Type.String({ description: "System prompt appended to the member's default prompt" })),
 		}),
@@ -72,20 +92,26 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		renderResult: renderTeamResult("team_create_member"),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const manager = getManager(ctx);
-			const { member, created } = await manager.createMember({
-				name: params.name,
-				role: params.role,
-				model: params.model,
-				tools: params.tools,
-				systemPrompt: params.systemPrompt,
-			});
+			assertActive();
+			const leaderModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+			const { member, created } = await manager.createMember(
+				{
+					name: params.name,
+					role: params.role,
+					model: params.model,
+					thinking: params.thinking,
+					tools: params.tools,
+					systemPrompt: params.systemPrompt,
+				},
+				leaderModel,
+			);
 			return {
 				content: [
 					{
 						type: "text",
 						text: [
 							`${created ? "Created" : "Resumed"} member "${member.name}" (role: ${member.role}).`,
-							`Model: ${member.model ?? "leader default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
+							`Model: ${member.model ?? "leader default"}; thinking: ${member.thinking ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
 							`Status: ${member.status}. Use team_send to give it work.`,
 						].join("\n"),
 					},
@@ -119,6 +145,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		renderResult: renderTeamResult("team_send"),
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const manager = getManager(ctx);
+			assertActive();
 
 			if (params.taskId && params.mode === "oneshot") {
 				throw new Error('team_send: taskId and mode "oneshot" are mutually exclusive.');
@@ -164,7 +191,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 							`Member "${result.member}" replied${result.resumed ? " (process was respawned; context resumed)" : ""}:`,
 							"",
 							truncateOutput(result.text || "(no output)"),
-							costWarning(result.usage.cost),
+							costWarning(config, result.usage.cost),
 						].join("\n"),
 					},
 				],
@@ -206,6 +233,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		renderResult: renderTeamResult("team_task"),
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const manager = getManager(ctx);
+			assertActive();
 
 			if (params.action === "create") {
 				if (!params.title) throw new Error("team_task create requires a title.");
@@ -296,6 +324,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		renderResult: renderTeamResult("team_disband"),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const manager = getManager(ctx);
+			assertActive();
 			const killed = await manager.disband(params.member);
 			if (killed.length === 0) {
 				return {
@@ -324,6 +353,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 		renderResult: renderTeamResult("team_status"),
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const manager = getManager(ctx);
+			assertActive();
 			const reg = manager.snapshot();
 			const memberLines =
 				reg.members.length > 0
@@ -356,7 +386,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager): voi
 							...taskLines,
 							"",
 							`Total cost: $${totalCost.toFixed(4)}`,
-							costWarning(totalCost),
+							costWarning(config, totalCost),
 						].join("\n"),
 					},
 				],

@@ -8,8 +8,10 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import { agentDir, getConfig } from "./config.ts";
+
+export { agentDir };
 
 export type MemberStatus = "idle" | "running" | "dead";
 export type TaskStatus = "pending" | "ready" | "running" | "done" | "failed";
@@ -25,6 +27,7 @@ export interface MemberRecord {
 	name: string;
 	role: string;
 	model?: string;
+	thinking?: string;
 	tools?: string[];
 	sessionId: string;
 	systemPromptFile?: string;
@@ -52,15 +55,11 @@ export interface TeamRegistry {
 	tasks: TaskRecord[];
 }
 
-/** Agent dir resolution mirrors docs/environment-variables.md; no hardcoded ~/.stepcode. */
-export function agentDir(): string {
-	return process.env.STEP_CODING_AGENT_DIR || path.join(os.homedir(), ".stepcode", "agent");
-}
-
 export function teamsRoot(): string {
+	const override = getConfig().storage.dir;
+	if (typeof override === "string" && override.trim()) return path.resolve(override.trim());
 	return path.join(agentDir(), "teams");
 }
-
 export function teamDir(teamId: string): string {
 	return path.join(teamsRoot(), teamId);
 }

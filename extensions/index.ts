@@ -1,11 +1,13 @@
 /**
  * Step-Code-Agent-Team extension entry point.
  *
- * The leader session (this one) orchestrates a team of member agents:
- *   team_create_member / team_send / team_task / team_disband / team_status
- *   (+ /team command)
- * Members are isolated `step --mode rpc` subprocesses; their contexts persist in
- * session files, so members can be respawned and resume where they left off.
+ * Default-off: the team tools are registered but declared unavailable
+ * (pi.setUnavailableTools) until the plugin is activated — by the /agent-team
+ * command or an explicit plugin mention in the prompt. On activation the tools
+ * are released, the messaging server starts, and idle reaping begins.
+ *
+ * Members are isolated `step --mode rpc` subprocesses; their contexts persist
+ * in session files, so members can be respawned and resume where they left off.
  * Member-to-member messaging runs through a Unix socket served by this process
  * and reached by members via the `stepcode-team` CLI shim.
  */
@@ -14,36 +16,67 @@ import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent"
 import { TeamManager } from "./members.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
-
-/** Idle member processes are reaped periodically (sessions persist on disk). */
-const IDLE_REAP_INTERVAL_MS = 5 * 60 * 1000;
-const IDLE_REAP_AFTER_MS = 30 * 60 * 1000;
+import { getConfig } from "./config.ts";
+import { activate, detectKeyword, initActivation, isActive, TEAM_TOOL_NAMES } from "./activation.ts";
 
 export default function (pi: ExtensionAPI) {
+	// Config first: tool descriptions and gating depend on it.
+	const config = getConfig();
+
 	let manager: TeamManager | null = null;
 	let server: TeamServer | null = null;
 	let reapTimer: NodeJS.Timeout | null = null;
+	let currentCtx: ExtensionContext | null = null;
 
 	const getManager = (ctx: ExtensionContext): TeamManager => {
-		if (!manager) {
-			manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
-		}
+		if (!manager) manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
 		return manager;
 	};
 
-	/** Idempotent: starts the team server once per session. */
-	const ensureServer = (ctx: ExtensionContext): void => {
-		if (server) return;
+	/** Backend side effects of a fresh activation (server, reaper, notify). */
+	const startBackend = (ctx: ExtensionContext, reason: string): void => {
 		const team = getManager(ctx);
-		server = new TeamServer(team.socketPath, () => team);
-		server.start();
+		if (!server) {
+			server = new TeamServer(team.socketPath, () => team);
+			server.start();
+		}
+		if (!reapTimer) {
+			reapTimer = setInterval(() => {
+				void team.reapIdleMembers(config.idle.reapAfterMs);
+			}, config.idle.reapIntervalMs);
+			reapTimer.unref?.();
+		}
+		if (config.activation.notifyOnActivate) {
+			ctx.ui.notify(`Agent team plugin activated (${reason}). Team tools are now available.`, "info");
+		}
 	};
 
-	registerTeamTools(pi, getManager);
+	// Activation may be triggered from the command handler, the input hook, or
+	// programmatically; backend effects always run with the latest context.
+	initActivation(config, pi, (reason) => {
+		if (currentCtx) startBackend(currentCtx, reason);
+	});
 
-	pi.registerCommand("team", {
-		description: "Show agent team status (members, task board, spend)",
+	/** Returns true when this call performed the activation. */
+	const tryActivate = (ctx: ExtensionContext, reason: string): boolean => {
+		currentCtx = ctx;
+		return activate(reason); // the initActivation callback runs startBackend
+	};
+
+	// Tools are registered with config-aware descriptions, then gated off
+	// until activation.
+	registerTeamTools(pi, getManager, config);
+	pi.setUnavailableTools([...TEAM_TOOL_NAMES]);
+
+	pi.registerCommand("agent-team", {
+		description: "Activate the agent team plugin and show the team board",
 		handler: async (_args, ctx) => {
+			currentCtx = ctx;
+			if (!config.activation.enabled) {
+				ctx.ui.notify("Agent team plugin is disabled by configuration (activation.enabled = false).", "warning");
+				return;
+			}
+			tryActivate(ctx, "/agent-team command");
 			const team = getManager(ctx);
 			const reg = team.snapshot();
 			const lines: string[] = [`Team "${team.teamId}"`];
@@ -51,7 +84,10 @@ export default function (pi: ExtensionAPI) {
 				lines.push("  no members yet — create one with team_create_member");
 			} else {
 				for (const m of reg.members) {
-					lines.push(`  ${m.status === "idle" ? "○" : m.status === "running" ? "●" : "✗"} ${m.name} (${m.role}) [${m.status}]`);
+					const icon = m.status === "idle" ? "○" : m.status === "running" ? "●" : "✗";
+					const model = m.model ? ` ${m.model}` : "";
+					const thinking = m.thinking ? ` thinking=${m.thinking}` : "";
+					lines.push(`  ${icon} ${m.name} (${m.role}) [${m.status}]${model}${thinking}`);
 				}
 			}
 			for (const t of reg.tasks) {
@@ -65,13 +101,26 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", (_event, ctx) => {
-		ensureServer(ctx);
-		if (!reapTimer) {
-			reapTimer = setInterval(() => {
-				const team = getManager(ctx);
-				void team.reapIdleMembers(IDLE_REAP_AFTER_MS);
-			}, IDLE_REAP_INTERVAL_MS);
-			reapTimer.unref?.();
+		currentCtx = ctx;
+	});
+
+	// Natural-language activation. Slash commands are handled above: when a
+	// command matches, the input event is skipped entirely.
+	pi.on("input", (event, ctx) => {
+		if (isActive()) return;
+		currentCtx = ctx;
+		if (detectKeyword(event.text)) {
+			tryActivate(ctx, "explicit plugin mention");
+		}
+	});
+
+	// Fallback for modes where the input event does not fire (e.g. headless
+	// `step -p`): before_agent_start sees every prompt before the agent loop.
+	pi.on("before_agent_start", (event, ctx) => {
+		if (isActive()) return;
+		currentCtx = ctx;
+		if (detectKeyword(event.prompt)) {
+			tryActivate(ctx, "explicit plugin mention");
 		}
 	});
 
