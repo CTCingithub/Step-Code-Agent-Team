@@ -1,0 +1,10 @@
+{
+  "stepcodeAgentTeam": {
+    "members": {
+      "maxRecursionDepth": 2
+    },
+    "dispatch": {
+      "timeoutMs": 240000
+    }
+  }
+}

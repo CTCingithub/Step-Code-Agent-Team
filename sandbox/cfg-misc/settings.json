@@ -1,0 +1,44 @@
+{
+  "stepcodeAgentTeam": {
+    "activation": {
+      "enabled": true,
+      "keywords": [
+        "magic phrase"
+      ],
+      "notifyOnActivate": false
+    },
+    "models": {
+      "available": [
+        "step-5-preview",
+        "other-model"
+      ],
+      "autonomousSelection": true,
+      "autonomousThinking": true
+    },
+    "members": {
+      "max": 3,
+      "defaultRole": "planner",
+      "maxRecursionDepth": 2
+    },
+    "dispatch": {
+      "maxConcurrent": 2,
+      "timeoutMs": 120000,
+      "handshakeTimeoutMs": 15000,
+      "retries": 0
+    },
+    "oneshot": {
+      "timeoutMs": 60000
+    },
+    "cost": {
+      "warnThreshold": 0.5
+    },
+    "idle": {
+      "reapAfterMs": 600000,
+      "reapIntervalMs": 120000
+    },
+    "storage": {
+      "dir": "sandbox/cfg-misc/teams-custom"
+    },
+    "debug": true
+  }
+}

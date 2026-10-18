@@ -1,8 +1,17 @@
 # Dependencies
 node_modules/
 
-# Local dev sandbox (isolated agent dir, sessions, throwaway project)
-sandbox/
+# Dev sandbox: the reusable harness ships with the repo; runtime state does not.
+# auth.json holds OAuth credentials (access/refresh tokens) — never commit it.
+sandbox/agent/
+sandbox/auth.json
+sandbox/config.toml
+sandbox/models-store.json
+sandbox/*/sessions/
+sandbox/*/teams/
+sandbox/*/teams-*/
+sandbox/*/live-context/
+sandbox/project/data/
 
 # Local agent state (session plans, local config)
 .stepcode/

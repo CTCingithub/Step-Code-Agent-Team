@@ -1,0 +1,9 @@
+{
+  "name": "sandbox-task-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Throwaway demo project for agent-team sandbox testing",
+  "scripts": {
+    "test": "node test/tasks.test.js"
+  }
+}

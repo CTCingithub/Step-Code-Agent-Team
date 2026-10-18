@@ -1,0 +1,7 @@
+{
+  "stepcodeAgentTeam": {
+    "dispatch": {
+      "maxConcurrent": 2
+    }
+  }
+}

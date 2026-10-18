@@ -1,0 +1,8 @@
+{
+  "stepcodeAgentTeam": {
+    "dispatch": {
+      "maxConcurrent": 1,
+      "timeoutMs": 60000
+    }
+  }
+}

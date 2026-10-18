@@ -1,0 +1,14 @@
+{
+  "stepcodeAgentTeam": {
+    "activation": {
+      "enabled": true
+    },
+    "models": {
+      "available": [
+        "step-5-preview"
+      ],
+      "autonomousSelection": true,
+      "autonomousThinking": true
+    }
+  }
+}
