@@ -177,6 +177,17 @@ the sandbox points `agentDir` at `sandbox/agent`) and an optional project-level 
 (`<cwd>/.stepcode/stepcode-agent-team.json`, applied only when the project is trusted).
 Precedence: defaults < global < project < environment overrides.
 
+| Tier | Path | Notes |
+|---|---|---|
+| Global | `<agentDir>/stepcode-agent-team.json` | `agentDir` = `STEP_CODING_AGENT_DIR` or `~/.stepcode/agent` |
+| Project | `<cwd>/.stepcode/stepcode-agent-team.json` | Loaded only when the project is trusted |
+| Environment | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | One-off overrides; highest precedence |
+
+**How to apply changes:** edit the JSON file (unknown keys are ignored; invalid
+values fall back to defaults with a debug warning) and start a new session —
+config is read once at load. `/reload` re-reads it but also returns the plugin
+to its default-off state. Environment overrides apply to a single run.
+
 ```jsonc
 {
   "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
@@ -187,9 +198,25 @@ Precedence: defaults < global < project < environment overrides.
   "cost": { "warnThreshold": 1 },
   "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
   "storage": { "dir": null },
+  "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
   "debug": false
 }
 ```
+
+### Options at a glance
+
+| Section | Key options (default) | What it controls |
+|---|---|---|
+| `activation` | `enabled` (true) · `keywords` · `notifyOnActivate` (true) | Default-off gate: the `/agent-team` command or a keyword mention activates the plugin |
+| `models` | `available` (`["step-5-preview"]`) · `autonomousSelection` (false) · `autonomousThinking` (false) | Member model pool; with the autonomous switches off, members use the conversation model and `high` thinking |
+| `members` | `max` (8) · `defaultRole` (`worker`) · `defaultTools` (null) · `maxRecursionDepth` (1) | Team size cap, default role and tool allowlist, team-tree depth bound |
+| `dispatch` | `maxConcurrent` (5) · `timeoutMs` (180000) · `handshakeTimeoutMs` (15000) · `retries` (1) | Concurrency gate (queue-before-start), per-dispatch timeouts, retry count |
+| `oneshot` | `timeoutMs` (180000) | Stateless `mode: "oneshot"` dispatch timeout |
+| `cost` | `warnThreshold` (1) | Cumulative team spend warning (0 disables) |
+| `idle` | `reapAfterMs` (1800000) · `reapIntervalMs` (300000) | Idle member reaping (sessions stay resumable) |
+| `storage` | `dir` (null) | Team data root; null = `<agentDir>/teams` |
+| `topology` | `default` (`star`) · `requireDeclaration` (false) · `maxLoopCount` (2) | Default shape, design-before-work gate, ring message-chain bound (0 = unlimited) |
+| `debug` | `false` | Diagnostic logging |
 
 Key points: with `autonomousSelection` off (default) every member runs on the
 conversation's current model; with `autonomousThinking` off (default) members
@@ -201,7 +228,9 @@ slot frees. Full reference:
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 Environment overrides: `STEPCODE_TEAM_DEBUG=1` (≡ `debug: true`),
-`STEPCODE_TEAM_COST_WARN=<usd>` (≡ `cost.warnThreshold`).
+`STEPCODE_TEAM_COST_WARN=<usd>` (≡ `cost.warnThreshold`),
+`STEPCODE_TEAM_MAXDEPTH=<n>` (≡ `members.maxRecursionDepth`, 1–4; the leader
+injects the effective value into member processes).
 `STEPCODE_TEAM_SOCK` is injected automatically on member processes.
 
 ## Development
@@ -212,7 +241,7 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13)
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14)
                         # hermetic: throwaway agent dir; phase 5 is skipped
                         # unless STEP_API_KEY is set (it makes one real call)
 ```

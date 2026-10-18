@@ -173,6 +173,16 @@ sandbox/       隔离开发环境（gitignored）
 `<cwd>/.stepcode/stepcode-agent-team.json`（仅项目被信任时加载）。
 优先级：内置默认 < 全局 < 项目级 < 环境变量覆盖。
 
+| 层级 | 路径 | 说明 |
+|---|---|---|
+| 全局 | `<agentDir>/stepcode-agent-team.json` | agentDir = `STEP_CODING_AGENT_DIR` 或 `~/.stepcode/agent` |
+| 项目级 | `<cwd>/.stepcode/stepcode-agent-team.json` | 仅项目被信任时加载 |
+| 环境变量 | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | 一次性覆盖，优先级最高 |
+
+**如何修改生效**：编辑 JSON 文件（未知键忽略；非法值回退默认并在 debug 日志警告），
+然后**开启新会话**——配置在加载时只读一次。`/reload` 会重新读取，但插件也会随之回到
+默认关闭状态。环境变量覆盖仅对当次运行生效。
+
 ```jsonc
 {
   "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
@@ -183,9 +193,25 @@ sandbox/       隔离开发环境（gitignored）
   "cost": { "warnThreshold": 1 },
   "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
   "storage": { "dir": null },
+  "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
   "debug": false
 }
 ```
+
+### 可配置项速览
+
+| 节 | 关键选项（默认值） | 控制内容 |
+|---|---|---|
+| `activation` | `enabled`（true）· `keywords` · `notifyOnActivate`（true） | 默认关闭门：`/agent-team` 命令或关键词提及才激活 |
+| `models` | `available`（`["step-5-preview"]`）· `autonomousSelection`（false）· `autonomousThinking`（false） | 成员模型池；两个自主开关关闭时，成员用对话当前模型与 `high` 思考 |
+| `members` | `max`（8）· `defaultRole`（`worker`）· `defaultTools`（null）· `maxRecursionDepth`（1） | 团队规模上限、默认角色与工具白名单、团队树深度上限 |
+| `dispatch` | `maxConcurrent`（5）· `timeoutMs`（180000）· `handshakeTimeoutMs`（15000）· `retries`（1） | 并发门（排队启动）、单次派发超时、重试次数 |
+| `oneshot` | `timeoutMs`（180000） | 无状态 `mode: "oneshot"` 派发超时 |
+| `cost` | `warnThreshold`（1） | 累计花费告警（0 禁用） |
+| `idle` | `reapAfterMs`（1800000）· `reapIntervalMs`（300000） | 空闲成员回收（session 保留可恢复） |
+| `storage` | `dir`（null） | 团队数据根目录；null = `<agentDir>/teams` |
+| `topology` | `default`（`star`）· `requireDeclaration`（false）· `maxLoopCount`（2） | 默认形状、先设计再开工门、环形消息链上限（0 = 无上限） |
+| `debug` | `false` | 调试日志 |
 
 要点：`autonomousSelection` 关闭（默认）时所有成员使用对话当前模型；
 `autonomousThinking` 关闭（默认）时成员思考强度默认为 `high`。
@@ -195,7 +221,8 @@ sandbox/       隔离开发环境（gitignored）
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 环境变量覆盖：`STEPCODE_TEAM_DEBUG=1`（≡ `debug: true`）、
-`STEPCODE_TEAM_COST_WARN=<usd>`（≡ `cost.warnThreshold`）。
+`STEPCODE_TEAM_COST_WARN=<usd>`（≡ `cost.warnThreshold`）、
+`STEPCODE_TEAM_MAXDEPTH=<n>`（≡ `members.maxRecursionDepth`，1–4；队长按生效值注入成员进程）。
 `STEPCODE_TEAM_SOCK` 由队长自动注入成员进程。
 
 ## 开发
@@ -205,7 +232,7 @@ sandbox/       隔离开发环境（gitignored）
 ```bash
 bash sandbox/probe.sh   # RPC 握手探针 → 期望输出 PROBE OK
 
-npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13）
+npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14）
                         # hermetic：一次性临时 agentDir；phase5 未设 STEP_API_KEY 时
                         # 显式 SKIP（它会发起一次真实调用）
 ```
