@@ -50,6 +50,7 @@ import {
 	type TopologyEdge,
 	type TopologyShape,
 } from "./topology.ts";
+import { TEAM_TOOL_NAMES } from "./activation.ts";
 
 export interface CreateMemberParams {
 	name: string;
@@ -72,6 +73,12 @@ export interface SendOptions {
 	signal?: AbortSignal;
 	/** Interim member text, for streaming tool updates. */
 	onProgress?: (text: string) => void;
+	/**
+	 * Internal: nested (member-to-member) dispatch, exempt from the global
+	 * concurrency gate. The sender already occupies a running slot, so
+	 * acquiring another one here could deadlock the messaging chain.
+	 */
+	nested?: boolean;
 }
 
 export interface CreateTaskParams {
@@ -335,6 +342,7 @@ export class TeamManager {
 			`Run \`node ${shim} status\` to see which teammates you may message.`,
 			`Run \`node ${shim} msg --to <teammate> --message "<text>"\` to message an allowed teammate.`,
 			"If a teammate is not in your allowed list, state the need in your final report instead — the leader will relay it.",
+			"If a messaging command fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
 		].join("\n");
 		fs.writeFileSync(file, `${basePrompt}\n${coordination}\n`, { encoding: "utf-8", mode: 0o600 });
@@ -372,7 +380,12 @@ export class TeamManager {
 		}
 		if (member.model) args.push("--model", member.model);
 		if (member.thinking) args.push("--thinking", member.thinking);
-		if (member.tools && member.tools.length > 0) args.push("--tools", member.tools.join(","));
+		if (member.tools && member.tools.length > 0) {
+			// --tools is an allowlist over built-in AND extension tools: sub-leaders
+			// need the team tools on top of their preset allowlist.
+			const allow = canOrchestrate ? [...new Set([...member.tools, ...TEAM_TOOL_NAMES])] : member.tools;
+			args.push("--tools", allow.join(","));
+		}
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
 		return { args, env };
 	}
@@ -402,7 +415,9 @@ export class TeamManager {
 		const handlers: MemberRpcHandlers = {
 			onClose: () => {
 				this.rpcs.delete(member.name);
-				if (member.status === "running") {
+				// Any exit (including an external kill) means the process is
+				// gone; keep the registry honest instead of a stale "idle".
+				if (member.status !== "dead") {
 					member.status = "dead";
 					this.save();
 				}
@@ -455,9 +470,23 @@ export class TeamManager {
 		const signal = options.signal;
 		if (signal?.aborted) throw new Error("member dispatch aborted before start");
 		this.assertTopologyDeclared();
+		if (options.nested) {
+			// Nested (member-to-member) dispatch: the sender already occupies a
+			// running slot, so acquiring another one here could deadlock the
+			// chain (A waits for B while holding the last slot).
+			return this.runDispatch(member, message, options);
+		}
 		// Concurrency gate BEFORE the process starts: beyond maxConcurrent this
 		// member waits for a running peer to finish before it starts at all.
 		await this.acquireSlot();
+		try {
+			return await this.runDispatch(member, message, options);
+		} finally {
+			this.releaseSlot();
+		}
+	}
+
+	private async runDispatch(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {
 		let rpc: MemberRpc | null = null;
 		let unsubscribe = (): void => {};
 		try {
@@ -467,7 +496,7 @@ export class TeamManager {
 			member.status = "running";
 			this.save();
 			if (options.onProgress) unsubscribe = rpc.onInterim(options.onProgress);
-			const { text, usage } = await rpc.promptAndSettle(message, signal);
+			const { text, usage } = await rpc.promptAndSettle(message, options.signal);
 			member.usage = addUsage(member.usage, usage);
 			member.status = "idle";
 			this.save();
@@ -485,7 +514,6 @@ export class TeamManager {
 			throw err;
 		} finally {
 			unsubscribe();
-			this.releaseSlot();
 		}
 	}
 

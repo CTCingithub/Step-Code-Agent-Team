@@ -19,6 +19,7 @@ export const TEAM_TOOL_NAMES = [
 	"team_create_member",
 	"team_send",
 	"team_task",
+	"team_set_topology",
 	"team_disband",
 	"team_status",
 ] as const;

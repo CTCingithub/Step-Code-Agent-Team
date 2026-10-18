@@ -125,7 +125,9 @@ export class TeamServer {
 					});
 					return;
 				}
-				const result = await manager.sendMessage(req.to, req.message);
+				// Nested dispatch: exempt from the global concurrency gate — the
+				// sender already holds a running slot (see members.ts dispatch).
+				const result = await manager.sendMessage(req.to, req.message, { nested: true });
 				this.reply(conn, { ok: true, reply: result.text });
 				return;
 			}
