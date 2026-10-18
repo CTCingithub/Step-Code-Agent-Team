@@ -92,6 +92,22 @@ live_check "project-config" "$LIVE1" "disabled by configuration"
 LIVE2="$(mktemp -d)"
 live_check "command-activate" "$LIVE2" "Agent team plugin activated (/agent-team command)"
 
+# Args after the command must be forwarded to the agent as a real user message
+# (a slash command otherwise consumes the whole input and drops the request).
+LIVE3="$(mktemp -d)"
+mkdir -p "$LIVE3/sessions"
+fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team ping-forward-check"}\n' \
+  | STEP_CODING_AGENT_DIR="$LIVE3/agent" timeout 45 step -e "$ROOT/extensions/index.ts" \
+    --mode rpc --session-id live-fwd --session-dir "$LIVE3/sessions" -a 2>&1)" || true
+if echo "$fwd_out" | grep -q '"text":"ping-forward-check"' || grep -rq '"text":"ping-forward-check"' "$LIVE3"/sessions/ 2>/dev/null; then
+  echo "live-args-forward: OK"
+else
+  echo "live-args-forward: FAILED (forwarded request not recorded as a user message)"
+  echo "$fwd_out" | tail -5
+  FAILED+=("live-args-forward")
+fi
+rm -rf "$LIVE3"
+
 if [ "${#FAILED[@]}" -gt 0 ]; then
   echo "run-smoke: FAILED phases: ${FAILED[*]}"
   exit 1

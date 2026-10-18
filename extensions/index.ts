@@ -105,8 +105,8 @@ export default function (pi: ExtensionAPI) {
 	pi.setUnavailableTools([...TEAM_TOOL_NAMES]);
 
 	pi.registerCommand("agent-team", {
-		description: "Activate the agent team plugin and show the team board",
-		handler: async (_args, ctx) => {
+		description: "Activate the agent team plugin and show the team board; text after the command is forwarded to the agent",
+		handler: async (args, ctx) => {
 			currentCtx = ctx;
 			if (!config.activation.enabled) {
 				ctx.ui.notify("Agent team plugin is disabled by configuration (activation.enabled = false).", "warning");
@@ -132,7 +132,25 @@ export default function (pi: ExtensionAPI) {
 			}
 			const totalCost = reg.members.reduce((sum, m) => sum + m.usage.cost, 0);
 			lines.push(`  spend: $${totalCost.toFixed(4)}`);
+			// A slash command consumes the whole input, so text after the command
+			// would otherwise be dropped — forward it as a real user message now
+			// that the team tools are available.
+			const request = args?.trim() ?? "";
+			if (request) lines.push("  → forwarding your request to the agent…");
 			ctx.ui.notify(lines.join("\n"), "info");
+			if (request) {
+				try {
+					// sendUserMessage throws while streaming unless a delivery
+					// mode is given; queue behind the current turn in that case.
+					if (ctx.isIdle()) pi.sendUserMessage(request);
+					else pi.sendUserMessage(request, { deliverAs: "followUp" });
+				} catch (err) {
+					ctx.ui.notify(
+						`Could not forward your request to the agent: ${err instanceof Error ? err.message : String(err)}`,
+						"warning",
+					);
+				}
+			}
 		},
 	});
 
