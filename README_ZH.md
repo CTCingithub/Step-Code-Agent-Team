@@ -38,18 +38,28 @@ step install /path/to/Step-Code-Agent-Team
 step -e ./extensions/index.ts
 ```
 
-然后在会话里直接用自然语言下达目标，例如："创建一个团队并行审查这个仓库"。
+然后在会话里下达目标，例如："用智能体团队并行审查这个仓库"（或先运行 `/agent-team`——插件在此之前保持静默）。
+
+## 激活机制（默认关闭）
+
+插件在会话启动时**不激活**：团队工具对模型不可见，也不存在 socket、定时器或成员进程。两种触发方式：
+
+1. **斜杠命令 `/agent-team`**：调用即激活，并展示团队板；
+2. **自然语言**：prompt 文本命中激活关键词（如 "智能体团队"、"agent team"，可配置）。
+
+激活后在本次会话内保持。完整配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+（可整体禁用激活或调整关键词）。
 
 ## 工具
 
 | 工具 | 用途 |
 |---|---|
-| `team_create_member` | 创建/恢复成员（`name`，可选 `role` 预设、`model`、`tools`、`systemPrompt`） |
+| `team_create_member` | 创建/恢复成员（`name`，可选 `role` 预设、`model`、`thinking`、`tools`、`systemPrompt`） |
 | `team_send` | 给成员发消息并等待完整回复；可带 `taskId`（按任务执行）或 `mode: "oneshot"`（无状态） |
 | `team_task` | 任务板：`create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
-| `/team` | 命令：TUI 中查看紧凑团队板 |
+| `/agent-team` | 命令：激活插件并查看团队板 |
 
 ## 内置角色预设（`agents/`）
 
@@ -80,24 +90,43 @@ bash sandbox/probe.sh  # 零 token 协议探针（期望输出 PROBE OK）
 ## 项目结构
 
 ```
-extensions/    index.ts（接线）· rpc-client.ts · members.ts · tasks.ts ·
-               registry.ts · team-server.ts · presets.ts · tools.ts · render.ts
+extensions/    index.ts（接线）· config.ts · activation.ts · rpc-client.ts ·
+               members.ts · tasks.ts · registry.ts · team-server.ts ·
+               presets.ts · tools.ts · render.ts
 bin/           stepcode-team.mjs（成员侧 CLI shim）
 agents/        角色预设（scout · planner · worker · reviewer）
 prompts/       team-review.md
 skills/        team-orchestration/SKILL.md
+docs/          CONFIGURATION.md（配置参考）
 sandbox/       隔离开发环境（gitignored）
 ```
 
 ## 配置
 
-| 变量 | 默认值 | 作用 |
-|---|---|---|
-| `STEPCODE_TEAM_COST_WARN` | `1` | 触发成本护栏告警的团队累计花费（美元） |
-| `STEP_CODING_AGENT_DIR` | `~/.stepcode/agent` | agent 目录；团队注册表位于 `<agentDir>/teams`（沙箱将其指向 `sandbox/agent`） |
-| `STEPCODE_TEAM_SOCK` | — | 由队长自动注入成员进程；指向团队服务 socket |
+全部行为参数集中于一个 JSON 文件：`<agentDir>/stepcode-agent-team.json`
+（沙箱中 agentDir 指向 `sandbox/agent`）：
 
-调度上限（编译期常量）：最多 8 个成员；最多 4 个并发调度；单次调度 180s 超时；空闲 30 分钟的成员被回收。
+```jsonc
+{
+  "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
+  "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
+  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null },
+  "dispatch": { "maxConcurrent": 4, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
+  "oneshot": { "timeoutMs": 180000 },
+  "cost": { "warnThreshold": 1 },
+  "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
+  "storage": { "dir": null },
+  "debug": false
+}
+```
+
+要点：`autonomousSelection` 关闭（默认）时所有成员使用对话当前模型；
+`autonomousThinking` 关闭（默认）时成员思考强度默认为 `high`。完整参考：
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
+
+环境变量覆盖：`STEPCODE_TEAM_DEBUG=1`（≡ `debug: true`）、
+`STEPCODE_TEAM_COST_WARN=<usd>`（≡ `cost.warnThreshold`）。
+`STEPCODE_TEAM_SOCK` 由队长自动注入成员进程。
 
 ## 开发
 
@@ -150,8 +179,8 @@ export STEP_API_KEY=<你的key>
 #       → 验证 team_create_member + team_send（真实 LLM 回复）
 #    b. "用一句话向它总结你发现的问题"
 #       → 验证成员上下文记忆（同一进程内多轮）
-#    c. "/team"
-#       → 验证团队板展示
+#    c. "/agent-team"
+#       → 验证激活与团队板展示
 #    d. "创建两个成员并行审查不同侧重，然后合并结论"
 #       → 验证并行调度与结果合并
 #    e. 退出后重新进入并恢复会话：

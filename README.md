@@ -38,18 +38,31 @@ step install /path/to/Step-Code-Agent-Team
 step -e ./extensions/index.ts
 ```
 
-Then start a session and just ask: *"Create a team to review this repo in parallel."*
+Then start a session and ask: *"Use the agent team to review this repo in parallel."* — or run `/agent-team` first; the plugin stays dormant until then.
+
+## Activation (default off)
+
+The plugin is **inactive when a session starts**: the team tools are hidden from
+the model, and no server, timer, or member process exists. It activates when:
+
+1. You invoke the **`/agent-team`** command (activates and shows the team board), or
+2. Your prompt explicitly mentions the plugin (keywords like "agent team" /
+   "智能体团队", configurable).
+
+Once activated it stays on for the session. See
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md) to disable activation entirely or
+tune the keywords.
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| `team_create_member` | Create/resume a member (`name`, optional `role` preset, `model`, `tools`, `systemPrompt`) |
+| `team_create_member` | Create/resume a member (`name`, optional `role` preset, `model`, `thinking`, `tools`, `systemPrompt`) |
 | `team_send` | Message a member and wait for the full reply; optional `taskId` (runs it as a task) or `mode: "oneshot"` (stateless) |
 | `team_task` | Task board: `create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
-| `/team` | Command: compact team board in the TUI |
+| `/agent-team` | Command: activate the plugin and show the team board |
 
 ## Bundled role presets (`agents/`)
 
@@ -81,25 +94,44 @@ before runs that touch a model — keys are never written to disk.
 ## Project layout
 
 ```
-extensions/    index.ts (wiring) · rpc-client.ts · members.ts · tasks.ts ·
-               registry.ts · team-server.ts · presets.ts · tools.ts · render.ts
+extensions/    index.ts (wiring) · config.ts · activation.ts · rpc-client.ts ·
+               members.ts · tasks.ts · registry.ts · team-server.ts ·
+               presets.ts · tools.ts · render.ts
 bin/           stepcode-team.mjs (member-side CLI shim)
 agents/        role presets (scout · planner · worker · reviewer)
 prompts/       team-review.md
 skills/        team-orchestration/SKILL.md
+docs/          CONFIGURATION.md (config reference)
 sandbox/       isolated dev environment (gitignored)
 ```
 
 ## Configuration
 
-| Variable | Default | Effect |
-|---|---|---|
-| `STEPCODE_TEAM_COST_WARN` | `1` | Cumulative team spend (USD) that triggers the cost guardrail warning |
-| `STEP_CODING_AGENT_DIR` | `~/.stepcode/agent` | Agent dir; team registries live under `<agentDir>/teams` (the sandbox points this at `sandbox/agent`) |
-| `STEPCODE_TEAM_SOCK` | — | Set automatically on member processes; points at the team server socket |
+All behavior lives in one JSON file, `<agentDir>/stepcode-agent-team.json`
+(the sandbox points `agentDir` at `sandbox/agent`):
 
-Dispatch limits (compiled in): max 8 members, max 4 concurrent dispatches,
-180s per-dispatch timeout, idle members reaped after 30 minutes.
+```jsonc
+{
+  "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
+  "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
+  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null },
+  "dispatch": { "maxConcurrent": 4, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
+  "oneshot": { "timeoutMs": 180000 },
+  "cost": { "warnThreshold": 1 },
+  "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
+  "storage": { "dir": null },
+  "debug": false
+}
+```
+
+Key points: with `autonomousSelection` off (default) every member runs on the
+conversation's current model; with `autonomousThinking` off (default) members
+default to `high` thinking. Full reference:
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+Environment overrides: `STEPCODE_TEAM_DEBUG=1` (≡ `debug: true`),
+`STEPCODE_TEAM_COST_WARN=<usd>` (≡ `cost.warnThreshold`).
+`STEPCODE_TEAM_SOCK` is injected automatically on member processes.
 
 ## Development
 

@@ -7,7 +7,18 @@ description: When and how to orchestrate a multi-agent team with the step-code-a
 
 You are the leader. You can spawn member agents (`team_create_member`), send them
 work (`team_send`), track a dependency-aware task board (`team_task`), and watch
-spend and status (`team_status`, `/team`).
+spend and status (`team_status`, `/agent-team`).
+
+**The plugin is dormant until activated.** The team tools only exist in your
+toolset after the user runs `/agent-team` or explicitly mentions the agent team.
+If the tools are missing, ask the user to run `/agent-team` — never pretend to
+orchestrate a team without them.
+
+Member models and thinking levels are policy-driven: by default every member
+runs on the conversation's current model with `high` thinking. If the config
+enables autonomous selection, pick each member's model from the available list
+deliberately — cheap models for read-only scouting, stronger models for
+implementation — and set its thinking level to match the task.
 
 ## When to form a team
 
