@@ -12,7 +12,7 @@
 │                            setUnavailableTools 关门（默认关闭）；
 │                            激活触发：/agent-team 命令、input 钩子、before_agent_start 钩子、
 │                            STEPCODE_TEAM_AUTOACTIVATE（子队长授予）
-├── extensions/config.ts     配置：默认值 < agentDir 配置文件 < 环境变量覆盖；校验与缓存
+├── extensions/config.ts     配置：settings.json 的 stepcodeAgentTeam 节（默认值 < 旧版专用文件 < settings.json 节 < 环境变量覆盖）；校验与缓存
 ├── extensions/activation.ts 激活门：关键词/命令检测、工具释放
 ├── extensions/tools.ts      6 个 LLM 工具（create_member / send / task / set_topology / disband / status）
 ├── extensions/members.ts    TeamManager：成员生命周期、并发门、任务板调度、拓扑方法、

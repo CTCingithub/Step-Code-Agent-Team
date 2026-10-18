@@ -45,7 +45,7 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 | `extensions/topology.ts` | 拓扑模型 | 新形状 |
 | `extensions/team-server.ts` | 消息强制 | 协议变更 |
 | `sandbox/smoke-phase4/10/11/12.ts` | LLM 层回归探针（需测试 key） | 新功能必须配套探针 |
-| `test/run-smoke.sh` + `test/smoke/phase*.ts` | 入库的零 token 冒烟集（1/2/3/5/6/7/8/9/13，hermetic 临时 agentDir；phase5 无 key 时 SKIP） | 新功能必须配套探针 |
+| `test/run-smoke.sh` + `test/smoke/phase*.ts` | 入库的零 token 冒烟集（1/2/3/5/6/7/8/9/13/14，hermetic 临时 agentDir；phase5 无 key 时 SKIP；含 live 接线检查） | 新功能必须配套探针 |
 | `docs/ARCHITECTURE.md` · `docs/PROTOCOL.md` | 架构与协议参考（组件/数据流/护栏、RPC/socket/registry/工具契约） | 组件或协议变更必改 |
 | `docs/TESTING.md` | 四层测试操作化指南 | 新探针或测试入口变化必改 |
 
@@ -62,7 +62,7 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 > 进度（plan-51，2026-10-18）：M4 文档三件套、项目级配置接线（smoke-phase13）、零 token 探针入库（`test/smoke/` + `test/run-smoke.sh`）、安装打包审计与 TUI 验证清单均已落地；余下均为用户侧执行项，详见 `.stepcode/plans/` 当前会话计划。
 
 1. ~~把沙箱探针固化为 CI 冒烟集~~ ✅ 已落地：`test/smoke/` + `test/run-smoke.sh`（`npm run smoke`），phase5 无 key 时显式 SKIP；LLM 层留 sandbox/
-2. ~~项目级配置接入~~ ✅ 已落地：`<cwd>/.stepcode/stepcode-agent-team.json`，trust 门控（smoke-phase13）
+2. ~~项目级配置接入~~ ✅ 已落地：`<cwd>/.stepcode/settings.json` 的 `stepcodeAgentTeam` 节，trust 门控（smoke-phase13；旧专用文件仅作只读回退）
 3. TUI 渲染人工验证：清单见 `docs/TUI-VERIFICATION.md`（沙箱内逐项打勾并记录结果）
 4. `step install ./` 端到端安装验证（由用户执行）：**从干净导出物安装**——本地路径安装整目录拷贝/硬链且不尊重 .gitignore，会把 `local/`（密钥）与 `sandbox/` 扫入发布物；用 `git archive HEAD | tar -x -C /tmp/pkg && step install /tmp/pkg`。package.json 已加 `files` 白名单作为纵深防御
 5. 观察真实使用中 LLM 对拓扑/递归的遵循度，迭代工具描述与 SKILL 指南

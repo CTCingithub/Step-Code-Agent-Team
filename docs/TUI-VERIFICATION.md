@@ -22,7 +22,7 @@ export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' local/test-api-key.md | cut -d=
 | 5 | 在 team_send 结果上按 ctrl+o | 完整正文展开 | ☐ |
 | 6 | `team_set_topology(pipeline)` 后再发一次消息 | renderCall：`team topology pipeline 1 edge(s)`；renderResult 头：`pipeline · 1 edge(s)` | ☐ |
 | 7 | `team_task create`（title + assignee）→ `team_task start` | renderCall：`team task create T1 …` / `team task start T1`；renderResult：`T1 [done] @scout1 标题` + 回复正文 | ☐ |
-| 8 | `team_status` | 每成员一行（图标 + name + role + 用量），任务逐行（id [status] title @assignee） | ☐ |
+| 8 | `team_status` | 每成员一行（图标 + name + role + 用量），任务逐行（id [status] title，50 字符预览） | ☐ |
 | 9 | `team_disband(scout1)` | renderCall：`team −scout1`；renderResult：`scout1` | ☐ |
 | 10 | 退出沙箱会话 | 无孤儿成员进程（`pgrep -f 'team-.*-scout1'` 为空） | ☐ |
 

@@ -330,7 +330,7 @@ is absent, so the core team functionality always runs.
 
 Phases 0–5 of the development plan are implemented and validated:
 
-- **Protocol layer** (zero-token smoke probes, `sandbox/smoke-phase*.ts`):
+- **Protocol layer** (zero-token smoke probes, `test/smoke/phase*.ts`):
   spawn, handshake, registry persistence, task graph, socket round-trip,
   preset loading.
 - **Model-touching paths** (validated in the sandbox with a test key): member

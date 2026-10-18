@@ -304,7 +304,7 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 ## 状态与验证
 
 开发计划 Phase 0–5 已全部实现。协议层行为（spawn、握手、注册表持久化、任务图、
-socket 往返）已由零 token 冒烟探针（`sandbox/smoke-phase*.ts`）验证通过。
+socket 往返）已由零 token 冒烟探针（`test/smoke/phase*.ts`）验证通过。
 涉及模型调用的路径已在沙箱内用测试 key 验证通过（成员回复、同进程上下文记忆、按 session-id 重启恢复、经 shim 的成员间直达消息、队长工具调用端到端链路）。以下命令可供人工复验：
 
 ```bash
