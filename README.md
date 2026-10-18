@@ -9,7 +9,7 @@ Agent team plugin for [Step Code](https://stepfun.com) (`step`): your current se
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
     Leader["Leader session (this extension)"]
     Registry[("TeamRegistry registry.json")]
     A["Member A (step --mode rpc)"]
@@ -92,10 +92,42 @@ Direct member-to-member messaging is **denied unless the topology allows it**. T
 | `star` (default) | none | Independent parallel strands that the leader merges |
 | `pipeline` | m1→m2→…→mn (creation order) | Sequential refinement (scout → planner → worker → reviewer) |
 | `mesh` | all ordered pairs | Peers cross-checking each other |
-| `ring` | mi→mi+1 (wraps around) | Round-robin review |
+| `ring` | mi→mi+1 (wraps around) | Round-robin review; chain length bounded by `topology.maxLoopCount` (default 2, 0 = unlimited) |
 | `custom` | explicit `{from, to}` list | Precise control |
 
-Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors, which members can query with `stepcode-team status`. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+```mermaid
+flowchart TD
+    subgraph star["star (default): no member↔member edges — the leader relays everything"]
+        direction LR
+        L["Leader"] --- S1["m1"]
+        L --- S2["m2"]
+        L --- S3["m3"]
+    end
+    subgraph pipeline["pipeline: ordered handoffs (creation order)"]
+        direction LR
+        P1["m1"] --> P2["m2"] --> P3["m3"]
+    end
+    subgraph mesh["mesh: everyone may message everyone"]
+        direction LR
+        M1["m1"] --> M2["m2"]
+        M2 --> M1
+        M1 --> M3["m3"]
+        M3 --> M1
+        M2 --> M3
+        M3 --> M2
+    end
+    subgraph ring["ring: round-robin, chain bounded by topology.maxLoopCount (default 2, 0 = unlimited)"]
+        direction LR
+        R1["m1"] --> R2["m2"] --> R3["m3"] --> R1
+    end
+    subgraph custom["custom: explicit edges"]
+        direction LR
+        C1["m1"] --> C3["m3"]
+        C2["m2"] --> C3
+    end
+```
+
+Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors, which members can query with `stepcode-team status`. In a ring, each forwarded message extends the sender's chain by one hop; a hop that would exceed `topology.maxLoopCount` (default 2, 0 = unlimited) is rejected and the sender is told to report to the leader instead — which also prevents ring-circulation deadlocks. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ## Bundled role presets (`agents/`)
 

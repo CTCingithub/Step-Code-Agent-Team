@@ -9,7 +9,7 @@
 ## 工作原理
 
 ```mermaid
-flowchart LR
+flowchart TD
     Leader["队长会话（本扩展）"]
     Registry[("TeamRegistry registry.json")]
     A["成员 A（step --mode rpc）"]
@@ -89,10 +89,42 @@ step -e ./extensions/index.ts
 | `star`（默认） | 无 | 并行独立、由队长汇总 |
 | `pipeline` | m1→m2→…→mn（按创建顺序） | 顺序精炼（scout → planner → worker → reviewer） |
 | `mesh` | 全部有序对 | 同伴互查 |
-| `ring` | mi→mi+1（末位回环） | 环形流水 |
+| `ring` | mi→mi+1（末位回环） | 环形流水；链长受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限） |
 | `custom` | 显式 `{from, to}` 列表 | 精确控制 |
 
-强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
+```mermaid
+flowchart TD
+    subgraph star["star（默认）：无成员间直连边——全部经队长中转"]
+        direction LR
+        L["队长"] --- S1["m1"]
+        L --- S2["m2"]
+        L --- S3["m3"]
+    end
+    subgraph pipeline["pipeline：按创建顺序接力"]
+        direction LR
+        P1["m1"] --> P2["m2"] --> P3["m3"]
+    end
+    subgraph mesh["mesh：两两互通"]
+        direction LR
+        M1["m1"] --> M2["m2"]
+        M2 --> M1
+        M1 --> M3["m3"]
+        M3 --> M1
+        M2 --> M3
+        M3 --> M2
+    end
+    subgraph ring["ring：环形接力，链长受 topology.maxLoopCount 约束（默认 2，0 = 无上限）"]
+        direction LR
+        R1["m1"] --> R2["m2"] --> R3["m3"] --> R1
+    end
+    subgraph custom["custom：显式边"]
+        direction LR
+        C1["m1"] --> C3["m3"]
+        C2["m2"] --> C3
+    end
+```
+
+强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 ## 内置角色预设（`agents/`）
 
