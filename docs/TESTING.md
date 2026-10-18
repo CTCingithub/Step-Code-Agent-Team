@@ -83,6 +83,9 @@ onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全�
 目录不存在（sessions 目录删后 createMember 仍正常）、大规模（8 成员上限 / 999 任务上限 /
 单任务 detail 50KB）。
 
+TUI 渲染（renderCall/renderResult、`/agent-team` 面板、流式进度、激活 notify）只在交互 TUI
+生效，探针覆盖不到，按 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) 人工验证。
+
 ## 5. 修复与复跑规则
 
 1. 失败先定位根因：产品缺陷 vs 探针缺陷 vs 陈旧状态，记录进 `sandbox/TEST-PLAN.md`。

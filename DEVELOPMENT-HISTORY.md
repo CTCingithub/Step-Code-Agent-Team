@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-50，README 改版与交接文档同期）。
+> 最近更新：2026-10-18（plan-51，后续工作规划与执行：M4 文档 / 项目级配置 / 探针入库 / 用户侧前置）。
 
 ## 总览
 
@@ -16,7 +16,7 @@
 | 7 | 递归深度/并发上限/README 致谢/上下文节约 | plan-37 | maxRecursionDepth / maxConcurrent=5 / 子队长授予 | — |
 | 8 | 沙箱全面测试与问题优化 | plan-43 | phase9–12 探针 + sandbox/TEST-PLAN.md | 嵌套死锁/门控泄漏/子队长工具饥饿/崩溃状态滞留/提示加固 |
 | 9 | 历程文档 + README 改版 + 交接文档 | plan-50 | 本文档 + mermaid README + HANDOFF.md | — |
-| 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针）；零 token 探针入库 test/smoke/ + runner | phase9 旧断言哨兵值越界 |
+| 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针）；零 token 探针入库 test/smoke/ + runner；安装打包审计 + TUI 验证清单 | phase9 旧断言哨兵值越界 |
 
 ## 明细
 
@@ -91,7 +91,7 @@
 
 **工作**：本文档 + README 中英 mermaid 改版与拓扑专节 + `HANDOFF.md` 交接文档。
 
-### 10. 后续工作规划与执行（plan-51，进行中）
+### 10. 后续工作规划与执行（plan-51，已完成）
 
 **用户 prompt**：「请阅读工作空间，了解项目与当前进度，然后规划后续工作」（修订：「开始按计划执行，注意同步修改或更新各类相关文档」）
 
@@ -99,4 +99,4 @@
 
 **工作（已完成）**：① `docs/ARCHITECTURE.md`（组件/数据流/护栏位置）、`docs/PROTOCOL.md`（RPC/socket/registry/工具契约，全部对齐源码）、`docs/TESTING.md`（四层测试操作化）；README 中英新增「文档」链接表与「已知限制」小节。② 项目级配置接线：`applyProjectConfig`（trust 门控、session_start 就地合并、env 仍最高优先）+ `STEPCODE_TEAM_MAXDEPTH` 向子成员传播生效深度上限；配套 smoke-phase13（先红后绿，14/14 通过、1 项因探针环境未授信而 SKIP）；phase9 相应断言更新（旧哨兵值 99 越界 1–64 校验范围，改 7）。
 
-**待执行**：`step install` 打包审计与 TUI 验证清单。
+**收尾**：安装打包审计结论——本地路径安装整目录拷贝/硬链、不尊重 .gitignore，README 中英增加「从干净导出物安装」指引，package.json 增加 `files` 白名单（纵深防御）；`docs/TUI-VERIFICATION.md` 交付 TUI 人工验证清单。四项后续工作全部完成，余下为用户侧执行项（TUI 清单打勾、干净导出物安装、LLM 遵循度观察）。

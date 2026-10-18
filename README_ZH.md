@@ -48,6 +48,14 @@ step install /path/to/Step-Code-Agent-Team
 step -e ./extensions/index.ts
 ```
 
+> **请从干净导出物安装，不要直接安装工作目录。** 本地路径安装会拷贝整个包目录
+> （不尊重 `.gitignore`），会把 `local/`（凭证）与 `sandbox/`（开发状态）一并卷入。
+> 在检出副本中：
+>
+> ```bash
+> git archive HEAD | tar -x -C /tmp/step-code-agent-team && step install /tmp/step-code-agent-team
+> ```
+
 然后在会话里下达目标，例如："用智能体团队并行审查这个仓库"（或先运行 `/agent-team`——插件在此之前保持静默）。
 
 ## 激活机制（默认关闭）

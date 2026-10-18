@@ -59,12 +59,12 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 
 ## 5. 建议下一步（按优先级）
 
-> 进度（plan-51，2026-10-18）：M4 文档三件套、项目级配置接线（smoke-phase13）、零 token 探针入库（`test/smoke/` + `test/run-smoke.sh`）均已落地；其余项仍开放，详见 `.stepcode/plans/` 当前会话计划。
+> 进度（plan-51，2026-10-18）：M4 文档三件套、项目级配置接线（smoke-phase13）、零 token 探针入库（`test/smoke/` + `test/run-smoke.sh`）、安装打包审计与 TUI 验证清单均已落地；余下均为用户侧执行项，详见 `.stepcode/plans/` 当前会话计划。
 
 1. ~~把沙箱探针固化为 CI 冒烟集~~ ✅ 已落地：`test/smoke/` + `test/run-smoke.sh`（`npm run smoke`），phase5 无 key 时显式 SKIP；LLM 层留 sandbox/
 2. ~~项目级配置接入~~ ✅ 已落地：`<cwd>/.stepcode/stepcode-agent-team.json`，trust 门控（smoke-phase13）
-3. TUI 渲染人工验证：`/agent-team` 面板、流式进度、renderCall/renderResult
-4. `step install ./` 端到端安装验证（会改真实 settings，由用户执行）
+3. TUI 渲染人工验证：清单见 `docs/TUI-VERIFICATION.md`（沙箱内逐项打勾并记录结果）
+4. `step install ./` 端到端安装验证（由用户执行）：**从干净导出物安装**——本地路径安装整目录拷贝/硬链且不尊重 .gitignore，会把 `local/`（密钥）与 `sandbox/` 扫入发布物；用 `git archive HEAD | tar -x -C /tmp/pkg && step install /tmp/pkg`。package.json 已加 `files` 白名单作为纵深防御
 5. 观察真实使用中 LLM 对拓扑/递归的遵循度，迭代工具描述与 SKILL 指南
 
 ## 6. 验证方法

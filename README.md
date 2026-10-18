@@ -48,6 +48,14 @@ step install /path/to/Step-Code-Agent-Team
 step -e ./extensions/index.ts
 ```
 
+> **Install from a clean export, not the working tree.** Installing a local path
+> copies the whole package folder (`.gitignore` is not honored), which would sweep
+> in `local/` (credentials) and `sandbox/` (dev state). From a checkout:
+>
+> ```bash
+> git archive HEAD | tar -x -C /tmp/step-code-agent-team && step install /tmp/step-code-agent-team
+> ```
+
 Then start a session and ask: *"Use the agent team to review this repo in parallel."* — or run `/agent-team` first; the plugin stays dormant until then.
 
 ## Activation (default off)
