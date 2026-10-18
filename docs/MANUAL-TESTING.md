@@ -10,6 +10,10 @@
 10 项逐条打勾：`/agent-team` 团队板、各工具的 renderCall/renderResult 形态、长 run 的
 流式进度（onUpdate）、ctrl+o 展开、激活 notify、退出后无孤儿成员进程。
 
+另验一条命令行为（plan-22 修复）：输入 `/agent-team <你的请求>`——命令应激活并展示团队板，
+且**命令后的请求文本会作为用户消息转发给 agent** 并开始处理（修复前整条输入被命令消费、
+请求被丢弃，表现为「无任何反馈」；runner 的 `live-args-forward` 检查已守住此行为）。
+
 ## 2. 真实安装（step install）
 
 ```bash

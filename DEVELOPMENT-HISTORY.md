@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-18 复查轮：全面审查、15 项缺陷修复、冒烟集硬化、手动测试清单）。
+> 最近更新：2026-10-18（plan-22，修复 /agent-team 带参 prompt 无反馈；此前为 plan-18 复查轮）。
 
 ## 总览
 
@@ -20,6 +20,7 @@
 | 11 | 拓扑图示化 + 环形 loop 上限 + README 配置文档 + 沙箱测试项目 | plan-52 | topology.maxLoopCount（默认 2、0 无上限；server + manager 双层强制；phase14 探针）；README 主图纵向化 + 五形状 mermaid 总图；README 配置节扩写；沙箱可运行测试小项目 | — |
 | 12 | 配置文件位置迁移到 settings.json 约定 | plan-53 | 配置改存 settings.json 的 stepcodeAgentTeam 节（全局 <agentDir>/settings.json + 项目级 <cwd>/.stepcode/settings.json），旧专用文件保留为只读回退；phase6/9/13/14 先红后绿；沙箱 cfg-* fixture 全迁移 | 探针先红 16 项 |
 | 13 | 全面复查与优化（三路独立审查 + 定向自查） | plan-18 | 修复 15 项缺陷（kill 升级死代码/定时器泄漏/信号量竞态/任务双派/消息环死锁/reaper/oneshot/disband/shim 截断等）；冒烟集结构化判定 + live 接线检查；新增 docs/MANUAL-TESTING.md | runner 曾误判 phase2 日志中的任务状态 failed（已收窄模式） |
+| 14 | 修复 /agent-team 带参 prompt 无反馈 | plan-22 | 命令后文本经 pi.sendUserMessage 转发为真实用户消息（空闲直发/流式 followUp）；runner 新增 live-args-forward 检查 | 修复前会话文件中无任何用户消息记录 |
 
 ## 明细
 
@@ -135,3 +136,13 @@
 **工作**：① 修复 15 项缺陷——rpc-client：SIGKILL 升级死代码（`proc.killed` 送达信号后恒为 true，改用真实退出状态）、settle 定时器与 waiter 泄漏（race 被 close/abort 赢时 finally 清理）；members：acquireSlot/releaseSlot 移交式改造（在飞派发可超过 maxConcurrent 的竞态）、startTask 每任务锁（并发 start 双派发双计费）+ 终态错误不再掩盖真实失败、等待环检测（`wouldCycle`/`withWaitingOn`，把成员互等死锁转为明确拒绝）、reaper 完成时刷新 lastActivity 且 killAndWait、oneshot 标记 running/idle + SIGKILL 升级、disband 清理每成员簿记；team-server：死锁防护、listen 错误始终留痕、每连接请求序列化、stop 销毁存活连接；index：reaper 间隔逐 tick 活读（项目级配置可生效）、getManager 停机守卫；tools：成本告警改团队总花费、截断不拆代理对；config：读取错误与缺失区分（debug 留痕）、自有键合并（防 Object.prototype 阴影）；registry：members/tasks 形状校验；shim：exitCode+end 刷新管道输出、leader 断连即失败。② 冒烟集硬化：runner 结构化判定（DONE 存在且探针日志无 FAIL 标记，替代子串计数）、信号安全清理、新增两个零 token live 检查（受信任项目配置抵达 index.ts 自身配置实例、/agent-team 命令路径）；phase13 移除 vacuous live 块（每个 -e 扩展各自持有 config 模块实例，探针内不可观测）与仓库真实 settings.json 的暂存污染；phase2/7/14 补输入验证、畸形注册表、等待环单测。③ 文档修正 6 处（README 中英 Status 节探针路径、HANDOFF phase 列表与项目配置路径、ARCHITECTURE 配置优先级、TUI-VERIFICATION team_status 预期）+ 沙箱 pristine 同步与 TEST-PLAN fixture 描述校正。④ 新增 `docs/MANUAL-TESTING.md`（8 类人工验证项 + 已知限制）。
 
 **验证**：全量 `npm run smoke` 全绿（10 个 phase + 2 个 live 检查）；phase5 带 key 复跑通过；期间 runner 新模式曾将 phase2 日志中的任务状态 `failed` 误判为失败，收窄失败模式（`FAIL `/`FAILED`）后转绿。
+
+### 14. 修复 /agent-team 带参无反馈（plan-22）
+
+**用户 prompt**：「任务1失败，我在沙箱环境中，尝试的prompt是"/agent-team 请阅读工作空间后，使用agent team功能，开始修改"，但是没有看到TUI有任何反馈内容」
+
+**根因**：harness 把以已注册斜杠命令开头的输入**整条路由给命令处理器并旁路 agent**；本插件 `/agent-team` 的处理器忽略 `_args`，命令后的自然语言请求被整体丢弃。用户只能看到瞬时的激活/团队板 toast（易错过），表现为「无任何反馈」。证据链：沙箱会话文件中无该 prompt 的任何记录（连原始输入都没进会话）；PTY 驱动真实 TUI 复现——团队板出现但请求文本缺失；RPC 实验中命令触发、board 出现，但 prompt 从不抵达 agent。对照：官方示例 `send-user-message.ts` 证实命令上下文可用 `pi.sendUserMessage` 转发。
+
+**修复**：`extensions/index.ts` 命令处理器——激活并展示团队板后，若 args 非空则经 `pi.sendUserMessage(request)` 将请求作为**真实用户消息**转发（空闲直发；流式时 `deliverAs: "followUp"` 排队；抛错有 warning toast）；团队板增加「→ forwarding your request to the agent…」提示行；命令描述与 README 中英命令表同步说明。
+
+**验证**：`test/run-smoke.sh` 新增 `live-args-forward` 检查（RPC 发送 `/agent-team ping-forward-check`，断言事件流出现纯参数文本的用户消息——修复前失败、修复后通过；曾因断言指向尚未落盘的会话文件而误报，改判事件流）；全量 `npm run smoke` 全绿（10 phase + 3 live 检查）。

@@ -84,7 +84,7 @@ step -e ./extensions/index.ts
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
 | `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
-| `/agent-team` | 命令：激活插件并查看团队板 |
+| `/agent-team` | 命令：激活插件并查看团队板；命令后的文本会转发给 agent |
 
 ## 成员通信拓扑
 
