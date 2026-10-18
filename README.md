@@ -184,12 +184,14 @@ before runs that touch a model — keys are never written to disk.
 ```
 extensions/    index.ts (wiring) · config.ts · activation.ts · rpc-client.ts ·
                members.ts · tasks.ts · registry.ts · team-server.ts ·
-               presets.ts · tools.ts · render.ts
+               topology.ts · presets.ts · tools.ts · render.ts
 bin/           stepcode-team.mjs (member-side CLI shim)
 agents/        role presets (scout · planner · worker · reviewer)
 prompts/       team-review.md
 skills/        team-orchestration/SKILL.md
-docs/          CONFIGURATION.md (config reference)
+docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
+               TUI-VERIFICATION · MANUAL-TESTING references
+test/          smoke/ zero-token probes + run-smoke.sh (npm run smoke)
 sandbox/       isolated dev environment (gitignored)
 ```
 

@@ -15,6 +15,7 @@ Execute this workflow:
 4. Return the merged report to the user, noting which reviewer found each finding.
 
 Rules:
+- No member-to-member messaging is needed; the default star topology suffices (the leader relays and merges).
 - Reviewers must not modify anything; only the worker writes the merged report.
 - If a reviewer fails, retry once, then continue with the remaining reviewers and note the gap.
 - Finish with team_disband to stop all member processes.

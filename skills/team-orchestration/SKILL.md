@@ -18,7 +18,10 @@ Member models and thinking levels are policy-driven: by default every member
 runs on the conversation's current model with `high` thinking. If the config
 enables autonomous selection, pick each member's model from the available list
 deliberately — cheap models for read-only scouting, stronger models for
-implementation — and set its thinking level to match the task.
+implementation — and set its thinking level to match the task. Configuration
+lives in the `stepcodeAgentTeam` section of settings.json (global
+`<agentDir>/settings.json`; project-level `<cwd>/.stepcode/settings.json` when
+the project is trusted).
 
 ## Design the communication topology first
 
@@ -33,7 +36,7 @@ Pick the shape from the task structure:
 | Independent parallel strands that you merge | `star` (default) | No peer chatter; you stay the only router |
 | Sequential refinement (scout → planner → worker → reviewer) | `pipeline` | Each stage hands off to the next, in member creation order |
 | Peers must cross-check each other | `mesh`, or a few `custom` edges | Only the pairs that truly need to talk get edges |
-| Circular round-robin review | `ring` | Each member may message the next |
+| Circular round-robin review | `ring` | Each member may message the next; the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited) |
 
 Start from `star` and add the minimum edges the task needs — every edge is a
 potential LLM round-trip spent on coordination instead of work. Members discover
@@ -74,7 +77,7 @@ Rules of thumb:
 
 ## Cost control
 
-- Concurrency is capped at 4 in-flight dispatches; per-member prompts are serialized.
+- Concurrency is capped at 5 in-flight dispatches (`dispatch.maxConcurrent`); per-member prompts are serialized.
 - Watch cumulative spend in `team_status`; a warning appears past
   `STEPCODE_TEAM_COST_WARN` (default $1).
 - Idle members are reaped after 30 minutes; their sessions remain resumable.

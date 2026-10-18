@@ -179,12 +179,14 @@ bash sandbox/restore-project.sh  # 还原测试小项目到初始状态（种子
 ```
 extensions/    index.ts（接线）· config.ts · activation.ts · rpc-client.ts ·
                members.ts · tasks.ts · registry.ts · team-server.ts ·
-               presets.ts · tools.ts · render.ts
+               topology.ts · presets.ts · tools.ts · render.ts
 bin/           stepcode-team.mjs（成员侧 CLI shim）
 agents/        角色预设（scout · planner · worker · reviewer）
 prompts/       team-review.md
 skills/        team-orchestration/SKILL.md
-docs/          CONFIGURATION.md（配置参考）
+docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
+               TUI-VERIFICATION · MANUAL-TESTING 参考文档
+test/          smoke/ 零 token 探针 + run-smoke.sh（npm run smoke）
 sandbox/       隔离开发环境（gitignored）
 ```
 
