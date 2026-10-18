@@ -43,10 +43,11 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
   "members": {
     "max": 8,                         // 团队成员上限（1–64）
     "defaultRole": "worker",          // 未指定 role 时的默认角色（命中同名预设）
-    "defaultTools": null              // 成员默认工具白名单；null = 用预设或全量
+    "defaultTools": null,             // 成员默认工具白名单；null = 用预设或全量
+    "maxRecursionDepth": 1            // 团队树最大深度（1–4）：队长=0，其成员=1
   },
   "dispatch": {
-    "maxConcurrent": 4,               // 全局并发调度上限（1–16）
+    "maxConcurrent": 5,               // 同时运行的成员上限（1–16）；超出的派活排队，轮到才启动
     "timeoutMs": 180000,              // 单次 dispatch/promptAndSettle 超时
     "handshakeTimeoutMs": 15000,      // 成员 spawn 握手超时
     "retries": 1                      // 任务失败重试次数（0–5）
@@ -123,6 +124,27 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
 
 成员通过 `stepcode-team status` 动态获知自己的可通知邻居（server 按发送方身份
 返回 `mayMessage` 列表）。
+
+## 递归深度与并发上限
+
+**`members.maxRecursionDepth`（默认 1）**——团队树最大深度（队长会话 = 0，其成员 = 1）：
+
+| 值 | 行为 |
+|---|---|
+| `1`（默认） | 成员不能再组建团队：成员以 `--no-extensions` 启动，扩展在其会话中完全惰性（零上下文开销） |
+| `2` | 成员可组建自己的子团队：成员进程加载本扩展并自动激活（父级经 env 授予），其子成员深度为 2 |
+| `3` / `4` | 依此类推（配置上限 4，防止成本失控） |
+
+实现要点（全部走代码与环境变量，不占用模型上下文）：深度经 `STEPCODE_TEAM_DEPTH`
+逐层传递；达到深度上限的会话中，扩展工厂直接返回——不注册工具、不挂钩子、不起
+服务；子队长的团队是**独立的 team**（独立注册表与 socket），兄弟间消息仍受父级
+拓扑约束。
+
+**`dispatch.maxConcurrent`（默认 5）**——同时运行的成员上限。派活
+（`team_send` / `team_task` / oneshot）在**启动成员进程之前**先获取运行位：
+超出上限的派活排队，轮到且有空位时才启动该成员——即"部分子智能体等待其他
+子智能体完成后再启动"。`team_create_member` 仍会立即启动成员进程（空闲待命），
+上限约束的是"正在工作"的成员数。
 
 ## 示例
 

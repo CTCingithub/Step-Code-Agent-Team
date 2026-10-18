@@ -1,6 +1,8 @@
 # Step-Code-Agent-Team
 
-[Step Code](https://stepfun.com)（`step`）的智能体团队插件：当前会话成为**队长**，按需创建可续聊的**成员** Agent，把目标拆解为带依赖的**任务板**，并行调度成员执行，并支持成员间直达消息——对标 DeepSeek Harness 的 agent teams。
+[Step Code](https://stepfun.com)（`step`）的智能体团队插件：当前会话成为**队长**，按需创建可续聊的**成员** Agent，把目标拆解为带依赖的**任务板**，并行调度成员执行，并支持成员间直达消息。
+
+> **参考说明：** 本项目**参考了 DeepSeek Harness 的智能体团队（agent teams）功能**——队长/成员模型、带依赖的任务板、成员间消息均沿袭其设计。本插件是面向 Step Code 的独立实现，与 DeepSeek 无隶属关系。
 
 ## 工作原理
 
@@ -114,8 +116,8 @@ sandbox/       隔离开发环境（gitignored）
 {
   "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
   "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
-  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null },
-  "dispatch": { "maxConcurrent": 4, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
+  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
+  "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
   "oneshot": { "timeoutMs": 180000 },
   "cost": { "warnThreshold": 1 },
   "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
@@ -125,7 +127,10 @@ sandbox/       隔离开发环境（gitignored）
 ```
 
 要点：`autonomousSelection` 关闭（默认）时所有成员使用对话当前模型；
-`autonomousThinking` 关闭（默认）时成员思考强度默认为 `high`。完整参考：
+`autonomousThinking` 关闭（默认）时成员思考强度默认为 `high`。
+`members.maxRecursionDepth`（默认 1）界定团队树深度——调大后成员才能组建自己的
+子团队；`dispatch.maxConcurrent`（默认 5）限制同时运行的成员数，超出的派活排队，
+轮到且有空位时才启动成员进程。完整参考：
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 环境变量覆盖：`STEPCODE_TEAM_DEBUG=1`（≡ `debug: true`）、

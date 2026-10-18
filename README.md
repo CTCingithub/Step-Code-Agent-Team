@@ -1,6 +1,8 @@
 # Step-Code-Agent-Team
 
-Agent team plugin for [Step Code](https://stepfun.com) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly — inspired by DeepSeek Harness's agent teams.
+Agent team plugin for [Step Code](https://stepfun.com) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly.
+
+> **Reference:** This project references the **agent teams feature of DeepSeek Harness** — the leader/member model, the dependency-aware task board, and member-to-member messaging follow its design. It is an independent implementation for Step Code and is not affiliated with DeepSeek.
 
 ## How it works
 
@@ -120,8 +122,8 @@ All behavior lives in one JSON file, `<agentDir>/stepcode-agent-team.json`
 {
   "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
   "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
-  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null },
-  "dispatch": { "maxConcurrent": 4, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
+  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
+  "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
   "oneshot": { "timeoutMs": 180000 },
   "cost": { "warnThreshold": 1 },
   "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
@@ -132,7 +134,11 @@ All behavior lives in one JSON file, `<agentDir>/stepcode-agent-team.json`
 
 Key points: with `autonomousSelection` off (default) every member runs on the
 conversation's current model; with `autonomousThinking` off (default) members
-default to `high` thinking. Full reference:
+default to `high` thinking. `members.maxRecursionDepth` (default 1) bounds the
+team tree — members cannot spawn sub-teams until you raise it; and
+`dispatch.maxConcurrent` (default 5) caps simultaneously running members:
+dispatches beyond the limit queue, and a member process is not started until a
+slot frees. Full reference:
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 Environment overrides: `STEPCODE_TEAM_DEBUG=1` (≡ `debug: true`),
