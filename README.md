@@ -167,7 +167,10 @@ Also included: `prompts/team-review.md` (parallel multi-reviewer chain) and
 
 The sandbox ships with the repo and is fully isolated from your real
 `~/.stepcode` config, sessions, and projects (its runtime state — agent dir,
-sessions, team registries, `auth.json` — is gitignored):
+sessions, team registries, `auth.json` — is gitignored). `sandbox/step` is a
+git submodule pinning the Step Code revision this sandbox tracks; clone with
+`--recurse-submodules` (or run `git submodule update --init sandbox/step`),
+and see `sandbox/README.md` for the update/build workflow:
 
 ```bash
 ./sandbox/run.sh     # launches step with STEP_CODING_AGENT_DIR pointed at sandbox/agent
@@ -196,6 +199,7 @@ docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING references
 test/          smoke/ zero-token probes + run-smoke.sh (npm run smoke)
 sandbox/       isolated dev environment (ships with the repo; runtime state gitignored)
+               └── step/  Step Code source submodule (pinned revision)
 ```
 
 ## Configuration
@@ -275,15 +279,14 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14)
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17)
                         # hermetic: throwaway agent dir; phase 5 is skipped
                         # unless STEP_API_KEY is set (it makes one real call)
 ```
 
 The suite ships in `test/smoke/` with a hermetic runner (`test/run-smoke.sh`,
 temporary agent dir via mktemp). LLM-path probes (`sandbox/smoke-phase4/10/11/12.ts`)
-need a test key and stay in the gitignored sandbox; see
-[docs/TESTING.md](docs/TESTING.md).
+need a test key; see [docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
 
 > **Headless runs:** `step -p` blocks tools that spawn processes or modify the
 > workspace unless a permission preset is configured. For unattended runs, add

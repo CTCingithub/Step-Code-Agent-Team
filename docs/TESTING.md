@@ -7,7 +7,7 @@
 ## 0. 环境准备
 
 零 token 层：`test/run-smoke.sh` 自建一次性临时 agentDir（mktemp），无需任何准备，与真实
-`~/.stepcode` 完全隔离。LLM 层在 `sandbox/` 内运行（`sandbox/` 随仓库分发，`cfg-*` fixture 已内含；仅 agent dir、sessions、teams 等运行时状态在 .gitignore 内）。headless 探针必须带
+`~/.stepcode` 完全隔离。LLM 层在 `sandbox/` 内运行（`sandbox/` 随仓库分发，`cfg-*` fixture 已内含；仅 agent dir、sessions、teams 等运行时状态在 .gitignore 内）。step 二进制解析顺序：`$STEPCODE_STEP_BIN` > `sandbox/step-build/step`（从 `sandbox/step` submodule 构建）> PATH 中的 `step`（见 `sandbox/step-bin.sh`）。headless 探针必须带
 `--approval-mode auto`，否则派生进程的工具会被审批拦截：
 
 ```bash
@@ -35,7 +35,7 @@ LLM 层测试前 `export STEP_API_KEY=<你自己的 key>`（经环境变量传�
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -54,6 +54,9 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase9 | 配置边界（storage.dir/项目级/非法回退） | 零 token |
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
 | phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
+| phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
+| phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput） | 零 token（独立运行） |
+| phase17 | 孤儿进程（成员不得比队长长寿） | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
 

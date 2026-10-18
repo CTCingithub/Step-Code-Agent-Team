@@ -162,7 +162,10 @@ flowchart LR
 ## 开发沙箱
 
 沙箱随仓库分发，与真实 `~/.stepcode` 配置、会话、项目完全隔离（其运行时状态——
-agent 目录、sessions、团队注册表、`auth.json`——在 gitignore 内）：
+agent 目录、sessions、团队注册表、`auth.json`——在 gitignore 内）。`sandbox/step`
+是钉住本沙箱跟踪版本的 Step Code 源码 submodule；克隆请用
+`--recurse-submodules`（或克隆后 `git submodule update --init sandbox/step`），
+更新与构建流程见 `sandbox/README.md`：
 
 ```bash
 ./sandbox/run.sh       # 以沙箱环境变量启动 step（cwd 为 sandbox/project）
@@ -190,6 +193,7 @@ docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING 参考文档
 test/          smoke/ 零 token 探针 + run-smoke.sh（npm run smoke）
 sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitignore）
+               └── step/  Step Code 源码 submodule（钉住跟踪的版本）
 ```
 
 ## 配置
@@ -268,8 +272,8 @@ npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,
 ```
 
 冒烟集随仓库分发（`test/smoke/` + `test/run-smoke.sh`，临时 agentDir 经 mktemp 创建）。
-LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需测试 key，仍留于 gitignore 的
-`sandbox/`，详见 [docs/TESTING.md](docs/TESTING.md)。
+LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，跑法见
+[docs/TESTING.md](docs/TESTING.md) 与 `sandbox/README.md`。
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 

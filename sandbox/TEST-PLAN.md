@@ -2,6 +2,10 @@
 
 > 目标：对已上线的功能做一次沙箱内的系统性 live 测试，暴露并修复问题。
 > 原则：零 token 探针优先；LLM 探针只用测试 key 做最小调用；失败先记录再修复再复跑。
+>
+> 版本钉住：`sandbox/step` submodule 钉住本沙箱跟踪的 Step Code 版本；step 二进制的
+> 解析顺序（$STEPCODE_STEP_BIN > sandbox/step-build > PATH）见 `sandbox/step-bin.sh`，
+> 更新流程见 `sandbox/README.md`。
 
 ## 一、已有覆盖（回归基线）
 

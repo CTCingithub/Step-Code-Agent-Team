@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-34，沙箱同步 GitHub 与配置位置确认；此前为 plan-25 二轮复查）。
+> 最近更新：2026-10-18（plan-38，沙箱引入 Step-Code submodule 并全面检查文档；此前为 plan-34）。
 
 ## 总览
 
@@ -23,6 +23,7 @@
 | 14 | 修复 /agent-team 带参 prompt 无反馈 | plan-22 | 命令后文本经 pi.sendUserMessage 转发为真实用户消息（空闲直发/流式 followUp）；runner 新增 live-args-forward 检查 | 修复前会话文件中无任何用户消息记录 |
 | 15 | 二轮全面复查 + 最小化人工验证项 | plan-25 | 新增 phase15（render 断言）/phase16（成本护栏+截断）/phase17+orphan-check（孤儿进程）/live-untrusted-config/live-clean-export；runner STANDALONE_PHASES 机制；MANUAL-TESTING 人工项 8→6 | 并行审查 subagent 因资源压力失败，改串行自查（未发现新缺陷） |
 | 16 | 沙箱同步 GitHub + 配置位置确认 | plan-34 | .gitignore 粒度化（沙箱 29 个可复用文件入库，排除 agent/auth.json/运行时状态）；cfg-misc storage.dir 改可移植相对路径；新增 sandbox/README.md；确认配置位于 settings.json 的 stepcodeAgentTeam 节 | auth.json 为 OAuth 凭证（access/refresh），dry-run 核验零泄漏 |
+| 17 | 沙箱引入 Step-Code submodule + 全面文档检查 | plan-38 | sandbox/step submodule 钉住 b5dbed9（上游无 tag）；step-bin.sh 解析器 + build-step.sh 可选构建；live-args-forward 分层断言（陈旧 key 不误判）；README 中英/TESTING/HANDOFF/TEST-PLAN 同步 | 用户轮换 key 后环境仍持旧 key，曾致 live-args-forward 误报，已修 |
 
 ## 明细
 
@@ -168,3 +169,15 @@
 **沙箱入库**：`.gitignore` 由整目录忽略改为粒度规则——保留 run.sh / probe.sh / restore-project.sh、smoke-phase4/10/11/12.ts、TEST-PLAN.md、project/、project-pristine/、cfg-*/settings.json（共 29 个文件）；排除 sandbox/agent/（11M 运行时状态）、auth.json（OAuth 凭证，含 access/refresh token）、config.toml、models-store.json、各 cfg-*/sessions|teams|live-context、project/data。cfg-misc/settings.json 的 storage.dir 由机器绝对路径改为可移植相对路径 `sandbox/cfg-misc/teams-custom`。新增 sandbox/README.md 作为他人测试入口；README 中英、HANDOFF、docs/TESTING.md 同步「沙箱随仓库分发、LLM 层探针需自带 key」。
 
 **验证**：`git add -n` dry-run 确认暂存清单恰为 29 个可复用文件、无凭证/运行时状态；cfg-misc 改动后全量 `npm run smoke` 全绿（13 phase + 6 live 检查；phase5 用轮换后的新 key 实跑通过）。
+
+### 17. 沙箱引入 Step-Code submodule（plan-38）
+
+**用户 prompt**：「请修改sandbox，把step code的repository作为git module，防止每次更新都需要重新改大量内容。请同时检查所有文档」（补充确认：仓库为 https://github.com/stepfun-ai/Step-Code）
+
+**调研**：Step-Code 为 MIT 开源 pnpm monorepo（浅克隆 27MB）；上游**无任何 tag**（产品版本号在构建时经 `STEPCODE_BUILD_VERSION` 注入），main HEAD = `b5dbed9`（2026-10-16）；已装 v0.1.5 二进制不含该 commit 特性且无可识别的 commit 内嵌；构建入口 `scripts/build-binaries.sh`（pnpm install + 全量构建 + bun 编译，产出 `packages/coding-agent/binaries/<platform>/`）。
+
+**实现**：① `sandbox/step` submodule 钉住 `b5dbed9`，`.gitmodules` 设 `ignore = untracked`（子模块内构建产物不污染主仓库状态）。② `sandbox/step-bin.sh` 解析器：`$STEPCODE_STEP_BIN` > `sandbox/step-build/step` > PATH 中的 `step`；`run.sh` / `probe.sh` / `test/run-smoke.sh` 全部改走解析器（`bash -n` + 无裸调用双重核验）。③ `sandbox/build-step.sh` 可选构建助手（本轮未执行——构建较重），以相对符号链接把 per-platform 构建目录暴露为 `sandbox/step-build/`（gitignored）。④ 文档同步：sandbox/README 新增 submodule 专节、README 中英（沙箱节 + 项目结构 + 克隆提示）、docs/TESTING.md 解析顺序、HANDOFF 关键文件索引、sandbox/TEST-PLAN 版本钉住说明。
+
+**顺带修复**：live-args-forward 检查在用户轮换 API key 后误报——环境中仍持有已失效的旧 key，使 key 分支进入但转发消息未落盘、`fwd_ok` 被重置清零。改为分层断言：团队板转发声明 + `send_user_message` 事件为必备证据，消息落盘为增益证据（只增不减），陈旧/缺失 key 不再造成误判。
+
+**验证**：`bash sandbox/probe.sh` → PROBE OK；`run-smoke.sh 1 15` 全绿（含旧 key 场景）；五个脚本 `bash -n` 通过；子模块与暂存内容经 git status 核验。

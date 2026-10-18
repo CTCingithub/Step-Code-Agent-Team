@@ -45,6 +45,9 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 | `extensions/topology.ts` | 拓扑模型 | 新形状 |
 | `extensions/team-server.ts` | 消息强制 | 协议变更 |
 | `sandbox/smoke-phase4/10/11/12.ts` | LLM 层回归探针（需测试 key） | 新功能必须配套探针 |
+| `sandbox/step/`（submodule） | 钉住跟踪的 Step Code 源码（MIT，按 commit 钉住——上游无 tag） | 升级 step 时 bump 指针并回归 |
+| `sandbox/step-bin.sh` | step 二进制解析器（$STEPCODE_STEP_BIN > sandbox/step-build > PATH） | 解析顺序变化 |
+| `sandbox/build-step.sh` | 可选：从子模块构建 step 到 sandbox/step-build/ | 构建方式变化 |
 | `test/run-smoke.sh` + `test/smoke/phase*.ts` | 入库的零 token 冒烟集（1/2/3/5/6/7/8/9/13/14，hermetic 临时 agentDir；phase5 无 key 时 SKIP；含 live 接线检查） | 新功能必须配套探针 |
 | `docs/ARCHITECTURE.md` · `docs/PROTOCOL.md` | 架构与协议参考（组件/数据流/护栏、RPC/socket/registry/工具契约） | 组件或协议变更必改 |
 | `docs/TESTING.md` | 四层测试操作化指南 | 新探针或测试入口变化必改 |

@@ -25,6 +25,35 @@ export STEP_API_KEY=<你自己的 key>   # 仅涉及模型调用时才需要；�
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
 | `cfg-*/settings.json` | 各探针的配置 fixture（`stepcodeAgentTeam` 节） |
 | `TEST-PLAN.md` | 测试计划与历史执行记录 |
+| `step/` | Step Code 源码 submodule（钉住本沙箱跟踪的版本） |
+| `step-bin.sh` | step 二进制解析器（被各脚本 source） |
+| `build-step.sh` | 可选：从子模块构建 step 到 `sandbox/step-build/` |
+
+## Step Code 源码（git submodule）
+
+`sandbox/step` 是 [Step Code](https://github.com/stepfun-ai/Step-Code)（MIT 许可）的
+git submodule，钉住本沙箱跟踪的 Step Code 版本——step 升级时只需 bump 子模块指针并重跑
+回归，不再被动跟随全局安装的变更。
+
+- **克隆本仓库时**：用 `git clone --recurse-submodules`，或克隆后执行
+  `git submodule update --init sandbox/step`。
+- **step 二进制解析顺序**（`sandbox/step-bin.sh`，run.sh / probe.sh / test/run-smoke.sh
+  均通过它取二进制）：
+  1. `$STEPCODE_STEP_BIN` —— 显式指定；
+  2. `sandbox/step-build/step` —— 由 `sandbox/build-step.sh` 从子模块构建产出；
+  3. PATH 中的 `step` —— 全局安装（默认，即当前回归基线）。
+- **从钉住的源码构建**（可选，较重：pnpm install + 全量构建 + bun 编译，数分钟与数 GB 磁盘）：
+  ```bash
+  bash sandbox/build-step.sh   # 产物以符号链接暴露为 sandbox/step-build/（gitignored）
+  ```
+- **更新子模块**（step 发布新版本后）：
+  ```bash
+  git submodule update --remote sandbox/step   # 拉到上游默认分支最新
+  npm run smoke                                # 全量回归
+  git add sandbox/step                         # 提交新指针
+  ```
+- 上游没有 tag（产品版本号在构建时注入），因此按 commit SHA 钉住；`.gitmodules` 设有
+  `ignore = untracked`，子模块内的构建产物不会污染主仓库的 `git status`。
 
 ## 演示剧本
 
