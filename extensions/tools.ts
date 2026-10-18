@@ -127,7 +127,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		label: "Send to Member",
 		description: [
 			"Send a message to a team member and wait for its full reply.",
-			"Prompts to the same member are serialized; parallelism happens across members (max 4 in flight).",
+			`Prompts to the same member are serialized; parallelism happens across members (max ${config.dispatch.maxConcurrent} in flight).`,
 			"If the member process died, it is respawned with the same session id and resumes its context.",
 			"Pass taskId to run the message as a task (marks it running, writes the reply back as the task result, one retry on failure).",
 			"Pass mode: \"oneshot\" for stateless fire-and-forget work (fresh process, no session, no context continuity).",
