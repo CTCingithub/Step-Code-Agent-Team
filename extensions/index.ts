@@ -17,6 +17,7 @@ import { currentDepth, TeamManager } from "./members.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
 import { getConfig } from "./config.ts";
+import { applyProjectConfig } from "./config.ts";
 import { activate, detectKeyword, initActivation, isActive, TEAM_TOOL_NAMES } from "./activation.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -40,6 +41,19 @@ export default function (pi: ExtensionAPI) {
 	let server: TeamServer | null = null;
 	let reapTimer: NodeJS.Timeout | null = null;
 	let currentCtx: ExtensionContext | null = null;
+
+	// Project-level config: cwd and project trust are only knowable inside
+	// event handlers, so the override is applied in place on the cached config
+	// the first time a context is available (idempotent; env overrides still
+	// win). Tool descriptions built at registration are not refreshed.
+	let projectConfigApplied = false;
+	const applyProjectConfigFromCtx = (ctx: ExtensionContext): void => {
+		if (projectConfigApplied) return;
+		projectConfigApplied = true;
+		const trust = ctx as { isProjectTrusted?: () => boolean };
+		const trusted = typeof trust.isProjectTrusted === "function" ? trust.isProjectTrusted() : false;
+		applyProjectConfig(config, ctx.cwd, trusted);
+	};
 
 	const getManager = (ctx: ExtensionContext): TeamManager => {
 		if (!manager) manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
@@ -73,6 +87,7 @@ export default function (pi: ExtensionAPI) {
 	/** Returns true when this call performed the activation. */
 	const tryActivate = (ctx: ExtensionContext, reason: string): boolean => {
 		currentCtx = ctx;
+		applyProjectConfigFromCtx(ctx);
 		return activate(reason); // the initActivation callback runs startBackend
 	};
 
@@ -115,6 +130,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", (_event, ctx) => {
 		currentCtx = ctx;
+		applyProjectConfigFromCtx(ctx);
 		// Sub-leader members are granted their own team by their parent process
 		// (STEPCODE_TEAM_AUTOACTIVATE is set only when the depth budget allows).
 		if (process.env.STEPCODE_TEAM_AUTOACTIVATE === "1") {

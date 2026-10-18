@@ -5,14 +5,15 @@
  * honors STEP_CODING_AGENT_DIR, so the development sandbox gets its own
  * config), merged over built-in defaults, with env-var overrides on top:
  *
- *   defaults  <  config file  <  STEPCODE_TEAM_DEBUG / STEPCODE_TEAM_COST_WARN
+ *   defaults  <  agentDir file  <  project file  <  env overrides
+ *
+ * The project-level override (<projectDir>/.stepcode/stepcode-agent-team.json)
+ * is gated on project trust, which is only knowable inside event handlers —
+ * so loadConfig accepts it as an option, and applyProjectConfig re-applies it
+ * in place on the cached config from session_start (see index.ts).
  *
  * Unknown keys are ignored (logged in debug mode); invalid values fall back to
- * the default with a warning. A project-level override
- * (<cwd>/.stepcode/stepcode-agent-team.json) is reserved in the loader
- * signature but not wired yet — trust information is only available inside
- * event handlers, which would break the "config before tool registration"
- * ordering.
+ * the default with a warning.
  */
 
 import * as fs from "node:fs";
@@ -106,6 +107,11 @@ export function configFilePath(agentDirPath: string): string {
 	return path.join(agentDirPath, CONFIG_FILE_NAME);
 }
 
+/** Project-level override: trusted projects may carry their own config. */
+export function projectConfigFilePath(projectDir: string): string {
+	return path.join(projectDir, ".stepcode", CONFIG_FILE_NAME);
+}
+
 export function defaultConfig(): PluginConfig {
 	return {
 		activation: {
@@ -147,24 +153,36 @@ export function defaultConfig(): PluginConfig {
 
 export interface LoadConfigOptions {
 	agentDir: string;
-	/** Reserved: project-level config file location (not wired yet). */
+	/** Project directory whose .stepcode/ config may override the agentDir one. */
 	projectDir?: string | null;
-	/** Reserved: whether the project is trusted (gates projectDir). */
+	/** Whether the project is trusted (gates the projectDir override). */
 	trusted?: boolean;
 }
 
 export function loadConfig(options: LoadConfigOptions): PluginConfig {
 	const config = defaultConfig();
 	applyFile(config, configFilePath(options.agentDir));
-	// Reserved: project-level override would be applied here, gated on options.trusted.
+	applyProjectConfig(config, options.projectDir, options.trusted);
 	applyEnvOverrides(config);
-	const warnings = validate(config);
-	for (const warning of warnings) {
-		if (process.env.STEPCODE_TEAM_DEBUG === "1" || process.env.STEPCODE_TEAM_DEBUG === "true") {
-			console.error(`[stepcode-agent-team] config: ${warning}`);
-		}
-	}
+	logWarnings(validate(config));
 	return config;
+}
+
+/**
+ * Applies the project-level override (<projectDir>/.stepcode/stepcode-agent-team.json)
+ * in place, gated on project trust, then re-applies env overrides so precedence
+ * stays defaults < agentDir file < project file < env. Returns true when a
+ * project file was applied. Callable on the cached config from event handlers,
+ * where cwd and project trust first become available (see index.ts).
+ */
+export function applyProjectConfig(config: PluginConfig, projectDir?: string | null, trusted?: boolean): boolean {
+	if (!projectDir || !trusted) return false;
+	const file = projectConfigFilePath(projectDir);
+	if (!fs.existsSync(file)) return false;
+	applyFile(config, file);
+	applyEnvOverrides(config);
+	logWarnings(validate(config));
+	return true;
 }
 
 let cached: PluginConfig | null = null;
@@ -222,6 +240,16 @@ function applyEnvOverrides(config: PluginConfig): void {
 		const parsed = Number.parseFloat(cost);
 		if (Number.isFinite(parsed) && parsed >= 0) config.cost.warnThreshold = parsed;
 	}
+	const maxDepth = process.env.STEPCODE_TEAM_MAXDEPTH;
+	if (maxDepth !== undefined && maxDepth.trim() !== "") {
+		const parsed = Number.parseInt(maxDepth, 10);
+		if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 4) config.members.maxRecursionDepth = parsed;
+	}
+}
+
+function logWarnings(warnings: string[]): void {
+	if (process.env.STEPCODE_TEAM_DEBUG !== "1" && process.env.STEPCODE_TEAM_DEBUG !== "true") return;
+	for (const warning of warnings) console.error(`[stepcode-agent-team] config: ${warning}`);
 }
 
 function isStringArray(value: unknown): value is string[] {

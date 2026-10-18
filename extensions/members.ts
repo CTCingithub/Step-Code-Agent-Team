@@ -370,6 +370,9 @@ export class TeamManager {
 			STEPCODE_TEAM_SOCK: this.socketPath,
 			STEPCODE_TEAM_MEMBER: member.name,
 			STEPCODE_TEAM_DEPTH: String(childDepth),
+			// Effective depth bound (it may come from a project-level config the
+			// child cannot read at load time); the child's config loader honors it.
+			STEPCODE_TEAM_MAXDEPTH: String(getConfig().members.maxRecursionDepth),
 		};
 		if (canOrchestrate) {
 			args.push("-e", extensionEntryPath());
