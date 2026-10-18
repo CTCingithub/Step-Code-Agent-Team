@@ -132,8 +132,10 @@ sandbox/       isolated dev environment (gitignored)
 
 ## Configuration
 
-All behavior lives in one JSON file, `<agentDir>/stepcode-agent-team.json`
-(the sandbox points `agentDir` at `sandbox/agent`):
+All behavior lives in JSON config files — one global (`<agentDir>/stepcode-agent-team.json`,
+the sandbox points `agentDir` at `sandbox/agent`) and an optional project-level override
+(`<cwd>/.stepcode/stepcode-agent-team.json`, applied only when the project is trusted).
+Precedence: defaults < global < project < environment overrides.
 
 ```jsonc
 {
@@ -198,9 +200,10 @@ your real `~/.stepcode` state.
 
 ## Known limitations
 
-- **Project-level config is not wired yet**: `<cwd>/.stepcode/stepcode-agent-team.json` is
-  reserved in the loader but not applied (project trust information is only available inside
-  event handlers, which would break the "config before tool registration" ordering).
+- **Project-level config has two timing compromises**: tool description strings built at
+  registration (e.g. the model list) and this process's depth gate are not refreshed by a
+  project-level override; the effective depth bound is propagated to sub-leaders via
+  `STEPCODE_TEAM_MAXDEPTH`, and description changes take effect next session.
 - **LLM behavior cannot be fully controlled**: members may abandon tools to investigate their
   environment; coordination prompts are hardened but this cannot be eliminated.
 - **TUI rendering is not manually verified**: `render.ts` only runs in the interactive TUI,

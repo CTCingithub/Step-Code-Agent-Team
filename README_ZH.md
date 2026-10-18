@@ -128,8 +128,10 @@ sandbox/       隔离开发环境（gitignored）
 
 ## 配置
 
-全部行为参数集中于一个 JSON 文件：`<agentDir>/stepcode-agent-team.json`
-（沙箱中 agentDir 指向 `sandbox/agent`）：
+全部行为参数集中于 JSON 配置文件——全局 `<agentDir>/stepcode-agent-team.json`
+（沙箱中 agentDir 指向 `sandbox/agent`）与可选的的项目级覆盖
+`<cwd>/.stepcode/stepcode-agent-team.json`（仅项目被信任时加载）。
+优先级：内置默认 < 全局 < 项目级 < 环境变量覆盖。
 
 ```jsonc
 {
@@ -187,7 +189,7 @@ printf '{"id":"1","type":"get_state"}\n' \
 
 ## 已知限制
 
-- **项目级配置未接入**：`<cwd>/.stepcode/stepcode-agent-team.json` 已在 loader 预留但未应用——项目信任信息只在事件处理器中可用，会破坏"注册工具前加载配置"的时序。
+- **项目级配置有两个时序妥协**：注册时固化的工具描述串（模型列表等）与本进程的深度门不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
 - **LLM 行为不可完全控**：成员可能弃用工具转去排查环境；协调提示已加固，无法根除。
 - **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到。
 - **沙箱探针在 gitignore 内**：`sandbox/smoke-phase*.ts` 与 `sandbox/TEST-PLAN.md` 未入库，换环境需按测试计划矩阵重建配置。

@@ -8,15 +8,18 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
 全局：  <agentDir>/stepcode-agent-team.json
        （agentDir 遵循 STEP_CODING_AGENT_DIR，默认 ~/.stepcode/agent；
          开发沙箱中自动指向 sandbox/agent，互不干扰）
+项目级：<cwd>/.stepcode/stepcode-agent-team.json
+       （仅当项目被信任时加载；信任信息只在事件处理器中可用，
+         故在 session_start 时就地合并进已加载的配置）
 ```
 
-优先级：**内置默认 < 配置文件 < 环境变量覆盖**。
+优先级：**内置默认 < 全局配置 < 项目级配置 < 环境变量覆盖**。
 
 - 文件为标准 JSON（不支持注释）。
 - 未知键会被忽略（`debug: true` 时在 stderr 打印提示）。
 - 非法值回退为默认值并在 debug 日志中警告。
-- 配置在扩展加载时读取一次并缓存；修改后需新会话生效（`/reload` 会重新读取，但插件也会随之回到默认关闭状态）。
-- 预留：项目级配置（`<cwd>/.stepcode/stepcode-agent-team.json`）尚未接入——项目信任信息只在事件处理器中可用，会破坏"注册工具前加载配置"的时序。
+- 配置在扩展加载时读取一次并缓存；项目级配置在首个事件上下文可用时就地合并（同一次会话内生效）；其余修改需新会话生效（`/reload` 会重新读取，但插件也会随之回到默认关闭状态）。
+- 已知妥协：注册时固化的工具描述串（如模型列表）与本进程的深度门（`maxRecursionDepth`）不随项目级配置刷新——生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
 
 ## 环境变量覆盖
 
@@ -24,6 +27,7 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
 |---|---|
 | `STEPCODE_TEAM_DEBUG=1` | 等价 `debug: true` |
 | `STEPCODE_TEAM_COST_WARN=<usd>` | 覆盖 `cost.warnThreshold`（非法值忽略） |
+| `STEPCODE_TEAM_MAXDEPTH=<n>` | 覆盖 `members.maxRecursionDepth`（1–4，非法值忽略）；队长按生效值注入子成员进程 |
 | `STEPCODE_TEAM_SOCK` | 由队长自动注入成员进程，指向团队服务 socket（无需手动设置） |
 
 ## 完整配置项

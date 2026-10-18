@@ -50,7 +50,7 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 
 ## 4. 已知限制
 
-- **项目级配置未接入**：loader 已预留 `projectDir`/`trusted` 参数但未接线（信任信息只在事件处理器可用，会破坏"注册前加载配置"的时序）
+- **项目级配置有两个时序妥协**：`applyProjectConfig` 已在 session_start 就地合并（trust 门控），但注册时固化的工具描述串（模型列表等）与本进程的深度门不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效
 - **LLM 行为不可完全控**：成员可能弃用工具转去排查环境（协调提示已加固，无法根除）
 - **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到
 - **沙箱探针在 gitignore 内**：phase1–12 与 TEST-PLAN.md 未入库，换环境需按其中 JSON 模板重建配置

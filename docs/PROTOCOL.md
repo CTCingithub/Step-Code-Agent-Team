@@ -136,4 +136,5 @@ shim 从 spawn env 取身份与地址：`STEPCODE_TEAM_SOCK`、`STEPCODE_TEAM_ME
 | `STEPCODE_TEAM_SOCK` | 团队 socket 路径（shim 连接目标） |
 | `STEPCODE_TEAM_MEMBER` | 发送方身份（拓扑强制的依据） |
 | `STEPCODE_TEAM_DEPTH` | 本成员在团队树中的深度（队长 = 0） |
+| `STEPCODE_TEAM_MAXDEPTH` | 生效的深度上限（可能来自项目级配置，队长加载时才能读到）；成员进程的配置加载器据此覆盖 `members.maxRecursionDepth` |
 | `STEPCODE_TEAM_AUTOACTIVATE` | `1` = 授予子团队，成员进程加载本扩展并自动激活 |
