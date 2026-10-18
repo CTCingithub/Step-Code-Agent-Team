@@ -4,25 +4,33 @@ Agent team plugin for [Step Code](https://stepfun.com) (`step`): your current se
 
 > **Reference:** This project references the **agent teams feature of DeepSeek Harness** — the leader/member model, the dependency-aware task board, and member-to-member messaging follow its design. It is an independent implementation for Step Code and is not affiliated with DeepSeek.
 
+[简体中文说明 →](./README_ZH.md)
+
 ## How it works
 
-```
-leader session (this extension)
-  │  team_create_member / team_send / team_task / team_status / team_disband
-  ▼
-TeamRegistry  <agentDir>/teams/<teamId>/registry.json
-  ├── Member A:  step --mode rpc --session-id team-<id>-a   (isolated context)
-  ├── Member B:  step --mode rpc --session-id team-<id>-b
-  └── ... driven over stdio JSONL; killed on leader shutdown, resumed on demand
-        ▲
-        │ member-to-member messages
-  bin/stepcode-team.mjs  ──►  Unix socket  <agentDir>/teams/<teamId>/sock
+```mermaid
+flowchart LR
+    Leader["Leader session (this extension)"]
+    Registry[("TeamRegistry registry.json")]
+    A["Member A (step --mode rpc)"]
+    B["Member B (step --mode rpc)"]
+    Shim["stepcode-team.mjs CLI shim"]
+    Server["Team server (in leader process)"]
+
+    Leader -->|"team_create_member / team_send / team_task"| Registry
+    Registry --- A
+    Registry --- B
+    A -->|"bash"| Shim
+    B -->|"bash"| Shim
+    Shim -->|"JSONL over Unix socket"| Server
+    Server -->|"topology-enforced dispatch"| A
+    Server -->|"topology-enforced dispatch"| B
 ```
 
-- **Members are real `step` processes** with their own context window, model, and tool allowlist, spoken to over the RPC protocol (`docs/rpc.md`). A member's context lives in its session file, so respawning it with the same session id resumes the conversation.
+- **Members are real `step` processes** with their own context window, model, and tool allowlist, spoken to over the RPC protocol. A member's context lives in its session file, so respawning it with the same session id resumes the conversation.
 - **The task board is a DAG**: a task is `ready` when every task in its `blockedBy` is `done`; cycles are rejected.
-- **Messaging**: members don't load this extension (no recursive teams); they reach teammates through the `stepcode-team` CLI shim, which talks to a Unix socket served by the leader process.
-- **Guardrails**: max 8 members, max 4 concurrent dispatches, 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), all children killed on leader shutdown.
+- **Messaging**: members reach teammates through the `stepcode-team` CLI shim, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader.
+- **Guardrails**: max 8 members, max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), all children killed on leader shutdown.
 
 ## Requirements
 
@@ -67,10 +75,19 @@ tune the keywords.
 | `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
 | `/agent-team` | Command: activate the plugin and show the team board |
 
-By default members cannot message each other directly (star topology — everything
-routes through the leader). The leader declares the topology that fits the task
-with `team_set_topology` before dispatching work; details in
-[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+## Member communication topology
+
+Direct member-to-member messaging is **denied unless the topology allows it**. The leader designs the topology that fits the task with `team_set_topology` after creating members and before dispatching work; the default is a star, where everything routes through the leader.
+
+| Shape | Edges | Fits |
+|---|---|---|
+| `star` (default) | none | Independent parallel strands that the leader merges |
+| `pipeline` | m1→m2→…→mn (creation order) | Sequential refinement (scout → planner → worker → reviewer) |
+| `mesh` | all ordered pairs | Peers cross-checking each other |
+| `ring` | mi→mi+1 (wraps around) | Round-robin review |
+| `custom` | explicit `{from, to}` list | Precise control |
+
+Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors, which members can query with `stepcode-team status`. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ## Bundled role presets (`agents/`)
 

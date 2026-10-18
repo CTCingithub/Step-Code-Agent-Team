@@ -4,25 +4,33 @@
 
 > **参考说明：** 本项目**参考了 DeepSeek Harness 的智能体团队（agent teams）功能**——队长/成员模型、带依赖的任务板、成员间消息均沿袭其设计。本插件是面向 Step Code 的独立实现，与 DeepSeek 无隶属关系。
 
+[English →](./README.md)
+
 ## 工作原理
 
-```
-队长会话（本扩展）
-  │  team_create_member / team_send / team_task / team_status / team_disband
-  ▼
-TeamRegistry  <agentDir>/teams/<teamId>/registry.json
-  ├── 成员 A:  step --mode rpc --session-id team-<id>-a   （独立上下文）
-  ├── 成员 B:  step --mode rpc --session-id team-<id>-b
-  └── ... 经 stdio JSONL 驱动；队长退出时回收，需要时按同 session-id 恢复
-        ▲
-        │ 成员间直达消息
-  bin/stepcode-team.mjs  ──►  Unix socket  <agentDir>/teams/<teamId>/sock
+```mermaid
+flowchart LR
+    Leader["队长会话（本扩展）"]
+    Registry[("TeamRegistry registry.json")]
+    A["成员 A（step --mode rpc）"]
+    B["成员 B（step --mode rpc）"]
+    Shim["stepcode-team.mjs CLI shim"]
+    Server["团队服务（队长进程内）"]
+
+    Leader -->|"team_create_member / team_send / team_task"| Registry
+    Registry --- A
+    Registry --- B
+    A -->|"bash"| Shim
+    B -->|"bash"| Shim
+    Shim -->|"Unix socket JSONL"| Server
+    Server -->|"按拓扑强制派发"| A
+    Server -->|"按拓扑强制派发"| B
 ```
 
-- **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议（`docs/rpc.md`）驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
+- **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
 - **任务板是 DAG**：`blockedBy` 全部完成的任务才 `ready`；成环的依赖在创建时即被拒绝。
-- **成员间消息**：成员不加载本扩展（防止递归组队），通过 `stepcode-team` CLI shim 连接队长进程内的 Unix socket 与队友通信。
-- **护栏**：最多 8 个成员；最多 4 个并发调度；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
+- **成员间消息**：成员通过 `stepcode-team` CLI shim 连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。
+- **护栏**：最多 8 个成员；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
 
 ## 环境要求
 
@@ -64,8 +72,19 @@ step -e ./extensions/index.ts
 | `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
 | `/agent-team` | 命令：激活插件并查看团队板 |
 
-默认情况下成员之间不能直接通信（星型拓扑——全部经队长中转）。队长在派活前用
-`team_set_topology` 按任务结构声明拓扑；详见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
+## 成员通信拓扑
+
+除非拓扑允许，成员之间的直达消息会被**拒绝**。队长在创建成员后、派活前，用 `team_set_topology` 按任务结构设计拓扑；默认为星型——全部经由队长中转。
+
+| 形状 | 边 | 适用 |
+|---|---|---|
+| `star`（默认） | 无 | 并行独立、由队长汇总 |
+| `pipeline` | m1→m2→…→mn（按创建顺序） | 顺序精炼（scout → planner → worker → reviewer） |
+| `mesh` | 全部有序对 | 同伴互查 |
+| `ring` | mi→mi+1（末位回环） | 环形流水 |
+| `custom` | 显式 `{from, to}` 列表 | 精确控制 |
+
+强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 ## 内置角色预设（`agents/`）
 
