@@ -6,6 +6,9 @@
     "pi-package"
   ],
   "license": "MIT",
+  "scripts": {
+    "smoke": "bash test/run-smoke.sh"
+  },
   "pi": {
     "extensions": [
       "./extensions"

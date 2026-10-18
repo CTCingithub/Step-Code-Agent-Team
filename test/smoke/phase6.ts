@@ -1,0 +1,167 @@
+/**
+ * Default-off activation + config file regression probe (plan v2).
+ *
+ * Zero-token: no LLM calls. Member spawns happen (handshake only) for the
+ * model/thinking resolution checks; each member is disbanded immediately.
+ *
+ * Run with three configs:
+ *   default (no file)         → off-paths + activation + off-mode resolution
+ *   autonomous on             → on-mode model/thinking resolution
+ *   activation.enabled=false  → activation refused, tools stay hidden
+ */
+
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import type { ExtensionAPI } from "@step-harness/coding-agent";
+import { TeamManager } from "../../extensions/members.ts";
+import { defaultConfig, getConfig, loadConfig } from "../../extensions/config.ts";
+import { TEAM_TOOL_NAMES, activate, detectKeyword, detectSlashCommand, initActivation } from "../../extensions/activation.ts";
+
+const LEADER_MODEL = "step-5-preview";
+
+export default function (pi: ExtensionAPI) {
+	pi.on("session_start", async (_event, ctx) => {
+		const log = (...a: unknown[]) => console.error("[smoke6]", ...a);
+		const results: Array<{ name: string; ok: boolean; detail: string }> = [];
+		const check = (name: string, ok: boolean, detail = "") => {
+			results.push({ name, ok, detail });
+			log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail.replace(/\s+/g, " ").slice(0, 160)}` : ""}`);
+		};
+
+		try {
+			const cfg = getConfig();
+			const manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
+			// Module state is per loaded extension (not shared with index.ts), so
+			// initialize this probe's own activation instance to unit-test the
+			// detection/gating logic. Tool release + socket startup are index.ts
+			// wiring and are covered by the LLM end-to-end run.
+			initActivation(cfg, pi, () => {});
+
+			// 1. default-off state
+			const toolsBefore = pi.getAllTools().map((t) => t.name);
+			check(
+				"default-off: team tools hidden",
+				!TEAM_TOOL_NAMES.some((n) => toolsBefore.includes(n)),
+				toolsBefore.join(","),
+			);
+			check("default-off: socket absent", !fs.existsSync(manager.socketPath));
+			const commands = pi.getCommands().map((c) => c.name);
+			check("command registered: agent-team", commands.includes("agent-team"));
+
+			// 2. pure config tests (synthetic dirs)
+			const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "scat-cfg-"));
+			const defaults = defaultConfig();
+			const d = loadConfig({ agentDir: tmp });
+			check("config defaults: models.available", d.models.available.join(",") === "step-5-preview");
+			check(
+				"config defaults: autonomous flags off",
+				d.models.autonomousSelection === false && d.models.autonomousThinking === false,
+			);
+			check("config defaults: dispatch.retries", d.dispatch.retries === defaults.dispatch.retries);
+
+			fs.writeFileSync(
+				path.join(tmp, "stepcode-agent-team.json"),
+				JSON.stringify({
+					activation: { keywords: ["magic word"], notifyOnActivate: false },
+					models: { available: ["m1", "m2"], autonomousSelection: true, autonomousThinking: true },
+					members: { max: 3 },
+					cost: { warnThreshold: 0 },
+					bogusSection: { x: 1 },
+				}),
+			);
+			const c1 = loadConfig({ agentDir: tmp });
+			check("config file: keywords override", JSON.stringify(c1.activation.keywords) === '["magic word"]');
+			check(
+				"config file: models override",
+				c1.models.available.join(",") === "m1,m2" && c1.models.autonomousSelection === true,
+			);
+			check("config file: members.max", c1.members.max === 3);
+			check("config file: cost disable", c1.cost.warnThreshold === 0);
+			check(
+				"config file: unknown keys ignored",
+				!("bogusSection" in (c1 as unknown as Record<string, unknown>)),
+			);
+
+			fs.writeFileSync(
+				path.join(tmp, "stepcode-agent-team.json"),
+				JSON.stringify({
+					members: { max: "eight" },
+					models: { available: [] },
+					dispatch: { maxConcurrent: -2, timeoutMs: 10, retries: 99 },
+					cost: { warnThreshold: "abc" },
+					idle: { reapAfterMs: 1 },
+				}),
+			);
+			const c2 = loadConfig({ agentDir: tmp });
+			check("config invalid: members.max fallback", c2.members.max === defaults.members.max);
+			check("config invalid: models.available fallback", c2.models.available.join(",") === "step-5-preview");
+			check(
+				"config invalid: dispatch fallbacks",
+				c2.dispatch.maxConcurrent === defaults.dispatch.maxConcurrent &&
+					c2.dispatch.timeoutMs === defaults.dispatch.timeoutMs &&
+					c2.dispatch.retries === defaults.dispatch.retries,
+			);
+			check("config invalid: cost fallback", c2.cost.warnThreshold === defaults.cost.warnThreshold);
+			check("config invalid: idle fallback", c2.idle.reapAfterMs === defaults.idle.reapAfterMs);
+			fs.rmSync(tmp, { recursive: true, force: true });
+
+			// 3. detection
+			check("detectKeyword: zh positive", detectKeyword("请用智能体团队并行审查这个仓库"));
+			check("detectKeyword: en positive", detectKeyword("let's spin up an agent team"));
+			check("detectKeyword: negative", !detectKeyword("hello world, please fix the typo"));
+			check(
+				"detectSlashCommand",
+				detectSlashCommand("/agent-team") &&
+					detectSlashCommand("  /agent-team status") &&
+					!detectSlashCommand("/model x"),
+			);
+
+			// 4. activation logic
+			if (cfg.activation.enabled) {
+				check("activation: fresh call true", activate("probe") === true);
+				check("activation: idempotent", activate("probe again") === false);
+
+				// 5. model / thinking resolution (spawn + disband per case)
+				if (!cfg.models.autonomousSelection) {
+					const r1 = await manager.createMember({ name: "res1", role: "worker", model: "some-other-model" }, LEADER_MODEL);
+					check("resolution: off → conversation model", r1.member.model === LEADER_MODEL, `got ${r1.member.model}`);
+					check("resolution: thinking default high", r1.member.thinking === "high", `got ${r1.member.thinking}`);
+					await manager.disband("res1");
+					const r2 = await manager.createMember({ name: "res2", role: "worker", thinking: "low" }, LEADER_MODEL);
+					check("resolution: explicit thinking honored", r2.member.thinking === "low", `got ${r2.member.thinking}`);
+					await manager.disband("res2");
+				} else {
+					const r1 = await manager.createMember({ name: "res1", role: "worker", model: "step-5-preview" }, LEADER_MODEL);
+					check("resolution: on → explicit available model", r1.member.model === "step-5-preview", `got ${r1.member.model}`);
+					await manager.disband("res1");
+					let bogusThrew = false;
+					try {
+						await manager.createMember({ name: "res2", role: "worker", model: "bogus-model" }, LEADER_MODEL);
+					} catch (err) {
+						bogusThrew = /available models/.test(err instanceof Error ? err.message : "");
+					}
+					check("resolution: on → invalid model throws with list", bogusThrew);
+					const r3 = await manager.createMember({ name: "res3", role: "worker", thinking: "xhigh" }, LEADER_MODEL);
+					check("resolution: on → explicit thinking honored", r3.member.thinking === "xhigh", `got ${r3.member.thinking}`);
+					await manager.disband("res3");
+					const r4 = await manager.createMember({ name: "res4", role: "worker" }, LEADER_MODEL);
+					check("resolution: on + no model → conversation model", r4.member.model === LEADER_MODEL, `got ${r4.member.model}`);
+					check("resolution: on + no thinking → high", r4.member.thinking === "high", `got ${r4.member.thinking}`);
+					await manager.disband("res4");
+				}
+			} else {
+				check("disabled config: activate refused", activate("probe") === false);
+				const toolsAfter = pi.getAllTools().map((t) => t.name);
+				check("disabled config: tools still hidden", !TEAM_TOOL_NAMES.some((n) => toolsAfter.includes(n)));
+			}
+
+			const failed = results.filter((r) => !r.ok).length;
+			log(failed === 0 ? "SMOKE6 DONE (all passed)" : `SMOKE6 DONE (${failed}/${results.length} failed)`);
+			setTimeout(() => process.exit(failed === 0 ? 0 : 1), 2000);
+		} catch (err) {
+			log("SMOKE6 FAILED:", err instanceof Error ? err.message : String(err));
+			setTimeout(() => process.exit(1), 2000);
+		}
+	});
+}
