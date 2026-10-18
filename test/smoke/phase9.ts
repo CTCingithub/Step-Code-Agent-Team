@@ -1,6 +1,7 @@
 /**
  * Config boundary probe (plan-43). Zero-token.
- * Covers: full-section config file, storage.dir redirection, pure loadConfig
+ * Covers: full-section settings.json config (stepcodeAgentTeam section),
+ * legacy dedicated-file fallback, storage.dir redirection, pure loadConfig
  * (merge / invalid fallback / unknown keys / env overrides), project-level
  * config wiring (applied when trusted, ignored otherwise), and idle reaping.
  */
@@ -26,12 +27,32 @@ export default function (pi: ExtensionAPI) {
 			const cfg = getConfig();
 			const manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
 
-			// 1. ambient config reflects the config file (assert per present section)
-			const configFile = path.join(agentDir(), "stepcode-agent-team.json");
-			if (fs.existsSync(configFile)) {
-				const raw = JSON.parse(fs.readFileSync(configFile, "utf8")) as Record<string, Record<string, unknown>>;
+			// 1. ambient config reflects the settings.json stepcodeAgentTeam
+			// section (or the legacy dedicated file), asserted per present section
+			const settingsFile = path.join(agentDir(), "settings.json");
+			const legacyFile = path.join(agentDir(), "stepcode-agent-team.json");
+			const readAmbient = (): Record<string, Record<string, unknown>> | null => {
+				if (fs.existsSync(settingsFile)) {
+					try {
+						const doc = JSON.parse(fs.readFileSync(settingsFile, "utf8")) as Record<string, unknown>;
+						const section = doc.stepcodeAgentTeam;
+						if (typeof section === "object" && section !== null && !Array.isArray(section)) {
+							return section as Record<string, Record<string, unknown>>;
+						}
+						return null;
+					} catch {
+						return null;
+					}
+				}
+				if (fs.existsSync(legacyFile)) {
+					return JSON.parse(fs.readFileSync(legacyFile, "utf8")) as Record<string, Record<string, unknown>>;
+				}
+				return null;
+			};
+			const raw = readAmbient();
+			if (raw) {
 				const expect = (label: string, actual: unknown, wanted: unknown) =>
-					check(`config file: ${label}`, JSON.stringify(actual) === JSON.stringify(wanted), `got ${JSON.stringify(actual)}`);
+					check(`ambient config: ${label}`, JSON.stringify(actual) === JSON.stringify(wanted), `got ${JSON.stringify(actual)}`);
 				if (raw.activation) {
 					expect("activation.keywords", cfg.activation.keywords, raw.activation.keywords);
 					expect("activation.notifyOnActivate", cfg.activation.notifyOnActivate, raw.activation.notifyOnActivate);
@@ -76,14 +97,16 @@ export default function (pi: ExtensionAPI) {
 			const d = defaultConfig();
 			const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "scat-cfg9-"));
 			fs.writeFileSync(
-				path.join(tmp, "stepcode-agent-team.json"),
+				path.join(tmp, "settings.json"),
 				JSON.stringify({
-					activation: { keywords: ["k1"] },
-					models: { available: ["m1"], autonomousSelection: true },
-					members: { max: 2, maxRecursionDepth: 3 },
-					dispatch: { maxConcurrent: 7 },
-					cost: { warnThreshold: 0.25 },
-					unknownTop: { x: 1 },
+					stepcodeAgentTeam: {
+						activation: { keywords: ["k1"] },
+						models: { available: ["m1"], autonomousSelection: true },
+						members: { max: 2, maxRecursionDepth: 3 },
+						dispatch: { maxConcurrent: 7 },
+						cost: { warnThreshold: 0.25 },
+						unknownTop: { x: 1 },
+					},
 				}),
 			);
 			const c1 = loadConfig({ agentDir: tmp });
@@ -98,13 +121,15 @@ export default function (pi: ExtensionAPI) {
 			check("loadConfig: unknown keys ignored", !("unknownTop" in (c1 as unknown as Record<string, unknown>)));
 
 			fs.writeFileSync(
-				path.join(tmp, "stepcode-agent-team.json"),
+				path.join(tmp, "settings.json"),
 				JSON.stringify({
-					members: { max: "eight", maxRecursionDepth: 9 },
-					models: { available: [] },
-					dispatch: { maxConcurrent: -2 },
-					cost: { warnThreshold: "abc" },
-					topology: { default: "bogus" },
+					stepcodeAgentTeam: {
+						members: { max: "eight", maxRecursionDepth: 9 },
+						models: { available: [] },
+						dispatch: { maxConcurrent: -2 },
+						cost: { warnThreshold: "abc" },
+						topology: { default: "bogus" },
+					},
 				}),
 			);
 			const c2 = loadConfig({ agentDir: tmp });
@@ -126,7 +151,7 @@ export default function (pi: ExtensionAPI) {
 			// env overrides
 			const savedCost = process.env.STEPCODE_TEAM_COST_WARN;
 			const savedDebug = process.env.STEPCODE_TEAM_DEBUG;
-			fs.writeFileSync(path.join(tmp, "stepcode-agent-team.json"), "{}");
+			fs.writeFileSync(path.join(tmp, "settings.json"), "{}");
 			process.env.STEPCODE_TEAM_COST_WARN = "2.5";
 			process.env.STEPCODE_TEAM_DEBUG = "1";
 			const c3 = loadConfig({ agentDir: tmp });
@@ -139,18 +164,24 @@ export default function (pi: ExtensionAPI) {
 			fs.rmSync(tmp, { recursive: true, force: true });
 
 			// 4. project-level config is wired: applied when trusted, ignored otherwise
-			const projectCfg = path.join(process.cwd(), ".stepcode", "stepcode-agent-team.json");
-			const hadProjectCfg = fs.existsSync(projectCfg);
-			const savedProjectCfg = hadProjectCfg ? fs.readFileSync(projectCfg, "utf8") : null;
-			fs.mkdirSync(path.dirname(projectCfg), { recursive: true });
-			fs.writeFileSync(projectCfg, JSON.stringify({ members: { max: 7 } }));
-			const c4 = loadConfig({ agentDir: agentDir(), projectDir: process.cwd(), trusted: true });
+			const proj = fs.mkdtempSync(path.join(os.tmpdir(), "scat-proj9-"));
+			fs.mkdirSync(path.join(proj, ".stepcode"), { recursive: true });
+			const projectCfg = path.join(proj, ".stepcode", "settings.json");
+			fs.writeFileSync(projectCfg, JSON.stringify({ stepcodeAgentTeam: { members: { max: 7 } } }));
+			const c4 = loadConfig({ agentDir: agentDir(), projectDir: proj, trusted: true });
 			check("project config: applied when trusted", c4.members.max === 7, `got ${c4.members.max}`);
-			const c4b = loadConfig({ agentDir: agentDir(), projectDir: process.cwd(), trusted: false });
+			const c4b = loadConfig({ agentDir: agentDir(), projectDir: proj, trusted: false });
 			check("project config: ignored when untrusted", c4b.members.max !== 7, `got ${c4b.members.max}`);
 			check("project config: cached ambient config unaffected", getConfig().members.max !== 7, `got ${getConfig().members.max}`);
-			if (hadProjectCfg && savedProjectCfg !== null) fs.writeFileSync(projectCfg, savedProjectCfg);
-			else fs.unlinkSync(projectCfg);
+			// legacy project file still honored when no settings section exists
+			fs.rmSync(projectCfg);
+			fs.writeFileSync(
+				path.join(proj, ".stepcode", "stepcode-agent-team.json"),
+				JSON.stringify({ members: { max: 9 } }),
+			);
+			const c4c = loadConfig({ agentDir: agentDir(), projectDir: proj, trusted: true });
+			check("project config: legacy file fallback", c4c.members.max === 9, `got ${c4c.members.max}`);
+			fs.rmSync(proj, { recursive: true, force: true });
 
 			// 5. idle reaper (the member must have been idle longer than the
 			// threshold: doSpawn touches lastActivity, so wait before reaping)

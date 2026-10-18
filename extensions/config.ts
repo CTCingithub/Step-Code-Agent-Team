@@ -1,16 +1,23 @@
 /**
  * Plugin configuration.
  *
- * Loaded once per process from <agentDir>/stepcode-agent-team.json (agentDir
- * honors STEP_CODING_AGENT_DIR, so the development sandbox gets its own
- * config), merged over built-in defaults, with env-var overrides on top:
+ * Following Step Code's settings convention, our configuration lives in the
+ * "stepcodeAgentTeam" section of settings.json: globally at
+ * <agentDir>/settings.json (agentDir honors STEP_CODING_AGENT_DIR, so the
+ * development sandbox gets its own config) and, gated on project trust, at
+ * <projectDir>/.stepcode/settings.json. Precedence:
  *
- *   defaults  <  agentDir file  <  project file  <  env overrides
+ *   defaults  <  legacy files  <  settings.json sections  <  env overrides
  *
- * The project-level override (<projectDir>/.stepcode/stepcode-agent-team.json)
- * is gated on project trust, which is only knowable inside event handlers —
- * so loadConfig accepts it as an option, and applyProjectConfig re-applies it
- * in place on the cached config from session_start (see index.ts).
+ * Legacy dedicated files (<agentDir>/stepcode-agent-team.json and
+ * <projectDir>/.stepcode/stepcode-agent-team.json) remain honored as a
+ * compatibility layer, applied before the settings section at each tier
+ * (debug mode logs a migration hint).
+ *
+ * The project-level section is gated on project trust, which is only knowable
+ * inside event handlers — so loadConfig accepts it as an option, and
+ * applyProjectConfig re-applies it in place on the cached config from
+ * session_start (see index.ts).
  *
  * Unknown keys are ignored (logged in debug mode); invalid values fall back to
  * the default with a warning.
@@ -22,6 +29,10 @@ import * as path from "node:path";
 import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
 
 export const CONFIG_FILE_NAME = "stepcode-agent-team.json";
+/** Settings file name (Step Code convention); our config is a section of it. */
+export const SETTINGS_FILE_NAME = "settings.json";
+/** Our configuration section inside settings.json. */
+export const CONFIG_SECTION = "stepcodeAgentTeam";
 
 /** Thinking levels accepted by `step --thinking`. */
 export const VALID_THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
@@ -118,6 +129,16 @@ export function projectConfigFilePath(projectDir: string): string {
 	return path.join(projectDir, ".stepcode", CONFIG_FILE_NAME);
 }
 
+/** Global settings file (Step Code convention: <agentDir>/settings.json). */
+export function settingsFilePath(agentDirPath: string): string {
+	return path.join(agentDirPath, SETTINGS_FILE_NAME);
+}
+
+/** Project settings file (<projectDir>/.stepcode/settings.json). */
+export function projectSettingsFilePath(projectDir: string): string {
+	return path.join(projectDir, ".stepcode", SETTINGS_FILE_NAME);
+}
+
 export function defaultConfig(): PluginConfig {
 	return {
 		activation: {
@@ -167,7 +188,7 @@ export interface LoadConfigOptions {
 
 export function loadConfig(options: LoadConfigOptions): PluginConfig {
 	const config = defaultConfig();
-	applyFile(config, configFilePath(options.agentDir));
+	applyGlobalTier(config, options.agentDir);
 	applyProjectConfig(config, options.projectDir, options.trusted);
 	applyEnvOverrides(config);
 	logWarnings(validate(config));
@@ -175,17 +196,27 @@ export function loadConfig(options: LoadConfigOptions): PluginConfig {
 }
 
 /**
- * Applies the project-level override (<projectDir>/.stepcode/stepcode-agent-team.json)
- * in place, gated on project trust, then re-applies env overrides so precedence
- * stays defaults < agentDir file < project file < env. Returns true when a
- * project file was applied. Callable on the cached config from event handlers,
- * where cwd and project trust first become available (see index.ts).
+ * Applies the project-level override (<projectDir>/.stepcode/settings.json
+ * section) in place, gated on project trust, then re-applies env overrides so
+ * precedence stays defaults < global < project < env. Returns true when a
+ * project config was applied. Callable on the cached config from event
+ * handlers, where cwd and project trust first become available (see index.ts).
  */
 export function applyProjectConfig(config: PluginConfig, projectDir?: string | null, trusted?: boolean): boolean {
 	if (!projectDir || !trusted) return false;
-	const file = projectConfigFilePath(projectDir);
-	if (!fs.existsSync(file)) return false;
-	applyFile(config, file);
+	let applied = false;
+	const legacy = projectConfigFilePath(projectDir);
+	if (fs.existsSync(legacy)) {
+		applyFile(config, legacy);
+		legacyNote(legacy);
+		applied = true;
+	}
+	const section = readSection(projectSettingsFilePath(projectDir));
+	if (section) {
+		mergeSection(config as unknown as Record<string, unknown>, section);
+		applied = true;
+	}
+	if (!applied) return false;
 	applyEnvOverrides(config);
 	logWarnings(validate(config));
 	return true;
@@ -215,6 +246,39 @@ function applyFile(config: PluginConfig, file: string): void {
 	}
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return;
 	mergeSection(config as unknown as Record<string, unknown>, raw as Record<string, unknown>);
+}
+
+/** Global tier: legacy dedicated file first, then the settings.json section. */
+function applyGlobalTier(config: PluginConfig, agentDirPath: string): void {
+	const legacy = configFilePath(agentDirPath);
+	if (fs.existsSync(legacy)) {
+		applyFile(config, legacy);
+		legacyNote(legacy);
+	}
+	const section = readSection(settingsFilePath(agentDirPath));
+	if (section) mergeSection(config as unknown as Record<string, unknown>, section);
+}
+
+/** Reads our section out of a settings.json file; null when absent/unusable. */
+function readSection(file: string): Record<string, unknown> | null {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(fs.readFileSync(file, "utf8"));
+	} catch {
+		return null;
+	}
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+	const section = (raw as Record<string, unknown>)[CONFIG_SECTION];
+	if (typeof section !== "object" || section === null || Array.isArray(section)) return null;
+	return section as Record<string, unknown>;
+}
+
+/** Debug hint when a legacy dedicated config file is honored. */
+function legacyNote(file: string): void {
+	if (process.env.STEPCODE_TEAM_DEBUG !== "1" && process.env.STEPCODE_TEAM_DEBUG !== "true") return;
+	console.error(
+		`[stepcode-agent-team] config: legacy file ${file} still honored; prefer the "${CONFIG_SECTION}" section in ${SETTINGS_FILE_NAME}`,
+	);
 }
 
 /** Recursive merge limited to keys present in the defaults (unknown keys ignored). */

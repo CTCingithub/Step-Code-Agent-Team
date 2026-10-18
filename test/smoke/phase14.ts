@@ -27,10 +27,10 @@ import { TopologyError } from "../../extensions/topology.ts";
 
 // Stage a short request timeout before any member spawns (members.ts reads
 // getConfig() at spawn time; index.ts's cached copy is irrelevant here).
-const CFG_FILE = path.join(agentDir(), "stepcode-agent-team.json");
+const CFG_FILE = path.join(agentDir(), "settings.json");
 const hadCfg = fs.existsSync(CFG_FILE);
 const savedCfg = hadCfg ? fs.readFileSync(CFG_FILE, "utf8") : null;
-fs.writeFileSync(CFG_FILE, JSON.stringify({ dispatch: { timeoutMs: 5000 } }));
+fs.writeFileSync(CFG_FILE, JSON.stringify({ stepcodeAgentTeam: { dispatch: { timeoutMs: 5000 } } }));
 resetConfigCache();
 
 // Keep the suite zero-token even when the shell exports a key.
@@ -83,15 +83,23 @@ export default function (pi: ExtensionAPI) {
 			check("config: defaultConfig carries maxLoopCount", d.topology.maxLoopCount === 2, `got ${d.topology.maxLoopCount}`);
 
 			const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "scat-loop14-"));
-			const write = (obj: unknown) => fs.writeFileSync(path.join(tmp, "stepcode-agent-team.json"), JSON.stringify(obj));
+			const write = (obj: unknown) =>
+				fs.writeFileSync(path.join(tmp, "settings.json"), JSON.stringify({ stepcodeAgentTeam: obj }));
 			write({ topology: { maxLoopCount: 5 } });
-			check("config: file override", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 5);
+			check("config: settings section override", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 5);
 			write({ topology: { maxLoopCount: 0 } });
 			check("config: 0 (unlimited) accepted", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 0);
 			write({ topology: { maxLoopCount: 999 } });
 			check("config: out-of-range → default", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 2, `got ${loadConfig({ agentDir: tmp }).topology.maxLoopCount}`);
 			write({ topology: { maxLoopCount: "two" } });
 			check("config: invalid type → default", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 2);
+			// legacy dedicated file still honored when no settings section exists
+			fs.rmSync(path.join(tmp, "settings.json"));
+			fs.writeFileSync(
+				path.join(tmp, "stepcode-agent-team.json"),
+				JSON.stringify({ topology: { maxLoopCount: 4 } }),
+			);
+			check("config: legacy file fallback", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 4, `got ${loadConfig({ agentDir: tmp }).topology.maxLoopCount}`);
 			fs.rmSync(tmp, { recursive: true, force: true });
 
 			// ---- 2. manager-level rejection (before any dispatch) ----

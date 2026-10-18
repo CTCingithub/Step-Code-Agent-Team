@@ -1,9 +1,10 @@
 /**
  * Project-level config probe (plan-51). Zero-token.
- * Covers: project-level config file (<cwd>/.stepcode/stepcode-agent-team.json)
- * merged over the agentDir config when the project is trusted; ignored when
- * untrusted / absent; precedence agentDir < project < env; invalid project
- * values fall back to defaults; STEPCODE_TEAM_MAXDEPTH env override (depth
+ * Covers: project-level config section (<cwd>/.stepcode/settings.json →
+ * "stepcodeAgentTeam") merged over the agentDir settings when the project is
+ * trusted; ignored when untrusted / absent; precedence agentDir < project <
+ * env; invalid project values fall back to defaults; legacy dedicated files
+ * still honored at both tiers; STEPCODE_TEAM_MAXDEPTH env override (depth
  * bound propagation to sub-leader members); live wiring through session_start.
  *
  * Regression: run via `bash test/run-smoke.sh` (zero token). The live
@@ -17,13 +18,13 @@ import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
 import { agentDir, defaultConfig, getConfig, loadConfig } from "../../extensions/config.ts";
 
-// Live wiring: stage a project-level config before any event fires (module
-// load happens before session_start; index.ts's handler applies it).
-const PROJECT_CFG = path.join(process.cwd(), ".stepcode", "stepcode-agent-team.json");
+// Live wiring: stage a project-level config section before any event fires
+// (module load happens before session_start; index.ts's handler applies it).
+const PROJECT_CFG = path.join(process.cwd(), ".stepcode", "settings.json");
 const hadProjectCfg = fs.existsSync(PROJECT_CFG);
 const savedProjectCfg = hadProjectCfg ? fs.readFileSync(PROJECT_CFG, "utf8") : null;
 fs.mkdirSync(path.dirname(PROJECT_CFG), { recursive: true });
-fs.writeFileSync(PROJECT_CFG, JSON.stringify({ members: { max: 42 } }));
+fs.writeFileSync(PROJECT_CFG, JSON.stringify({ stepcodeAgentTeam: { members: { max: 42 } } }));
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
@@ -46,13 +47,15 @@ export default function (pi: ExtensionAPI) {
 			const base = fs.mkdtempSync(path.join(os.tmpdir(), "scat-base13-"));
 			const proj = fs.mkdtempSync(path.join(os.tmpdir(), "scat-proj13-"));
 			fs.writeFileSync(
-				path.join(base, "stepcode-agent-team.json"),
-				JSON.stringify({ members: { max: 2, defaultRole: "scout" }, cost: { warnThreshold: 1 } }),
+				path.join(base, "settings.json"),
+				JSON.stringify({
+					stepcodeAgentTeam: { members: { max: 2, defaultRole: "scout" }, cost: { warnThreshold: 1 } },
+				}),
 			);
 			fs.mkdirSync(path.join(proj, ".stepcode"), { recursive: true });
 			fs.writeFileSync(
-				path.join(proj, ".stepcode", "stepcode-agent-team.json"),
-				JSON.stringify({ members: { max: 5 }, cost: { warnThreshold: 0.25 } }),
+				path.join(proj, ".stepcode", "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { members: { max: 5 }, cost: { warnThreshold: 0.25 } } }),
 			);
 
 			const c1 = loadConfig({ agentDir: base, projectDir: proj, trusted: true });
@@ -80,8 +83,8 @@ export default function (pi: ExtensionAPI) {
 
 			// invalid project values fall back to defaults (consistent with single-file semantics)
 			fs.writeFileSync(
-				path.join(proj, ".stepcode", "stepcode-agent-team.json"),
-				JSON.stringify({ members: { max: "forty-two" } }),
+				path.join(proj, ".stepcode", "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { members: { max: "forty-two" } } }),
 			);
 			const c5 = loadConfig({ agentDir: base, projectDir: proj, trusted: true });
 			check("project config: invalid value → default", c5.members.max === d.members.max, `got ${c5.members.max}`);
@@ -90,6 +93,20 @@ export default function (pi: ExtensionAPI) {
 			fs.rmSync(path.join(proj, ".stepcode"), { recursive: true, force: true });
 			const c6 = loadConfig({ agentDir: base, projectDir: proj, trusted: true });
 			check("project config: missing file → base stands", c6.members.max === 2, `got ${c6.members.max}`);
+
+			// legacy dedicated files still honored at both tiers
+			fs.rmSync(path.join(base, "settings.json"));
+			fs.writeFileSync(path.join(base, "stepcode-agent-team.json"), JSON.stringify({ members: { max: 11 } }));
+			fs.mkdirSync(path.join(proj, ".stepcode"), { recursive: true });
+			fs.writeFileSync(
+				path.join(proj, ".stepcode", "stepcode-agent-team.json"),
+				JSON.stringify({ members: { max: 12 } }),
+			);
+			const cLegacy = loadConfig({ agentDir: base, projectDir: proj, trusted: true });
+			check("legacy files: project honored over global", cLegacy.members.max === 12, `got ${cLegacy.members.max}`);
+			fs.rmSync(path.join(proj, ".stepcode", "stepcode-agent-team.json"));
+			const cLegacyGlobal = loadConfig({ agentDir: base, projectDir: proj, trusted: true });
+			check("legacy files: global-only honored", cLegacyGlobal.members.max === 11, `got ${cLegacyGlobal.members.max}`);
 
 			// STEPCODE_TEAM_MAXDEPTH: effective depth bound propagation to sub-leaders
 			const savedDepth = process.env.STEPCODE_TEAM_MAXDEPTH;

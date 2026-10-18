@@ -61,49 +61,69 @@ export default function (pi: ExtensionAPI) {
 			check("config defaults: dispatch.retries", d.dispatch.retries === defaults.dispatch.retries);
 
 			fs.writeFileSync(
-				path.join(tmp, "stepcode-agent-team.json"),
+				path.join(tmp, "settings.json"),
 				JSON.stringify({
-					activation: { keywords: ["magic word"], notifyOnActivate: false },
-					models: { available: ["m1", "m2"], autonomousSelection: true, autonomousThinking: true },
-					members: { max: 3 },
-					cost: { warnThreshold: 0 },
-					bogusSection: { x: 1 },
+					stepcodeAgentTeam: {
+						activation: { keywords: ["magic word"], notifyOnActivate: false },
+						models: { available: ["m1", "m2"], autonomousSelection: true, autonomousThinking: true },
+						members: { max: 3 },
+						cost: { warnThreshold: 0 },
+						bogusSection: { x: 1 },
+					},
 				}),
 			);
 			const c1 = loadConfig({ agentDir: tmp });
-			check("config file: keywords override", JSON.stringify(c1.activation.keywords) === '["magic word"]');
+			check("settings section: keywords override", JSON.stringify(c1.activation.keywords) === '["magic word"]');
 			check(
-				"config file: models override",
+				"settings section: models override",
 				c1.models.available.join(",") === "m1,m2" && c1.models.autonomousSelection === true,
 			);
-			check("config file: members.max", c1.members.max === 3);
-			check("config file: cost disable", c1.cost.warnThreshold === 0);
+			check("settings section: members.max", c1.members.max === 3);
+			check("settings section: cost disable", c1.cost.warnThreshold === 0);
 			check(
-				"config file: unknown keys ignored",
+				"settings section: unknown keys ignored",
 				!("bogusSection" in (c1 as unknown as Record<string, unknown>)),
 			);
 
 			fs.writeFileSync(
-				path.join(tmp, "stepcode-agent-team.json"),
+				path.join(tmp, "settings.json"),
 				JSON.stringify({
-					members: { max: "eight" },
-					models: { available: [] },
-					dispatch: { maxConcurrent: -2, timeoutMs: 10, retries: 99 },
-					cost: { warnThreshold: "abc" },
-					idle: { reapAfterMs: 1 },
+					stepcodeAgentTeam: {
+						members: { max: "eight" },
+						models: { available: [] },
+						dispatch: { maxConcurrent: -2, timeoutMs: 10, retries: 99 },
+						cost: { warnThreshold: "abc" },
+						idle: { reapAfterMs: 1 },
+					},
 				}),
 			);
 			const c2 = loadConfig({ agentDir: tmp });
-			check("config invalid: members.max fallback", c2.members.max === defaults.members.max);
-			check("config invalid: models.available fallback", c2.models.available.join(",") === "step-5-preview");
+			check("settings invalid: members.max fallback", c2.members.max === defaults.members.max);
+			check("settings invalid: models.available fallback", c2.models.available.join(",") === "step-5-preview");
 			check(
-				"config invalid: dispatch fallbacks",
+				"settings invalid: dispatch fallbacks",
 				c2.dispatch.maxConcurrent === defaults.dispatch.maxConcurrent &&
 					c2.dispatch.timeoutMs === defaults.dispatch.timeoutMs &&
 					c2.dispatch.retries === defaults.dispatch.retries,
 			);
-			check("config invalid: cost fallback", c2.cost.warnThreshold === defaults.cost.warnThreshold);
-			check("config invalid: idle fallback", c2.idle.reapAfterMs === defaults.idle.reapAfterMs);
+			check("settings invalid: cost fallback", c2.cost.warnThreshold === defaults.cost.warnThreshold);
+			check("settings invalid: idle fallback", c2.idle.reapAfterMs === defaults.idle.reapAfterMs);
+
+			// legacy dedicated file: still honored; the settings section wins over it
+			fs.rmSync(path.join(tmp, "settings.json"));
+			fs.writeFileSync(
+				path.join(tmp, "stepcode-agent-team.json"),
+				JSON.stringify({ members: { max: 5 }, cost: { warnThreshold: 7 } }),
+			);
+			const cLegacy = loadConfig({ agentDir: tmp });
+			check("legacy file: still honored", cLegacy.members.max === 5, `got ${cLegacy.members.max}`);
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { members: { max: 6 } } }),
+			);
+			const cBoth = loadConfig({ agentDir: tmp });
+			check("legacy file: settings section overrides", cBoth.members.max === 6, `got ${cBoth.members.max}`);
+			check("legacy file: unoverridden keys survive", cBoth.cost.warnThreshold === 7, `got ${cBoth.cost.warnThreshold}`);
 			fs.rmSync(tmp, { recursive: true, force: true });
 
 			// 3. detection
