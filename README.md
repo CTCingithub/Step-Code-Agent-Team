@@ -171,6 +171,7 @@ All development happens in `sandbox/` (gitignored), fully isolated from your rea
 ```bash
 ./sandbox/run.sh     # launches step with STEP_CODING_AGENT_DIR pointed at sandbox/agent
 bash sandbox/probe.sh  # zero-token protocol probe (expects "PROBE OK")
+bash sandbox/restore-project.sh  # reset the demo project (sandbox/project) to its seeded-bug state
 ```
 
 `run.sh` sets `STEP_CODING_AGENT_DIR`, `STEP_CODING_AGENT_SESSION_DIR`, and

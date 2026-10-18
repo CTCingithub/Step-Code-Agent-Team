@@ -167,6 +167,7 @@ flowchart LR
 ```bash
 ./sandbox/run.sh       # 以沙箱环境变量启动 step（cwd 为 sandbox/project）
 bash sandbox/probe.sh  # 零 token 协议探针（期望输出 PROBE OK）
+bash sandbox/restore-project.sh  # 还原测试小项目到初始状态（种子 bug 复位、data/ 清除）
 ```
 
 `run.sh` 会将 `STEP_CODING_AGENT_DIR`、`STEP_CODING_AGENT_SESSION_DIR`、
