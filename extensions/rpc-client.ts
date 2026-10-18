@@ -305,16 +305,20 @@ export class MemberRpc {
 		// Never leak the previous run's text into this one.
 		this.lastAssistantText = "";
 		const usageBefore = { ...this.usage };
+		// Hoisted so the finally block can always clear the timer and drop the
+		// waiter, even when the race is won by close/abort instead of settle.
+		let settleTimer: NodeJS.Timeout | undefined;
+		let settleDone: (() => void) | undefined;
 		const settleWaiter = new Promise<void>((resolve, reject) => {
-			const timer = setTimeout(() => {
-				this.settleWaiters = this.settleWaiters.filter((w) => w !== done);
-				reject(new Error("timeout waiting for member to settle"));
-			}, this.timeouts.requestMs);
-			const done = () => {
-				clearTimeout(timer);
+			settleDone = () => {
+				if (settleTimer) clearTimeout(settleTimer);
 				resolve();
 			};
-			this.settleWaiters.push(done);
+			settleTimer = setTimeout(() => {
+				this.settleWaiters = this.settleWaiters.filter((w) => w !== settleDone);
+				reject(new Error("timeout waiting for member to settle"));
+			}, this.timeouts.requestMs);
+			this.settleWaiters.push(settleDone);
 		});
 		// If the member dies mid-run, surface that via a close race.
 		const close = this.waitForClose();
@@ -340,6 +344,8 @@ export class MemberRpc {
 			close.cancel();
 			closeWaiter.catch(() => {});
 			abortWaiter.catch(() => {});
+			clearTimeout(settleTimer);
+			if (settleDone) this.settleWaiters = this.settleWaiters.filter((w) => w !== settleDone);
 		}
 		return { text: this.lastAssistantText, usage: usageDelta(usageBefore, this.usage) };
 	}
@@ -361,7 +367,9 @@ export class MemberRpc {
 		if (this.closed || this.proc.killed) return;
 		this.proc.kill("SIGTERM");
 		setTimeout(() => {
-			if (!this.proc.killed) this.proc.kill("SIGKILL");
+			// `proc.killed` stays true once a signal is delivered, so test the
+			// real exit state — otherwise the SIGKILL escalation never fires.
+			if (!this.closed) this.proc.kill("SIGKILL");
 		}, 5000).unref();
 	}
 
@@ -381,6 +389,6 @@ export class MemberRpc {
 		await Promise.race([close.promise, timeout]);
 		clearTimeout(timer);
 		close.cancel();
-		if (!this.closed && !this.proc.killed) this.proc.kill("SIGKILL");
+		if (!this.closed) this.proc.kill("SIGKILL");
 	}
 }

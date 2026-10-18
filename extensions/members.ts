@@ -112,6 +112,18 @@ function sanitizeTeamId(sessionId: string): string {
 	return cleaned || `team-${Date.now().toString(36)}`;
 }
 
+/** Walks the wait-for graph; true when `to` (transitively) waits on `from`. */
+export function wouldCycle(waitingOn: Map<string, string>, from: string, to: string): boolean {
+	let cur: string | undefined = to;
+	const seen = new Set<string>();
+	while (cur && !seen.has(cur)) {
+		if (cur === from) return true;
+		seen.add(cur);
+		cur = waitingOn.get(cur);
+	}
+	return false;
+}
+
 export class TeamManager {
 	private inFlight = 0;
 	private slotWaiters: Array<() => void> = [];
@@ -124,6 +136,10 @@ export class TeamManager {
 	private topologyDeclared = false;
 	/** Message-chain length per member while a dispatch is running. */
 	private chainLengths = new Map<string, number>();
+	/** Serializes claim + dispatch per task id (mirrors memberLocks). */
+	private taskLocks = new Map<string, Promise<unknown>>();
+	/** Member → the member it is currently waiting on (nested dispatch in flight). */
+	private waitingOn = new Map<string, string>();
 
 	private constructor(
 		private reg: TeamRegistry,
@@ -186,6 +202,28 @@ export class TeamManager {
 		}
 	}
 
+	/**
+	 * Marks `from` as waiting on `to` for the duration of `fn` (the team
+	 * server wraps every nested dispatch with this). Feeds cycle detection.
+	 */
+	async withWaitingOn<T>(from: string, to: string, fn: () => Promise<T>): Promise<T> {
+		this.waitingOn.set(from, to);
+		try {
+			return await fn();
+		} finally {
+			if (this.waitingOn.get(from) === to) this.waitingOn.delete(from);
+		}
+	}
+
+	/**
+	 * True when dispatching from → to would close a wait cycle: the target is
+	 * itself waiting (transitively) on the sender, so the dispatch could only
+	 * deadlock on the per-member queue.
+	 */
+	wouldDeadlock(from: string, to: string): boolean {
+		return wouldCycle(this.waitingOn, from, to);
+	}
+
 	// ------------------------------------------------------------------ members
 
 	private findMember(name: string): MemberRecord | undefined {
@@ -215,7 +253,9 @@ export class TeamManager {
 			if (now - last < maxIdleMs) continue;
 			const rpc = this.rpcs.get(member.name);
 			if (rpc) {
-				rpc.kill();
+				// Wait for the exit so the registry's "dead" is truthful and the
+				// next dispatch cannot respawn a duplicate on the same session id.
+				await rpc.killAndWait();
 				this.rpcs.delete(member.name);
 			}
 			member.status = "dead";
@@ -551,6 +591,9 @@ export class TeamManager {
 			throw err;
 		} finally {
 			unsubscribe();
+			// Refresh the idle clock from completion (not run start), so a member
+			// that just finished a long task is not reaped immediately.
+			this.touch(member.name);
 		}
 	}
 
@@ -608,7 +651,22 @@ export class TeamManager {
 			const available = this.reg.members.map((m) => m.name).join(", ") || "none";
 			throw new Error(`Unknown member "${target}". Available members: ${available}.`);
 		}
+		// Serialize claim + dispatch per task id: two concurrent starts must not
+		// both pass the "ready" gate and run (and bill) the work twice.
+		return this.withTaskLock(id, () => this.startTaskLocked(id, target, message, options));
+	}
 
+	private async startTaskLocked(
+		id: string,
+		target: string,
+		message: string | undefined,
+		options: SendOptions,
+	): Promise<{ task: TaskRecord; text: string }> {
+		const task = this.findTask(id);
+		if (task.status !== "ready") {
+			const blockers = task.blockedBy.join(", ") || "none";
+			throw new Error(`Task "${id}" is "${task.status}", not "ready" (blocked by: ${blockers}).`);
+		}
 		task.assignee = target;
 		task.status = "running";
 		this.save();
@@ -619,16 +677,40 @@ export class TeamManager {
 			if (options.signal?.aborted) break;
 			try {
 				const result = await this.sendMessage(target, prompt, options);
-				return { task: this.completeTask(id, result.text), text: result.text };
+				// A concurrent manual complete may have closed the task already;
+				// it IS done, so tolerate the terminal-state error.
+				try {
+					return { task: this.completeTask(id, result.text), text: result.text };
+				} catch (closeErr) {
+					if (!/already "(done|failed)"/.test(closeErr instanceof Error ? closeErr.message : "")) throw closeErr;
+					return { task: this.findTask(id), text: result.text };
+				}
 			} catch (err) {
 				lastError = err;
 				if (options.signal?.aborted) break;
 			}
 		}
 		const aborted = options.signal?.aborted === true;
-		this.failTask(id, aborted ? "aborted by leader" : lastError instanceof Error ? lastError.message : String(lastError));
+		try {
+			this.failTask(id, aborted ? "aborted by leader" : lastError instanceof Error ? lastError.message : String(lastError));
+		} catch {
+			// Already terminal via another path; the original error matters more.
+		}
 		if (aborted) throw new Error("Task dispatch aborted by leader.");
 		throw lastError instanceof Error ? lastError : new Error(String(lastError));
+	}
+
+	/** Serializes same-id task dispatches (mirrors withMemberLock). */
+	private withTaskLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+		const prev = this.taskLocks.get(id) ?? Promise.resolve();
+		const run = prev
+			.catch(() => {})
+			.then(fn)
+			.finally(() => {
+				if (this.taskLocks.get(id) === run) this.taskLocks.delete(id);
+			});
+		this.taskLocks.set(id, run);
+		return run;
 	}
 
 	/** Only non-terminal tasks may be closed manually. */
@@ -742,12 +824,17 @@ export class TeamManager {
 
 		// Oneshots count against the same concurrency budget as persistent runs.
 		await this.acquireSlot();
+		member.status = "running";
+		this.save();
 		try {
 			const { text, usage } = await this.runOneshot(args, options.signal);
 			member.usage = addUsage(member.usage, usage);
-			this.save();
 			return { member: member.name, text, usage: member.usage, resumed: false };
 		} finally {
+			// A oneshot runs in its own throwaway process; the persistent member
+			// stays usable, so return it to idle either way.
+			member.status = "idle";
+			this.save();
 			this.releaseSlot();
 		}
 	}
@@ -764,15 +851,24 @@ export class TeamManager {
 			let text = "";
 			let stderr = "";
 			let aborted = false;
+			let exited = false;
 			const usage = emptyUsage();
-			const timer = setTimeout(() => {
+			// `proc.killed` stays true once a signal is delivered, so escalate
+			// from the real exit state instead.
+			const terminate = (): void => {
 				proc.kill("SIGTERM");
+				setTimeout(() => {
+					if (!exited) proc.kill("SIGKILL");
+				}, 3000).unref();
+			};
+			const timer = setTimeout(() => {
+				terminate();
 				reject(new Error("oneshot dispatch timed out"));
 			}, getConfig().oneshot.timeoutMs);
 
 			const onAbort = (): void => {
 				aborted = true;
-				proc.kill("SIGTERM");
+				terminate();
 			};
 			if (signal) {
 				if (signal.aborted) onAbort();
@@ -818,6 +914,7 @@ export class TeamManager {
 				stderr += data.toString();
 			});
 			proc.on("close", (code) => {
+				exited = true;
 				clearTimeout(timer);
 				signal?.removeEventListener("abort", onAbort);
 				consumeLine(buffer); // flush trailing partial line
@@ -839,18 +936,26 @@ export class TeamManager {
 	// ------------------------------------------------------------------ slots
 
 	private async acquireSlot(): Promise<void> {
-		if (this.inFlight < getConfig().dispatch.maxConcurrent) {
+		// Never barge past queued waiters: with hand-over, a non-empty waiter
+		// queue implies every slot is taken.
+		if (this.slotWaiters.length === 0 && this.inFlight < getConfig().dispatch.maxConcurrent) {
 			this.inFlight += 1;
 			return;
 		}
 		await new Promise<void>((resolve) => this.slotWaiters.push(resolve));
-		this.inFlight += 1;
+		// The slot was handed over by releaseSlot; inFlight already counts it.
 	}
 
 	private releaseSlot(): void {
-		this.inFlight -= 1;
+		// Hand the slot directly to the next waiter (inFlight unchanged) so a
+		// fresh caller cannot squeeze in between release and the waiter's
+		// continuation — that race let in-flight dispatches exceed the cap.
 		const next = this.slotWaiters.shift();
-		if (next) next();
+		if (next) {
+			next();
+			return;
+		}
+		this.inFlight -= 1;
 	}
 
 	private killMember(member: MemberRecord): void {
@@ -859,6 +964,26 @@ export class TeamManager {
 			rpc.kill();
 			this.rpcs.delete(member.name);
 		}
+	}
+
+	/** Drops per-member bookkeeping so a recreated member starts clean. */
+	private forgetMemberState(name?: string): void {
+		if (name === undefined) {
+			this.lastActivity.clear();
+			this.queues.clear();
+			this.chainLengths.clear();
+			this.memberLocks.clear();
+			this.spawning.clear();
+			this.waitingOn.clear();
+			this.taskLocks.clear();
+			return;
+		}
+		this.lastActivity.delete(name);
+		this.queues.delete(name);
+		this.chainLengths.delete(name);
+		this.memberLocks.delete(name);
+		this.spawning.delete(name);
+		this.waitingOn.delete(name);
 	}
 
 	async disband(name?: string): Promise<string[]> {
@@ -872,6 +997,7 @@ export class TeamManager {
 			member.status = "dead";
 			member.pid = -1;
 			this.pruneTopologyMember(member.name);
+			this.forgetMemberState(member.name);
 			this.save();
 			return [member.name];
 		}
@@ -888,6 +1014,7 @@ export class TeamManager {
 		// A disbanded team starts fresh: star topology, declaration cleared.
 		this.reg.topology = starTopology();
 		this.topologyDeclared = false;
+		this.forgetMemberState();
 		this.save();
 		return killed;
 	}

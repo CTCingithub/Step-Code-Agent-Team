@@ -22,9 +22,16 @@ import { connect } from "node:net";
 
 const REQUEST_TIMEOUT_MS = 180_000;
 
+let conn = null;
+let finished = false;
+
 function fail(message, code = 1) {
+	if (finished) return;
+	finished = true;
 	console.error(`stepcode-team: ${message}`);
-	process.exit(code);
+	// exitCode + end(): process.exit() can truncate piped stdout writes.
+	process.exitCode = code;
+	if (conn) conn.end();
 }
 
 const args = process.argv.slice(2);
@@ -61,14 +68,15 @@ if (command === "status") {
 	request = { from: sender, to, message };
 }
 
-const conn = connect(socketPath);
+conn = connect(socketPath);
 let buffer = "";
-let finished = false;
 
 function finish(code) {
 	if (finished) return;
 	finished = true;
-	process.exit(code);
+	// exitCode + end(): process.exit() can truncate piped stdout writes.
+	process.exitCode = code;
+	conn.end();
 }
 
 conn.on("connect", () => {
@@ -99,6 +107,11 @@ conn.on("data", (data) => {
 
 conn.on("error", (err) => {
 	fail(err.message);
+});
+
+// A leader that dies mid-request must not look like an empty successful reply.
+conn.on("close", () => {
+	if (!finished) fail("team server closed the connection before replying");
 });
 
 setTimeout(() => fail("timed out waiting for the team server"), REQUEST_TIMEOUT_MS).unref();

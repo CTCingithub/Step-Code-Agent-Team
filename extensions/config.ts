@@ -241,8 +241,12 @@ function applyFile(config: PluginConfig, file: string): void {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(fs.readFileSync(file, "utf8"));
-	} catch {
-		return; // missing or unreadable file: defaults stand
+	} catch (err) {
+		// Missing file is normal; a present-but-broken one is worth a trace.
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+			configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
+		}
+		return; // unreadable file: defaults stand
 	}
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return;
 	mergeSection(config as unknown as Record<string, unknown>, raw as Record<string, unknown>);
@@ -264,7 +268,11 @@ function readSection(file: string): Record<string, unknown> | null {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(fs.readFileSync(file, "utf8"));
-	} catch {
+	} catch (err) {
+		// Missing file is normal; a present-but-broken one is worth a trace.
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+			configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
+		}
 		return null;
 	}
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
@@ -275,16 +283,21 @@ function readSection(file: string): Record<string, unknown> | null {
 
 /** Debug hint when a legacy dedicated config file is honored. */
 function legacyNote(file: string): void {
+	configNote(`legacy file ${file} still honored; prefer the "${CONFIG_SECTION}" section in ${SETTINGS_FILE_NAME}`);
+}
+
+/** Debug-gated one-line config trace. */
+function configNote(message: string): void {
 	if (process.env.STEPCODE_TEAM_DEBUG !== "1" && process.env.STEPCODE_TEAM_DEBUG !== "true") return;
-	console.error(
-		`[stepcode-agent-team] config: legacy file ${file} still honored; prefer the "${CONFIG_SECTION}" section in ${SETTINGS_FILE_NAME}`,
-	);
+	console.error(`[stepcode-agent-team] config: ${message}`);
 }
 
 /** Recursive merge limited to keys present in the defaults (unknown keys ignored). */
 function mergeSection(target: Record<string, unknown>, source: Record<string, unknown>): void {
 	for (const key of Object.keys(source)) {
-		if (!(key in target)) continue;
+		// Own-key check: `key in target` is also true for inherited
+		// Object.prototype keys ("constructor", "toString", …).
+		if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
 		const value = source[key];
 		const current = target[key];
 		if (

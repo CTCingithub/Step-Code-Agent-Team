@@ -41,6 +41,7 @@ export default function (pi: ExtensionAPI) {
 	let server: TeamServer | null = null;
 	let reapTimer: NodeJS.Timeout | null = null;
 	let currentCtx: ExtensionContext | null = null;
+	let shutDown = false;
 
 	// Project-level config: cwd and project trust are only knowable inside
 	// event handlers, so the override is applied in place on the cached config
@@ -56,6 +57,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const getManager = (ctx: ExtensionContext): TeamManager => {
+		if (shutDown) throw new Error("Agent team plugin has shut down for this session.");
 		if (!manager) manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
 		return manager;
 	};
@@ -68,10 +70,16 @@ export default function (pi: ExtensionAPI) {
 			server.start();
 		}
 		if (!reapTimer) {
-			reapTimer = setInterval(() => {
-				void team.reapIdleMembers(config.idle.reapAfterMs);
-			}, config.idle.reapIntervalMs);
-			reapTimer.unref?.();
+			// Self-rescheduling (not setInterval) so a project-level
+			// idle.reapIntervalMs applied after activation still takes effect.
+			const scheduleReap = (): void => {
+				reapTimer = setTimeout(() => {
+					reapTimer = null;
+					void team.reapIdleMembers(getConfig().idle.reapAfterMs).then(scheduleReap, scheduleReap);
+				}, getConfig().idle.reapIntervalMs);
+				reapTimer.unref?.();
+			};
+			scheduleReap();
 		}
 		if (config.activation.notifyOnActivate) {
 			ctx.ui.notify(`Agent team plugin activated (${reason}). Team tools are now available.`, "info");
@@ -159,8 +167,9 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", () => {
+		shutDown = true;
 		if (reapTimer) {
-			clearInterval(reapTimer);
+			clearTimeout(reapTimer);
 			reapTimer = null;
 		}
 		server?.stop();

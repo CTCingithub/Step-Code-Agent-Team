@@ -42,8 +42,15 @@ function costWarning(config: PluginConfig, cost: number): string {
 function truncateOutput(text: string): string {
 	const byteLength = Buffer.byteLength(text, "utf8");
 	if (byteLength <= PER_TASK_OUTPUT_CAP) return text;
-	const truncated = text.slice(0, PER_TASK_OUTPUT_CAP);
+	// Drop a trailing lone high surrogate: slicing by code units can split a
+	// pair and emit an invalid character into the tool result.
+	const truncated = text.slice(0, PER_TASK_OUTPUT_CAP).replace(/[\uD800-\uDBFF]$/, "");
 	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. The full text is in the tool result details (fullText).]`;
+}
+
+/** Cumulative spend across all members — the guardrail is a team-level number. */
+function teamSpend(manager: TeamManager): number {
+	return manager.snapshot().members.reduce((sum, m) => sum + m.usage.cost, 0);
 }
 
 /** Defense in depth: team tools are unavailable until the plugin is activated. */
@@ -193,7 +200,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 							`Member "${result.member}" replied${result.resumed ? " (process was respawned; context resumed)" : ""}:`,
 							"",
 							truncateOutput(result.text || "(no output)"),
-							costWarning(config, result.usage.cost),
+							costWarning(config, teamSpend(manager)),
 						].join("\n"),
 					},
 				],

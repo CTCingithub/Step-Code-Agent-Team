@@ -129,6 +129,7 @@ export function loadRegistry(teamId: string): TeamRegistry | null {
 		const raw = fs.readFileSync(file, "utf-8");
 		const reg = JSON.parse(raw) as TeamRegistry;
 		if (reg.schemaVersion !== 1) return null;
+		if (!Array.isArray(reg.members) || !Array.isArray(reg.tasks)) return null;
 		// Registries written before the topology field degrade to star.
 		reg.topology = parseTopology(reg.topology);
 		return reg;

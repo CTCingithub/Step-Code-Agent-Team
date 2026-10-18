@@ -24,6 +24,7 @@ function debugLog(...args: unknown[]): void {
 
 export class TeamServer {
 	private server: net.Server | null = null;
+	private conns = new Set<net.Socket>();
 
 	constructor(
 		private readonly socketPath: string,
@@ -41,14 +42,23 @@ export class TeamServer {
 		fs.mkdirSync(path.dirname(this.socketPath), { recursive: true });
 
 		this.server = net.createServer((conn) => {
+			this.conns.add(conn);
+			conn.on("close", () => this.conns.delete(conn));
 			let buffer = "";
+			// Serialize handling per connection so a member that pipelines two
+			// requests still gets its replies in order.
+			let queue: Promise<void> = Promise.resolve();
 			conn.on("data", (data: Buffer) => {
 				buffer += data.toString("utf8");
 				let idx: number;
 				while ((idx = buffer.indexOf("\n")) >= 0) {
 					const line = buffer.slice(0, idx).replace(/\r$/, "");
 					buffer = buffer.slice(idx + 1);
-					if (line.trim()) void this.handle(conn, line);
+					if (line.trim()) {
+						queue = queue
+							.then(() => this.handle(conn, line))
+							.catch((err) => debugLog("handle error:", err instanceof Error ? err.message : String(err)));
+					}
 				}
 			});
 			conn.on("error", (err: Error) => {
@@ -57,9 +67,10 @@ export class TeamServer {
 			});
 		});
 		this.server.on("error", (err: Error) => {
-			// Keep the leader alive even if the socket misbehaves, but leave a
-			// trace: a silent listen() failure would break messaging invisibly.
-			debugLog("server error:", err.message);
+			// Keep the leader alive even if the socket misbehaves, but always
+			// leave a trace: a silent listen() failure would break messaging
+			// invisibly (every member msg would fail with ECONNREFUSED).
+			console.error(`[stepcode-team] server error: ${err.message}`);
 		});
 		this.server.listen(this.socketPath, () => {
 			try {
@@ -72,6 +83,9 @@ export class TeamServer {
 	}
 
 	stop(): void {
+		// Drop live connections first: server.close() waits for them otherwise.
+		for (const conn of this.conns) conn.destroy();
+		this.conns.clear();
 		this.server?.close();
 		this.server = null;
 		try {
@@ -137,9 +151,24 @@ export class TeamServer {
 					});
 					return;
 				}
+				// Wait-cycle guard: if the target is itself waiting (transitively)
+				// on the sender, this dispatch can only deadlock on the per-member
+				// queue — reject it instead of hanging until the RPC timeout.
+				if (manager.wouldDeadlock(from, req.to)) {
+					this.reply(conn, {
+						ok: false,
+						error:
+							`messaging cycle detected: ${from} → ${req.to} would close a wait loop. ` +
+							"Report the need to the leader instead of forwarding further.",
+					});
+					return;
+				}
 				// Nested dispatch: exempt from the global concurrency gate — the
 				// sender already holds a running slot (see members.ts dispatch).
-				const result = await manager.sendMessage(req.to, req.message, { nested: true, chainLength: nextLength });
+				// withWaitingOn records the edge so later hops can detect cycles.
+				const result = await manager.withWaitingOn(from, req.to, () =>
+					manager.sendMessage(req.to, req.message, { nested: true, chainLength: nextLength }),
+				);
 				this.reply(conn, { ok: true, reply: result.text });
 				return;
 			}
