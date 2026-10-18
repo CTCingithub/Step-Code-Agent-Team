@@ -10,6 +10,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { agentDir, getConfig } from "./config.ts";
+import { parseTopology, starTopology, type TopologyData } from "./topology.ts";
 
 export { agentDir };
 
@@ -53,6 +54,7 @@ export interface TeamRegistry {
 	cwd: string;
 	members: MemberRecord[];
 	tasks: TaskRecord[];
+	topology: TopologyData;
 }
 
 export function teamsRoot(): string {
@@ -107,6 +109,7 @@ export function createRegistry(teamId: string, cwd: string): TeamRegistry {
 		cwd,
 		members: [],
 		tasks: [],
+		topology: starTopology(),
 	};
 }
 
@@ -126,6 +129,8 @@ export function loadRegistry(teamId: string): TeamRegistry | null {
 		const raw = fs.readFileSync(file, "utf-8");
 		const reg = JSON.parse(raw) as TeamRegistry;
 		if (reg.schemaVersion !== 1) return null;
+		// Registries written before the topology field degrade to star.
+		reg.topology = parseTopology(reg.topology);
 		return reg;
 	} catch {
 		return null;

@@ -18,6 +18,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
 
 export const CONFIG_FILE_NAME = "stepcode-agent-team.json";
 
@@ -70,6 +71,13 @@ export interface StorageConfig {
 	dir: string | null;
 }
 
+export interface TopologyConfig {
+	/** Shape applied to new teams before the leader declares one. */
+	default: TopologyShape;
+	/** When true, work cannot be dispatched until the topology is declared. */
+	requireDeclaration: boolean;
+}
+
 export interface PluginConfig {
 	activation: ActivationConfig;
 	models: ModelsConfig;
@@ -79,6 +87,7 @@ export interface PluginConfig {
 	cost: CostConfig;
 	idle: IdleConfig;
 	storage: StorageConfig;
+	topology: TopologyConfig;
 	debug: boolean;
 }
 
@@ -125,6 +134,7 @@ export function defaultConfig(): PluginConfig {
 		cost: { warnThreshold: 1 },
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
+		topology: { default: "star", requireDeclaration: false },
 		debug: false,
 	};
 }
@@ -299,6 +309,11 @@ function validate(config: PluginConfig): string[] {
 		config.storage.dir = d.storage.dir;
 		warnings.push("storage.dir");
 	}
+	if (!VALID_TOPOLOGY_SHAPES.includes(config.topology.default as TopologyShape)) {
+		config.topology.default = d.topology.default;
+		warnings.push("topology.default");
+	}
+	expectBoolean(asRecord(config.topology), "requireDeclaration", d.topology.requireDeclaration, warnings);
 	expectBoolean(asRecord(config), "debug", d.debug, warnings);
 
 	return warnings;
