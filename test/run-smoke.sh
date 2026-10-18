@@ -26,7 +26,13 @@ trap 'rm -rf "$AGENT_DIR"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-PHASES="${*:-1 2 3 5 6 7 8 9 13 14}"
+PHASES="${*:-1 2 3 5 6 7 8 9 13 14 15 16 17}"
+# Pure-logic probes (render/tools helpers) run standalone — without
+# extensions/index.ts. Importing them transitively pulls @step-harness/pi-tui,
+# which makes step stage the repo package into the agent dir and load a second
+# copy of index.ts: a fatal tool-name conflict. These probes don't need the
+# team extension, so don't load it.
+STANDALONE_PHASES="15 16"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
 KEY_PHASES="5"
@@ -42,9 +48,14 @@ for p in $PHASES; do
     echo "phase$p: SKIPPED (STEP_API_KEY not set)"
     continue
   fi
+  if echo " $STANDALONE_PHASES " | grep -q " $p "; then
+    ext_args=(-e "$probe")
+  else
+    ext_args=(-e "$ROOT/extensions/index.ts" -e "$probe")
+  fi
   out="$(printf '{"id":"1","type":"get_state"}\n' \
     | STEP_CODING_AGENT_DIR="$AGENT_DIR" \
-      timeout 240 step -e "$ROOT/extensions/index.ts" -e "$probe" \
+      timeout 240 step "${ext_args[@]}" \
       --mode rpc --session-id "smoke-$p" --session-dir "$SESSION_DIR" \
       --approval-mode auto 2>&1)" || true
   # Structural verdict on the probe's own log lines only (step's stderr can
@@ -107,6 +118,54 @@ else
   FAILED+=("live-args-forward")
 fi
 rm -rf "$LIVE3"
+
+# Untrusted project config must NOT apply: staged activation.enabled=false with
+# --no-approve → /agent-team still activates.
+LIVE4="$(mktemp -d)"
+mkdir -p "$LIVE4/.stepcode" "$LIVE4/sessions"
+echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE4/.stepcode/settings.json"
+na_out="$(cd "$LIVE4" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+  | STEP_CODING_AGENT_DIR="$LIVE4/agent" timeout 45 step -e "$ROOT/extensions/index.ts" \
+    --mode rpc --session-id live-untrusted --session-dir "$LIVE4/sessions" -na 2>&1)" || true
+if echo "$na_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
+  echo "live-untrusted-config: OK"
+else
+  echo "live-untrusted-config: FAILED (staged project config applied despite --no-approve)"
+  FAILED+=("live-untrusted-config")
+fi
+rm -rf "$LIVE4"
+
+# Clean-export packaging: the repo at HEAD must load from a fresh git archive
+# without touching the user's real settings.
+EXPORT_DIR="$(mktemp -d)"
+NEUTRAL="$(mktemp -d)"
+if git -C "$ROOT" archive HEAD 2>/dev/null | tar -x -C "$EXPORT_DIR" 2>/dev/null && [ -f "$EXPORT_DIR/extensions/index.ts" ]; then
+  exp_out="$(cd "$NEUTRAL" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+    | STEP_CODING_AGENT_DIR="$EXPORT_DIR/agent" timeout 45 step -e "$EXPORT_DIR/extensions/index.ts" \
+      --mode rpc --session-id live-export --session-dir "$EXPORT_DIR/sessions" --approval-mode auto 2>&1)" || true
+  if echo "$exp_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
+    echo "live-clean-export: OK"
+  else
+    echo "live-clean-export: FAILED (extension from git archive did not activate)"
+    echo "$exp_out" | tail -5
+    FAILED+=("live-clean-export")
+  fi
+else
+  echo "live-clean-export: SKIPPED (git archive unavailable)"
+fi
+rm -rf "$EXPORT_DIR" "$NEUTRAL"
+
+# Orphan processes: a member spawned by phase17 must not outlive its leader.
+if [ -f "$AGENT_DIR/orphan.pid" ]; then
+  orphan_pid="$(cat "$AGENT_DIR/orphan.pid")"
+  sleep 3
+  if kill -0 "$orphan_pid" 2>/dev/null; then
+    echo "orphan-check: FAILED (member pid $orphan_pid still alive after leader exit)"
+    FAILED+=("orphan-check")
+  else
+    echo "orphan-check: OK"
+  fi
+fi
 
 if [ "${#FAILED[@]}" -gt 0 ]; then
   echo "run-smoke: FAILED phases: ${FAILED[*]}"

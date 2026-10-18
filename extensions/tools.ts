@@ -33,13 +33,13 @@ const PER_TASK_OUTPUT_CAP = 50 * 1024;
  * Cumulative team spend warning (threshold from config; 0 disables).
  * Env override (STEPCODE_TEAM_COST_WARN) is applied by the config loader.
  */
-function costWarning(config: PluginConfig, cost: number): string {
+export function costWarning(config: PluginConfig, cost: number): string {
 	const threshold = config.cost.warnThreshold;
 	if (threshold <= 0 || cost < threshold) return "";
 	return `\n\n[cost guardrail] Team spend has reached $${cost.toFixed(4)} (threshold $${threshold.toFixed(2)}). Consider disbanding idle members or finishing up.`;
 }
 
-function truncateOutput(text: string): string {
+export function truncateOutput(text: string): string {
 	const byteLength = Buffer.byteLength(text, "utf8");
 	if (byteLength <= PER_TASK_OUTPUT_CAP) return text;
 	// Drop a trailing lone high surrogate: slicing by code units can split a
