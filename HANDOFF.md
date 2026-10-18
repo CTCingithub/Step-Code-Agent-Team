@@ -1,7 +1,7 @@
 # 交接文档（Handoff）
 
 > 目的：让其他 session 阅读本文后即可无缝继续开发。
-> 配套文档：`DEVELOPMENT-HISTORY.md`（开发历程）、`README.md` / `README_ZH.md`（使用说明）、`docs/ARCHITECTURE.md`（架构）、`docs/PROTOCOL.md`（协议）、`docs/CONFIGURATION.md`（配置参考）、`docs/TESTING.md`（测试指南）、`sandbox/TEST-PLAN.md`（测试计划与缺陷清单，仅在本地沙箱）。
+> 配套文档：`DEVELOPMENT-HISTORY.md`（开发历程）、`README.md` / `README_ZH.md`（使用说明）、`docs/ARCHITECTURE.md`（架构）、`docs/PROTOCOL.md`（协议）、`docs/CONFIGURATION.md`（配置参考）、`docs/TESTING.md`（测试指南）、`sandbox/TEST-PLAN.md`（随仓库分发的测试计划与缺陷清单）。
 
 ## 1. 项目现状（截至 2026-10-18）
 
@@ -54,7 +54,7 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 - **项目级配置有两个时序妥协**：`applyProjectConfig` 已在 session_start 就地合并（trust 门控），但注册时固化的工具描述串（模型列表等）与本进程的深度门不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效
 - **LLM 行为不可完全控**：成员可能弃用工具转去排查环境（协调提示已加固，无法根除）
 - **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到
-- **LLM 层探针在 gitignore 内**：phase4/10/11/12 与 TEST-PLAN.md 未入库（零 token 层已随 `test/smoke/` 分发，`npm run smoke`）；换环境跑 LLM 层需按其中 JSON 模板重建配置
+- **LLM 层探针需自带 key**：phase4/10/11/12 与 TEST-PLAN.md 已随 `sandbox/` 分发（沙箱运行时状态——agent/、sessions、teams、auth.json——仍在 gitignore），但会发起真实模型调用——跑前 export 你自己的 `STEP_API_KEY`
 - **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）
 
 ## 5. 建议下一步（按优先级）
@@ -74,7 +74,7 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 npm run smoke                    # phase 1 2 3 5 6 7 8 9 13 14；phase5 无 STEP_API_KEY 时 SKIP
 bash test/run-smoke.sh 9 13      # 只跑指定 phase
 
-# LLM 路径（先 export STEP_API_KEY，密钥位置见 local/test-api-key.md）
+# LLM 路径（先 export STEP_API_KEY=<你自己的 key>）
 sleep 300 | step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
 ```

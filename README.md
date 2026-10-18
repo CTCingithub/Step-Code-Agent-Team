@@ -165,8 +165,9 @@ Also included: `prompts/team-review.md` (parallel multi-reviewer chain) and
 
 ## Development sandbox
 
-All development happens in `sandbox/` (gitignored), fully isolated from your real
-`~/.stepcode` config, sessions, and projects:
+The sandbox ships with the repo and is fully isolated from your real
+`~/.stepcode` config, sessions, and projects (its runtime state — agent dir,
+sessions, team registries, `auth.json` — is gitignored):
 
 ```bash
 ./sandbox/run.sh     # launches step with STEP_CODING_AGENT_DIR pointed at sandbox/agent
@@ -176,8 +177,10 @@ bash sandbox/restore-project.sh  # reset the demo project (sandbox/project) to i
 
 `run.sh` sets `STEP_CODING_AGENT_DIR`, `STEP_CODING_AGENT_SESSION_DIR`, and
 `STEP_CODING_AGENT_PLAN_DIR` to `sandbox/agent/...`, and runs `step` in
-`sandbox/project/` (a throwaway workspace). Export `STEP_API_KEY` in your shell
-before runs that touch a model — keys are never written to disk.
+`sandbox/project/` (a throwaway demo workspace). Export your own `STEP_API_KEY`
+in your shell before runs that touch a model — keys are never written to disk.
+The LLM-layer probes (`sandbox/smoke-phase4/10/11/12.ts`) are included too; see
+[docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
 
 ## Project layout
 
@@ -192,7 +195,7 @@ skills/        team-orchestration/SKILL.md
 docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING references
 test/          smoke/ zero-token probes + run-smoke.sh (npm run smoke)
-sandbox/       isolated dev environment (gitignored)
+sandbox/       isolated dev environment (ships with the repo; runtime state gitignored)
 ```
 
 ## Configuration
@@ -305,10 +308,10 @@ need a test key and stay in the gitignored sandbox; see
   environment; coordination prompts are hardened but this cannot be eliminated.
 - **TUI rendering is not manually verified**: `render.ts` only runs in the interactive TUI,
   which headless probes do not cover.
-- **LLM-path probes stay in the gitignored sandbox**: `sandbox/smoke-phase4/10/11/12.ts` and
-  `sandbox/TEST-PLAN.md` are not in the repo; the zero-token suite ships in `test/smoke/`
-  (`npm run smoke`), and a fresh environment must rebuild the sandbox config fixtures per the
-  test-plan matrix for the LLM layer.
+- **LLM-path probes need your own key**: `sandbox/smoke-phase4/10/11/12.ts` and the `cfg-*`
+  fixtures now ship with the repo (sandbox runtime state stays gitignored), but they make real
+  model calls — export your own `STEP_API_KEY` first. The zero-token suite (`npm run smoke`)
+  needs no key.
 - **Depth ≥ 3 is not live-tested with a real LLM chain** (process-level self-bootstrap is
   verified; the depth bound constrains deeper trees).
 

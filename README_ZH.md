@@ -161,8 +161,8 @@ flowchart LR
 
 ## 开发沙箱
 
-全部开发活动在 `sandbox/` 内进行（已 gitignore），与真实 `~/.stepcode`
-配置、会话、项目完全隔离：
+沙箱随仓库分发，与真实 `~/.stepcode` 配置、会话、项目完全隔离（其运行时状态——
+agent 目录、sessions、团队注册表、`auth.json`——在 gitignore 内）：
 
 ```bash
 ./sandbox/run.sh       # 以沙箱环境变量启动 step（cwd 为 sandbox/project）
@@ -172,7 +172,9 @@ bash sandbox/restore-project.sh  # 还原测试小项目到初始状态（种子
 
 `run.sh` 会将 `STEP_CODING_AGENT_DIR`、`STEP_CODING_AGENT_SESSION_DIR`、
 `STEP_CODING_AGENT_PLAN_DIR` 指向 `sandbox/agent/...`。涉及模型调用的运行前，
-请在当前 shell `export STEP_API_KEY=<你的key>`——密钥绝不落盘。
+请在当前 shell `export STEP_API_KEY=<你自己的 key>`——密钥绝不落盘。
+LLM 层探针（`sandbox/smoke-phase4/10/11/12.ts`）同样随仓库分发，跑法见
+[docs/TESTING.md](docs/TESTING.md) 与 `sandbox/README.md`。
 
 ## 项目结构
 
@@ -187,7 +189,7 @@ skills/        team-orchestration/SKILL.md
 docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING 参考文档
 test/          smoke/ 零 token 探针 + run-smoke.sh（npm run smoke）
-sandbox/       隔离开发环境（gitignored）
+sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitignore）
 ```
 
 ## 配置
@@ -285,7 +287,7 @@ LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需测试 key，仍留�
 - **项目级配置有两个时序妥协**：注册时固化的工具描述串（模型列表等）与本进程的深度门不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
 - **LLM 行为不可完全控**：成员可能弃用工具转去排查环境；协调提示已加固，无法根除。
 - **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到。
-- **LLM 层探针在 gitignore 内**：`sandbox/smoke-phase4/10/11/12.ts` 与 `sandbox/TEST-PLAN.md` 未入库（零 token 层已随 `test/smoke/` 分发，`npm run smoke`）；换环境跑 LLM 层需按测试计划矩阵重建配置。
+- **LLM 层探针需自带 key**：`sandbox/smoke-phase4/10/11/12.ts` 与 `cfg-*` fixture 已随仓库分发（沙箱运行时状态仍在 gitignore），但会发起真实模型调用——跑前 export 你自己的 `STEP_API_KEY`。零 token 冒烟集（`npm run smoke`）无需 key。
 - **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）。
 
 ## 许可证

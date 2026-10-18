@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-25，二轮全面复查与人工项最小化：新增 3 个探针 + 3 个 live 检查，人工项 8→6）。
+> 最近更新：2026-10-18（plan-34，沙箱同步 GitHub 与配置位置确认；此前为 plan-25 二轮复查）。
 
 ## 总览
 
@@ -22,6 +22,7 @@
 | 13 | 全面复查与优化（三路独立审查 + 定向自查） | plan-18 | 修复 15 项缺陷（kill 升级死代码/定时器泄漏/信号量竞态/任务双派/消息环死锁/reaper/oneshot/disband/shim 截断等）；冒烟集结构化判定 + live 接线检查；新增 docs/MANUAL-TESTING.md | runner 曾误判 phase2 日志中的任务状态 failed（已收窄模式） |
 | 14 | 修复 /agent-team 带参 prompt 无反馈 | plan-22 | 命令后文本经 pi.sendUserMessage 转发为真实用户消息（空闲直发/流式 followUp）；runner 新增 live-args-forward 检查 | 修复前会话文件中无任何用户消息记录 |
 | 15 | 二轮全面复查 + 最小化人工验证项 | plan-25 | 新增 phase15（render 断言）/phase16（成本护栏+截断）/phase17+orphan-check（孤儿进程）/live-untrusted-config/live-clean-export；runner STANDALONE_PHASES 机制；MANUAL-TESTING 人工项 8→6 | 并行审查 subagent 因资源压力失败，改串行自查（未发现新缺陷） |
+| 16 | 沙箱同步 GitHub + 配置位置确认 | plan-34 | .gitignore 粒度化（沙箱 29 个可复用文件入库，排除 agent/auth.json/运行时状态）；cfg-misc storage.dir 改可移植相对路径；新增 sandbox/README.md；确认配置位于 settings.json 的 stepcodeAgentTeam 节 | auth.json 为 OAuth 凭证（access/refresh），dry-run 核验零泄漏 |
 
 ## 明细
 
@@ -157,3 +158,13 @@
 **工作**：① PTY 复测确认 plan-22 的 `/agent-team` 修复在真实 TUI 生效（团队板 + 转发行 + 请求文本进入会话）。② 串行自查全部高危改动（信号量移交、任务锁锁序、等待环检测、kill 升级、shim TDZ、runner 判定）——未发现新缺陷。③ 新增自动化：phase15（render.ts 六工具 call/result 断言，含折叠/展开/用量行/图标）、phase16（costWarning 阈值/禁用/格式化 + truncateOutput 边界与代理对安全）、phase17 + orphan-check（成员不得比队长长寿）、live-untrusted-config（`-na` 时项目配置不得生效）、live-clean-export（git archive 导出物可加载并激活）。④ 发现并规避一个 harness 行为：纯逻辑探针传递导入 `@step-harness/pi-tui` 会触发 step 把仓库包暂存进 agentDir 并加载第二份 index.ts，与 `-e` 原始副本冲突且启动中止——runner 增加 `STANDALONE_PHASES` 机制（15/16/17 不挂载 index.ts）。⑤ `docs/MANUAL-TESTING.md` 重写：人工项从 8 项缩减为 6 项不可约项（TUI 观感、真实安装、信任弹窗 UX、LLM 行为遵循度、演示剧本、性能主观），其余全部有自动化覆盖。
 
 **验证**：全量 `npm run smoke` 全绿（13 phase + 6 live 检查；phase5 因环境变量含 key 实际执行并通过）。
+
+### 16. 沙箱同步 GitHub 与配置位置确认（plan-34）
+
+**用户 prompt**：「我已经手动 bash sandbox/restore-project.sh 了。我希望 sandbox 可以被同步到 github 上供其他人测试。不管在 ~/.stepcode/agent/ 还是在 sandbox/agent/ 中，都没有看到 settings.json 文件，请确认配置信息的位置」
+
+**配置位置答复**：插件配置位于 settings.json 的 `stepcodeAgentTeam` 节——全局 `<agentDir>/settings.json`（agentDir = `STEP_CODING_AGENT_DIR` 或 `~/.stepcode/agent`）、项目级 `<cwd>/.stepcode/settings.json`（trust 门控）。实测三处（`~/.stepcode/agent/`、`sandbox/agent/`、`sandbox/project/.stepcode/`）均不存在该文件——沙箱一直运行在内置默认值上；要配置沙箱，建 `sandbox/agent/settings.json` 即可。
+
+**沙箱入库**：`.gitignore` 由整目录忽略改为粒度规则——保留 run.sh / probe.sh / restore-project.sh、smoke-phase4/10/11/12.ts、TEST-PLAN.md、project/、project-pristine/、cfg-*/settings.json（共 29 个文件）；排除 sandbox/agent/（11M 运行时状态）、auth.json（OAuth 凭证，含 access/refresh token）、config.toml、models-store.json、各 cfg-*/sessions|teams|live-context、project/data。cfg-misc/settings.json 的 storage.dir 由机器绝对路径改为可移植相对路径 `sandbox/cfg-misc/teams-custom`。新增 sandbox/README.md 作为他人测试入口；README 中英、HANDOFF、docs/TESTING.md 同步「沙箱随仓库分发、LLM 层探针需自带 key」。
+
+**验证**：`git add -n` dry-run 确认暂存清单恰为 29 个可复用文件、无凭证/运行时状态；cfg-misc 改动后全量 `npm run smoke` 全绿（13 phase + 6 live 检查；phase5 用轮换后的新 key 实跑通过）。

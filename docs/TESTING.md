@@ -2,13 +2,12 @@
 
 > 四层测试体系的操作化版本。原则：**先写可复现测试，再修复**；零 token 层优先，
 > LLM 层只在沙箱内用测试 key 做最小调用。探针按 phase 编号递增：零 token 层随仓库分发
-> （`test/smoke/phase*.ts`），LLM 层留在 gitignore 的 `sandbox/`；历史执行记录见 `sandbox/TEST-PLAN.md`。
+> （`test/smoke/phase*.ts`），LLM 层随 `sandbox/` 分发（需你自己的 key）；历史执行记录见 `sandbox/TEST-PLAN.md`。
 
 ## 0. 环境准备
 
 零 token 层：`test/run-smoke.sh` 自建一次性临时 agentDir（mktemp），无需任何准备，与真实
-`~/.stepcode` 和 gitignore 的 sandbox/ 完全隔离。LLM 层在 `sandbox/` 内运行（`sandbox/` 在
-.gitignore 内，换环境需按 `sandbox/TEST-PLAN.md` 第三节矩阵重建配置 fixture）。headless 探针必须带
+`~/.stepcode` 完全隔离。LLM 层在 `sandbox/` 内运行（`sandbox/` 随仓库分发，`cfg-*` fixture 已内含；仅 agent dir、sessions、teams 等运行时状态在 .gitignore 内）。headless 探针必须带
 `--approval-mode auto`，否则派生进程的工具会被审批拦截：
 
 ```bash
@@ -16,7 +15,7 @@ export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 export STEP_CODING_AGENT_SESSION_DIR="$PWD/sandbox/agent/sessions"
 ```
 
-LLM 层测试前 `export STEP_API_KEY`（密钥只存于 gitignore 的 `local/test-api-key.md`，经环境变量传递，绝不入库）。
+LLM 层测试前 `export STEP_API_KEY=<你自己的 key>`（经环境变量传递，绝不写入任何文件）。
 
 ## 1. A 层 — 单元测试（无 LLM，无进程）
 
