@@ -13,7 +13,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
-import { TeamManager } from "./members.ts";
+import { currentDepth, TeamManager } from "./members.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
 import { getConfig } from "./config.ts";
@@ -22,6 +22,19 @@ import { activate, detectKeyword, initActivation, isActive, TEAM_TOOL_NAMES } fr
 export default function (pi: ExtensionAPI) {
 	// Config first: tool descriptions and gating depend on it.
 	const config = getConfig();
+
+	// Depth gate: at maxRecursionDepth this session may not orchestrate a team.
+	// The extension stays completely inert (no tools, hooks, or server), which
+	// is also the zero-context-cost way to bound recursion.
+	const depth = currentDepth();
+	if (depth >= config.members.maxRecursionDepth) {
+		if (config.debug) {
+			console.error(
+				`[stepcode-agent-team] inert at depth ${depth} (maxRecursionDepth=${config.members.maxRecursionDepth})`,
+			);
+		}
+		return;
+	}
 
 	let manager: TeamManager | null = null;
 	let server: TeamServer | null = null;
@@ -102,6 +115,11 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", (_event, ctx) => {
 		currentCtx = ctx;
+		// Sub-leader members are granted their own team by their parent process
+		// (STEPCODE_TEAM_AUTOACTIVATE is set only when the depth budget allows).
+		if (process.env.STEPCODE_TEAM_AUTOACTIVATE === "1") {
+			tryActivate(ctx, "sub-team grant");
+		}
 	});
 
 	// Natural-language activation. Slash commands are handled above: when a
