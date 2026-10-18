@@ -44,6 +44,7 @@ export type TeamToolName =
 	| "team_create_member"
 	| "team_send"
 	| "team_task"
+	| "team_set_topology"
 	| "team_disband"
 	| "team_status";
 
@@ -73,6 +74,12 @@ export function renderTeamCall(tool: TeamToolName) {
 					0,
 					0,
 				);
+			case "team_set_topology":
+				return new Text(
+					`${head}${theme.fg("accent", `topology ${str(args.shape)}`)}${Array.isArray(args.edges) ? theme.fg("dim", ` ${args.edges.length} edge(s)`) : ""}`,
+					0,
+					0,
+				);
 			case "team_disband":
 				return new Text(`${head}${theme.fg("error", args.member ? `−${str(args.member)}` : "−all")}`, 0, 0);
 			default:
@@ -86,6 +93,7 @@ interface TeamResultDetails {
 	member?: { name: string; role: string; status: string; model?: string; thinking?: string; usage?: MemberUsage };
 	usage?: MemberUsage;
 	task?: { id: string; status: string; title?: string; assignee?: string };
+	topology?: { shape?: string; edges?: Array<[string, string]> };
 	members?: Array<{ name: string; role: string; status: string; usage?: MemberUsage }>;
 	tasks?: Array<{ id: string; status: string; title?: string }>;
 	disbanded?: string[];
@@ -127,6 +135,13 @@ export function renderTeamResult(tool: TeamToolName) {
 					header.push(
 						`${t.id} [${t.status}]${t.assignee ? theme.fg("muted", ` @${t.assignee}`) : ""}${t.title ? theme.fg("dim", ` ${preview(t.title, 60)}`) : ""}`,
 					);
+				}
+				break;
+			}
+			case "team_set_topology": {
+				const t = details.topology;
+				if (t) {
+					header.push(`${t.shape ?? "?"}${t.edges && t.edges.length > 0 ? theme.fg("dim", ` · ${t.edges.length} edge(s)`) : ""}`);
 				}
 				break;
 			}

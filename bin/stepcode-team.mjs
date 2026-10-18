@@ -13,7 +13,9 @@
  *   stepcode-team msg --to <member> --message "<text>"
  *   stepcode-team status
  *
- * Protocol: JSONL over the Unix socket; see extensions/team-server.ts.
+ * Protocol: JSONL over the Unix socket; every request carries the sender
+ * identity (STEPCODE_TEAM_MEMBER) and is checked against the team topology;
+ * see extensions/team-server.ts.
  */
 
 import { connect } from "node:net";
@@ -28,6 +30,7 @@ function fail(message, code = 1) {
 const args = process.argv.slice(2);
 const command = args[0];
 const socketPath = process.env.STEPCODE_TEAM_SOCK;
+const sender = process.env.STEPCODE_TEAM_MEMBER;
 
 if (!command || !["msg", "status"].includes(command)) {
 	console.error("usage: stepcode-team msg --to <member> --message <text>");
@@ -37,6 +40,9 @@ if (!command || !["msg", "status"].includes(command)) {
 if (!socketPath) {
 	fail("STEPCODE_TEAM_SOCK is not set. This tool only runs inside a team member.", 2);
 }
+if (!sender) {
+	fail("STEPCODE_TEAM_MEMBER is not set. This tool only runs inside a team member.", 2);
+}
 
 function flag(name) {
 	const idx = args.indexOf(name);
@@ -45,14 +51,14 @@ function flag(name) {
 
 let request;
 if (command === "status") {
-	request = { type: "status" };
+	request = { from: sender, type: "status" };
 } else {
 	const to = flag("--to");
 	const message = flag("--message");
 	if (!to || !message) {
 		fail('msg requires --to <member> and --message <text>', 2);
 	}
-	request = { to, message };
+	request = { from: sender, to, message };
 }
 
 const conn = connect(socketPath);

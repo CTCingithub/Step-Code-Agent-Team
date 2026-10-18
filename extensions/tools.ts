@@ -63,6 +63,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Create (or resume) a member agent in the current team.",
 			"Members run as isolated `step --mode rpc` processes with their own context window,",
 			"model, and tool allowlist. Idempotent: an existing member name is resumed, not duplicated.",
+			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
 		].join(" "),
 		parameters: Type.Object({
 			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
@@ -130,6 +131,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"If the member process died, it is respawned with the same session id and resumes its context.",
 			"Pass taskId to run the message as a task (marks it running, writes the reply back as the task result, one retry on failure).",
 			"Pass mode: \"oneshot\" for stateless fire-and-forget work (fresh process, no session, no context continuity).",
+			"Members may only message each other along edges of the declared team topology (default: star — no direct member messaging).",
 		].join(" "),
 		parameters: Type.Object({
 			member: Type.String({ description: "Target member name" }),
@@ -308,6 +310,49 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			return {
 				content: [{ type: "text", text: `Task ${task.id} marked failed: ${task.result}` }],
 				details: { teamId: manager.teamId, task },
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "team_set_topology",
+		label: "Set Topology",
+		description: [
+			"Design the member-to-member communication topology BEFORE dispatching work (create the members first).",
+			"Shapes: star (default — everything routes through you, no direct member messaging),",
+			"pipeline (ordered handoffs in member creation order), mesh (everyone may message everyone),",
+			"ring (each member may message the next), custom (explicit edges).",
+			"Match the shape to the task: parallel independent work needs only star; sequential refinement fits",
+			"pipeline; cross-checking peers fit mesh or a few custom edges. Members learn their allowed",
+			"neighbors from the team status the shim reports.",
+		].join(" "),
+		promptGuidelines: [
+			"Use team_set_topology to design the member communication topology (star/pipeline/mesh/ring/custom) after creating members and before dispatching work with team_send or team_task.",
+		],
+		parameters: Type.Object({
+			shape: StringEnum(["star", "pipeline", "mesh", "ring", "custom"] as const, {
+				description: "Topology shape",
+			}),
+			edges: Type.Optional(
+				Type.Array(
+					Type.Object({
+						from: Type.String({ description: "Sender member name" }),
+						to: Type.String({ description: "Receiver member name" }),
+					}),
+					{ description: 'Explicit edges; required for shape "custom"' },
+				),
+			),
+		}),
+		renderCall: renderTeamCall("team_set_topology"),
+		renderResult: renderTeamResult("team_set_topology"),
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const manager = getManager(ctx);
+			assertActive();
+			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
+			const topology = manager.setTopology(params.shape, edges);
+			return {
+				content: [{ type: "text", text: `Topology set:\n${manager.describeTopology()}` }],
+				details: { teamId: manager.teamId, topology },
 			};
 		},
 	});

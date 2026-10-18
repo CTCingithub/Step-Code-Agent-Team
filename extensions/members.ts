@@ -37,6 +37,19 @@ import {
 	VALID_THINKING,
 	getConfig,
 } from "./config.ts";
+import {
+	buildTopology,
+	describeTopology,
+	normalizeTopology,
+	starTopology,
+	TopologyError,
+	topologyMayMessage,
+	topologyOutbound,
+	validateTopology,
+	type TopologyData,
+	type TopologyEdge,
+	type TopologyShape,
+} from "./topology.ts";
 
 export interface CreateMemberParams {
 	name: string;
@@ -87,6 +100,8 @@ export class TeamManager {
 	private memberLocks = new Map<string, Promise<unknown>>();
 	/** Dedupes concurrent spawns of the same member (same session id). */
 	private spawning = new Map<string, Promise<MemberRpc>>();
+	/** Whether the topology has been explicitly declared this session. */
+	private topologyDeclared = false;
 
 	private constructor(
 		private reg: TeamRegistry,
@@ -309,9 +324,10 @@ export class TeamManager {
 			"",
 			"## Team messaging",
 			`You are member "${member.name}" of an agent team coordinated by a leader.`,
-			"When you need facts only a teammate has, message them directly instead of guessing:",
-			`  node ${shim} msg --to <teammate> --message "<text>"`,
-			`  node ${shim} status`,
+			"Direct member-to-member messaging is gated by the team topology.",
+			`Run \`node ${shim} status\` to see which teammates you may message.`,
+			`Run \`node ${shim} msg --to <teammate> --message "<text>"\` to message an allowed teammate.`,
+			"If a teammate is not in your allowed list, state the need in your final report instead — the leader will relay it.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
 		].join("\n");
 		fs.writeFileSync(file, `${basePrompt}\n${coordination}\n`, { encoding: "utf-8", mode: 0o600 });
@@ -370,7 +386,7 @@ export class TeamManager {
 		const config = getConfig();
 		const rpc = await MemberRpc.spawn(this.buildSpawnArgs(member), this.cwd, {
 			handlers,
-			env: { STEPCODE_TEAM_SOCK: this.socketPath },
+			env: { STEPCODE_TEAM_SOCK: this.socketPath, STEPCODE_TEAM_MEMBER: member.name },
 			handshakeTimeoutMs: config.dispatch.handshakeTimeoutMs,
 			requestTimeoutMs: config.dispatch.timeoutMs,
 		});
@@ -412,6 +428,7 @@ export class TeamManager {
 	private async dispatch(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {
 		const signal = options.signal;
 		if (signal?.aborted) throw new Error("member dispatch aborted before start");
+		this.assertTopologyDeclared();
 		const wasDead = !this.rpcs.get(member.name) || this.rpcs.get(member.name)!.isClosed();
 		const rpc = await this.ensureLive(member);
 		this.touch(member.name);
@@ -482,6 +499,7 @@ export class TeamManager {
 		message?: string,
 		options: SendOptions = {},
 	): Promise<{ task: TaskRecord; text: string }> {
+		this.assertTopologyDeclared();
 		const task = this.findTask(id);
 		if (task.status !== "ready") {
 			const blockers = task.blockedBy.join(", ") || "none";
@@ -543,6 +561,55 @@ export class TeamManager {
 		return { ...task };
 	}
 
+	// ------------------------------------------------------------------ topology
+
+	/**
+	 * Declares the member-to-member communication topology. Edges are validated
+	 * against the current member list; unknown members and self-loops throw.
+	 */
+	setTopology(shape: TopologyShape, edges?: TopologyEdge[]): TopologyData {
+		const members = this.reg.members.map((m) => m.name);
+		const data = normalizeTopology(buildTopology({ shape, members, edges }));
+		validateTopology(data, members);
+		this.reg.topology = data;
+		this.topologyDeclared = true;
+		this.save();
+		return { shape: data.shape, edges: data.edges.map(([from, to]) => [from, to] as TopologyEdge) };
+	}
+
+	getTopology(): TopologyData {
+		return this.reg.topology;
+	}
+
+	mayMessage(from: string, to: string): boolean {
+		return topologyMayMessage(this.reg.topology, from, to);
+	}
+
+	outboundTargets(from: string): string[] {
+		return topologyOutbound(this.reg.topology, from);
+	}
+
+	describeTopology(): string {
+		return describeTopology(this.reg.topology, this.reg.members.map((m) => m.name));
+	}
+
+	/** When configured, work cannot be dispatched until the topology is declared. */
+	private assertTopologyDeclared(): void {
+		if (getConfig().topology.requireDeclaration && !this.topologyDeclared) {
+			throw new TopologyError(
+				"Communication topology has not been declared yet. Design it first with team_set_topology (star/pipeline/mesh/ring/custom), then dispatch work.",
+			);
+		}
+	}
+
+	/** Drops edges that reference a removed member. */
+	private pruneTopologyMember(name: string): void {
+		const edges = this.reg.topology.edges.filter(([from, to]) => from !== name && to !== name);
+		if (edges.length !== this.reg.topology.edges.length) {
+			this.reg.topology = { shape: this.reg.topology.shape, edges };
+		}
+	}
+
 	// ------------------------------------------------------------------ oneshot
 
 	/**
@@ -557,6 +624,7 @@ export class TeamManager {
 			throw new Error(`Unknown member "${name}". Available members: ${available}.`);
 		}
 		if (options.signal?.aborted) throw new Error("oneshot dispatch aborted before start");
+		this.assertTopologyDeclared();
 		const args = ["-p", "--mode", "json", "--no-session", "--no-extensions"];
 		if (member.model) args.push("--model", member.model);
 		if (member.thinking) args.push("--thinking", member.thinking);
@@ -695,6 +763,7 @@ export class TeamManager {
 			this.killMember(member);
 			member.status = "dead";
 			member.pid = -1;
+			this.pruneTopologyMember(member.name);
 			this.save();
 			return [member.name];
 		}
@@ -708,6 +777,9 @@ export class TeamManager {
 			killed.push(member.name);
 		}
 		this.reg.members = [];
+		// A disbanded team starts fresh: star topology, declaration cleared.
+		this.reg.topology = starTopology();
+		this.topologyDeclared = false;
 		this.save();
 		return killed;
 	}

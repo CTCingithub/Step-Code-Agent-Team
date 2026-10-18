@@ -91,17 +91,41 @@ export class TeamServer {
 		}
 		try {
 			if (req.type === "status") {
-				const reg = this.getManager().snapshot();
+				const manager = this.getManager();
+				const reg = manager.snapshot();
+				const from = typeof req.from === "string" ? req.from : "";
 				this.reply(conn, {
 					ok: true,
 					teamId: reg.teamId,
+					youAre: from || undefined,
+					mayMessage: from ? manager.outboundTargets(from) : [],
 					members: reg.members.map((m) => ({ name: m.name, role: m.role, status: m.status })),
 					tasks: reg.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee })),
 				});
 				return;
 			}
 			if (typeof req.to === "string" && typeof req.message === "string") {
-				const result = await this.getManager().sendMessage(req.to, req.message);
+				const manager = this.getManager();
+				const from = typeof req.from === "string" ? req.from : "";
+				if (!from) {
+					this.reply(conn, {
+						ok: false,
+						error: "missing sender identity (from); the shim sets it from STEPCODE_TEAM_MEMBER",
+					});
+					return;
+				}
+				// Topology enforcement: A may message B only when edge A→B exists.
+				if (!manager.mayMessage(from, req.to)) {
+					const allowed = manager.outboundTargets(from);
+					this.reply(conn, {
+						ok: false,
+						error: `topology denies ${from} → ${req.to}. Allowed teammates: ${
+							allowed.length > 0 ? allowed.join(", ") : "(none — route everything through the leader)"
+						}.`,
+					});
+					return;
+				}
+				const result = await manager.sendMessage(req.to, req.message);
 				this.reply(conn, { ok: true, reply: result.text });
 				return;
 			}
