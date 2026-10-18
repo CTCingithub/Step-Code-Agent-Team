@@ -108,6 +108,6 @@
 
 **思路**：loop 上限约束**成员间消息链长度**（队长→成员派发记链长 0，成员每转发一次 +1），超限即拒并提示发送方向队长汇报——同时天然防止环形巡游死锁（发送方持运行位等待、目标方又排队等位）。簿记收敛为 TeamManager 的 `withChainLength` 原语（派发与探针共用），server 在嵌套派发前计算 next 并拒绝，manager 在 dispatch 前置校验兜底。
 
-**工作**：① `topology.maxLoopCount`（config.ts 默认 2、校验 0–64、0 = 无上限）；members.ts 链长簿记（`currentChainLength` / `withChainLength`）+ `assertLoopBound`；team-server.ts 嵌套派发前拒绝。② `test/smoke/phase14.ts`（先红后绿）：配置面（默认/覆盖/0/越界/类型）、manager 层超限即抛（不到 dispatch）、server 层经 shim 拒绝（withChainLength 确定性模拟中链成员，无时序竞态）、拓扑拒绝优先于 loop 检查、边界（链长 = 上限）放行。③ README 中英：主架构图 `flowchart LR → TD`；拓扑节新增五形状 mermaid 总图（ring 子图标注 loop 上限）；配置节扩写（三级配置位置表 + 可配置项速览 + 修改生效方式 + env 清单补 MAXDEPTH）。④ CONFIGURATION/PROTOCOL/TESTING/HANDOFF 同步。
+**工作**：① `topology.maxLoopCount`（config.ts 默认 2、校验 0–64、0 = 无上限）；members.ts 链长簿记（`currentChainLength` / `withChainLength`）+ `assertLoopBound`；team-server.ts 嵌套派发前拒绝。② `test/smoke/phase14.ts`（先红后绿）：配置面（默认/覆盖/0/越界/类型）、manager 层超限即抛（不到 dispatch）、server 层经 shim 拒绝（withChainLength 确定性模拟中链成员，无时序竞态）、拓扑拒绝优先于 loop 检查、边界（链长 = 上限）放行。③ README 中英：主架构图 `flowchart LR → TD`；拓扑节新增五形状 mermaid 总图（ring 子图标注 loop 上限）；配置节扩写（三级配置位置表 + 可配置项速览 + 修改生效方式 + env 清单补 MAXDEPTH）。④ CONFIGURATION/PROTOCOL/TESTING/HANDOFF 同步。⑤ 沙箱测试小项目：`sandbox/project/` 重建为零依赖 Node.js 任务管理器，埋 off-by-one 种子 bug（`complete(id)` 按 `id-1` 索引）；TEST-PLAN.md 第七节记录结构与三类演示剧本（pipeline 修复链 / ring 巡回观察 loop 上限 / star 并行审查）。
 
-**验证**：phase14 先红（8 项按预期失败）后绿；`npm run smoke` 全回归通过（phase5 无 key SKIP）。
+**验证**：phase14 先红（8 项按预期失败）后绿；`npm run smoke` 全回归通过（phase5 无 key SKIP）；沙箱项目 `npm test` 复现种子 bug 失败（7/8、退出码 1），临时修复验证 8/8 全绿后还原为演示状态。
