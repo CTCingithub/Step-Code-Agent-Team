@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-38，沙箱引入 Step-Code submodule 并全面检查文档；此前为 plan-34）。
+> 最近更新：2026-10-18（plan-42，人工测试清单答复与文档收尾；此前为 plan-38）。
 
 ## 总览
 
@@ -24,6 +24,7 @@
 | 15 | 二轮全面复查 + 最小化人工验证项 | plan-25 | 新增 phase15（render 断言）/phase16（成本护栏+截断）/phase17+orphan-check（孤儿进程）/live-untrusted-config/live-clean-export；runner STANDALONE_PHASES 机制；MANUAL-TESTING 人工项 8→6 | 并行审查 subagent 因资源压力失败，改串行自查（未发现新缺陷） |
 | 16 | 沙箱同步 GitHub + 配置位置确认 | plan-34 | .gitignore 粒度化（沙箱 29 个可复用文件入库，排除 agent/auth.json/运行时状态）；cfg-misc storage.dir 改可移植相对路径；新增 sandbox/README.md；确认配置位于 settings.json 的 stepcodeAgentTeam 节 | auth.json 为 OAuth 凭证（access/refresh），dry-run 核验零泄漏 |
 | 17 | 沙箱引入 Step-Code submodule + 全面文档检查 | plan-38 | sandbox/step submodule 钉住 b5dbed9（上游无 tag）；step-bin.sh 解析器 + build-step.sh 可选构建；live-args-forward 分层断言（陈旧 key 不误判）；README 中英/TESTING/HANDOFF/TEST-PLAN 同步 | 用户轮换 key 后环境仍持旧 key，曾致 live-args-forward 误报，已修 |
+| 18 | 罗列剩余人工测试项 + 文档收尾 | plan-42 | 答复人工测试清单（6 项不可约项：TUI 观感/真实安装/信任弹窗 UX/LLM 行为遵循度/演示剧本/性能主观）；DEVELOPMENT-HISTORY 与 HANDOFF 刷新供新 session 接手 | — |
 
 ## 明细
 
