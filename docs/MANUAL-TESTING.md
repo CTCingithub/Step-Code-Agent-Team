@@ -43,10 +43,17 @@ LLM 是否「听话」——收到拒绝后转为向队长汇报，而非反复�
 建 3 个成员声明 ring 拓扑实跑一次观察即可（第 3 跳应被拒且成员汇报）。
 成本护栏的**发射逻辑**已由 phase16 覆盖；想在真实累积花费下眼见为实可选做。
 
-## 5. 沙箱演示剧本（可选，需 key）
+## 5. 沙箱演示剧本（✅ 2026-10-18 已实测通过）
 
 pipeline 修复链 / star 并行审查 / ring 巡回审查——`./sandbox/run.sh`，
 每轮前 `bash sandbox/restore-project.sh` 还原。属体验验证，非正确性验证。
+
+**实测记录（2026-10-18）**：`/agent-team <请求>` 驱动 7 成员团队完整跑通两幕——
+pipeline 修复链（scout 定位种子 bug → planner 出最小方案 → worker 修复 →
+reviewer 通过）+ star 三方并行审查（正确性/风格通过；安全项留下加固建议，
+属演示项目自身的可选项）。队长复核：`npm test` 8/8（修复前基线 7/8）、与
+`project-pristine` 逐文件比对仅 `src/tasks.js` 有差异、`secret-sample.txt`
+全程未被任何成员读取。第三幕（ring 巡回）与安全加固待用户定夺。
 
 ## 6. 性能主观项
 
