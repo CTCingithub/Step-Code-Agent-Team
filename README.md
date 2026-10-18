@@ -195,34 +195,40 @@ sandbox/       isolated dev environment (gitignored)
 
 ## Configuration
 
-All behavior lives in JSON config files — one global (`<agentDir>/stepcode-agent-team.json`,
-the sandbox points `agentDir` at `sandbox/agent`) and an optional project-level override
-(`<cwd>/.stepcode/stepcode-agent-team.json`, applied only when the project is trusted).
-Precedence: defaults < global < project < environment overrides.
+All behavior lives in Step Code's `settings.json`, in the plugin's `stepcodeAgentTeam`
+section — globally at `<agentDir>/settings.json` (the sandbox points `agentDir` at
+`sandbox/agent`) and, applied only when the project is trusted, at
+`<cwd>/.stepcode/settings.json`. Precedence: defaults < legacy files < settings.json
+sections < environment overrides.
 
 | Tier | Path | Notes |
 |---|---|---|
-| Global | `<agentDir>/stepcode-agent-team.json` | `agentDir` = `STEP_CODING_AGENT_DIR` or `~/.stepcode/agent` |
-| Project | `<cwd>/.stepcode/stepcode-agent-team.json` | Loaded only when the project is trusted |
+| Global | `<agentDir>/settings.json` → `stepcodeAgentTeam` section | `agentDir` = `STEP_CODING_AGENT_DIR` or `~/.stepcode/agent` |
+| Project | `<cwd>/.stepcode/settings.json` → `stepcodeAgentTeam` section | Loaded only when the project is trusted |
 | Environment | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | One-off overrides; highest precedence |
 
-**How to apply changes:** edit the JSON file (unknown keys are ignored; invalid
-values fall back to defaults with a debug warning) and start a new session —
-config is read once at load. `/reload` re-reads it but also returns the plugin
-to its default-off state. Environment overrides apply to a single run.
+**How to apply changes:** edit the `stepcodeAgentTeam` section of `settings.json`
+(unknown keys are ignored; invalid values fall back to defaults with a debug
+warning; the plugin only reads its section and never writes the file) and start
+a new session — config is read once at load. `/reload` re-reads it but also
+returns the plugin to its default-off state. Environment overrides apply to a
+single run. Legacy dedicated files (`<agentDir>/stepcode-agent-team.json`,
+`<cwd>/.stepcode/stepcode-agent-team.json`) are still honored as a fallback.
 
 ```jsonc
 {
-  "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
-  "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
-  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
-  "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
-  "oneshot": { "timeoutMs": 180000 },
-  "cost": { "warnThreshold": 1 },
-  "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
-  "storage": { "dir": null },
-  "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
-  "debug": false
+  "stepcodeAgentTeam": {
+    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
+    "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
+    "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
+    "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
+    "oneshot": { "timeoutMs": 180000 },
+    "cost": { "warnThreshold": 1 },
+    "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
+    "storage": { "dir": null },
+    "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
+    "debug": false
+  }
 }
 ```
 

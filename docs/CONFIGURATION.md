@@ -1,25 +1,26 @@
 # 配置参考
 
-Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
+Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节控制全部行为参数（沿用 Step Code 的 settings 约定）。
 
 ## 位置与优先级
 
 ```
-全局：  <agentDir>/stepcode-agent-team.json
+全局：  <agentDir>/settings.json 的 "stepcodeAgentTeam" 节
        （agentDir 遵循 STEP_CODING_AGENT_DIR，默认 ~/.stepcode/agent；
          开发沙箱中自动指向 sandbox/agent，互不干扰）
-项目级：<cwd>/.stepcode/stepcode-agent-team.json
+项目级：<cwd>/.stepcode/settings.json 的 "stepcodeAgentTeam" 节
        （仅当项目被信任时加载；信任信息只在事件处理器中可用，
          故在 session_start 时就地合并进已加载的配置）
 ```
 
-优先级：**内置默认 < 全局配置 < 项目级配置 < 环境变量覆盖**。
+优先级（全局与项目级两个层级各自如此）：**内置默认 < 旧版专用文件 < settings.json 节 < 环境变量覆盖**。
 
-- 文件为标准 JSON（不支持注释）。
+- 文件为标准 JSON（不支持注释）；插件**只读取**自己的节，绝不写入 settings.json（step 自身命令会保留未知键）。
 - 未知键会被忽略（`debug: true` 时在 stderr 打印提示）。
 - 非法值回退为默认值并在 debug 日志中警告。
 - 配置在扩展加载时读取一次并缓存；项目级配置在首个事件上下文可用时就地合并（同一次会话内生效）；其余修改需新会话生效（`/reload` 会重新读取，但插件也会随之回到默认关闭状态）。
 - 已知妥协：注册时固化的工具描述串（如模型列表）与本进程的深度门（`maxRecursionDepth`）不随项目级配置刷新——生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
+- **旧版兼容**：此前的专用文件 `<agentDir>/stepcode-agent-team.json` 与 `<cwd>/.stepcode/stepcode-agent-team.json` 仍然有效（在同层级的 settings 节之前应用，debug 模式提示迁移）；建议尽早搬入 settings.json 的 `stepcodeAgentTeam` 节。
 
 ## 环境变量覆盖
 
@@ -31,6 +32,8 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
 | `STEPCODE_TEAM_SOCK` | 由队长自动注入成员进程，指向团队服务 socket（无需手动设置） |
 
 ## 完整配置项
+
+以下内容放入 `<agentDir>/settings.json`（全局）或 `<cwd>/.stepcode/settings.json`（项目级）的 `stepcodeAgentTeam` 节内：
 
 ```jsonc
 {

@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-52，拓扑图示化 + 环形 loop 上限 + README 配置文档 + 沙箱测试项目）。
+> 最近更新：2026-10-18（plan-53，配置位置迁移到 settings.json 命名节）。
 
 ## 总览
 
@@ -18,6 +18,7 @@
 | 9 | 历程文档 + README 改版 + 交接文档 | plan-50 | 本文档 + mermaid README + HANDOFF.md | — |
 | 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针）；零 token 探针入库 test/smoke/ + runner；安装打包审计 + TUI 验证清单 | phase9 旧断言哨兵值越界 |
 | 11 | 拓扑图示化 + 环形 loop 上限 + README 配置文档 + 沙箱测试项目 | plan-52 | topology.maxLoopCount（默认 2、0 无上限；server + manager 双层强制；phase14 探针）；README 主图纵向化 + 五形状 mermaid 总图；README 配置节扩写；沙箱可运行测试小项目 | — |
+| 12 | 配置文件位置迁移到 settings.json 约定 | plan-53 | 配置改存 settings.json 的 stepcodeAgentTeam 节（全局 <agentDir>/settings.json + 项目级 <cwd>/.stepcode/settings.json），旧专用文件保留为只读回退；phase6/9/13/14 先红后绿；沙箱 cfg-* fixture 全迁移 | 探针先红 16 项 |
 
 ## 明细
 
@@ -111,3 +112,15 @@
 **工作**：① `topology.maxLoopCount`（config.ts 默认 2、校验 0–64、0 = 无上限）；members.ts 链长簿记（`currentChainLength` / `withChainLength`）+ `assertLoopBound`；team-server.ts 嵌套派发前拒绝。② `test/smoke/phase14.ts`（先红后绿）：配置面（默认/覆盖/0/越界/类型）、manager 层超限即抛（不到 dispatch）、server 层经 shim 拒绝（withChainLength 确定性模拟中链成员，无时序竞态）、拓扑拒绝优先于 loop 检查、边界（链长 = 上限）放行。③ README 中英：主架构图 `flowchart LR → TD`；拓扑节新增五形状 mermaid 总图（ring 子图标注 loop 上限）；配置节扩写（三级配置位置表 + 可配置项速览 + 修改生效方式 + env 清单补 MAXDEPTH）。④ CONFIGURATION/PROTOCOL/TESTING/HANDOFF 同步。⑤ 沙箱测试小项目：`sandbox/project/` 重建为零依赖 Node.js 任务管理器，埋 off-by-one 种子 bug（`complete(id)` 按 `id-1` 索引）；TEST-PLAN.md 第七节记录结构与三类演示剧本（pipeline 修复链 / ring 巡回观察 loop 上限 / star 并行审查）。
 
 **验证**：phase14 先红（8 项按预期失败）后绿；`npm run smoke` 全回归通过（phase5 无 key SKIP）；沙箱项目 `npm test` 复现种子 bug 失败（7/8、退出码 1），临时修复验证 8/8 全绿后还原为演示状态。
+
+### 12. 配置位置迁移到 settings.json（plan-53）
+
+**用户 prompt**：「我不满意目前配置文件的位置，请选择更合适的路径。你可以检索其他的step code插件项目，或者step code好象是从pi改的，检索pi的插件是如何存放配置信息的」
+
+**调研**：Step Code 官方文档（`~/.stepcode/bin/docs/settings.md`、`extensions.md`、`packages.md`）明确约定——设置存于 JSON settings 文件：全局 `~/.stepcode/agent/settings.json`、项目级 `.stepcode/settings.json`（项目覆盖全局、嵌套合并、trust 门控；`step install/config` 等命令只读写已知键、保留未知键）。示例扩展无自带配置文件先例。结论：插件配置应作为 settings.json 的命名节，而非在 agentDir 根放置专用文件。
+
+**思路**：配置迁入 `stepcodeAgentTeam` 节（全局 `<agentDir>/settings.json`、项目级 `<cwd>/.stepcode/settings.json`），优先级 **内置默认 < 旧版专用文件 < settings.json 节 < env 覆盖**（全局与项目级两个层级各自如此）；旧专用文件保留为只读回退（debug 模式提示迁移），插件绝不写入 settings.json。
+
+**工作**：① `extensions/config.ts`：`CONFIG_SECTION`/`SETTINGS_FILE_NAME` 常量、`settingsFilePath`/`projectSettingsFilePath`、`readSection`、`applyGlobalTier`、`legacyNote`；`loadConfig`/`applyProjectConfig` 改双层加载。② 探针先红后绿：phase6/9/13/14 改用 settings.json 节并新增旧文件回退断言（先红共 16 项，实现后全绿）；phase9 的项目级测试改用合成 projectDir，避免污染仓库真实的 `.stepcode/settings.json`。③ 沙箱 8 个 cfg-\* fixture 迁移为 settings.json。④ 文档：CONFIGURATION.md 位置/优先级/示例、README 中英配置节、HANDOFF §1 同步。
+
+**验证**：phase6/9/13/14 全绿；phase9 + 迁移后的 cfg-misc 实测 16 项 ambient 检查全过。

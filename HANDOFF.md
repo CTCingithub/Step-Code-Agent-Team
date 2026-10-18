@@ -11,7 +11,7 @@ Step Code 的智能体团队插件，对标 DeepSeek Harness agent teams，**功
 - **成员生命周期**：长驻 `step --mode rpc` 子进程；同 session-id 重启即续聊；并发/递归/拓扑/成本全链路护栏
 - **通信拓扑**：star/pipeline/mesh/ring/custom 五形状，server 层强制（含环形链长上限 `topology.maxLoopCount`，默认 2、0 无上限），`team_set_topology` 声明
 - **递归深度**：`maxRecursionDepth`（默认 1），子队长经 env 授予并自动激活
-- **配置文件**：`<agentDir>/stepcode-agent-team.json`（沙箱经 `STEP_CODING_AGENT_DIR` 隔离）
+- **配置文件**：`<agentDir>/settings.json` 的 `stepcodeAgentTeam` 节（项目级 `<cwd>/.stepcode/settings.json` 同节、trust 门控；旧版专用文件 `<agentDir>/stepcode-agent-team.json` 仍作只读回退）（沙箱经 `STEP_CODING_AGENT_DIR` 隔离）
 
 ## 2. 架构地图
 

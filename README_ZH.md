@@ -190,33 +190,37 @@ sandbox/       隔离开发环境（gitignored）
 
 ## 配置
 
-全部行为参数集中于 JSON 配置文件——全局 `<agentDir>/stepcode-agent-team.json`
-（沙箱中 agentDir 指向 `sandbox/agent`）与可选的的项目级覆盖
-`<cwd>/.stepcode/stepcode-agent-team.json`（仅项目被信任时加载）。
-优先级：内置默认 < 全局 < 项目级 < 环境变量覆盖。
+全部行为参数集中于 Step Code 的 `settings.json`——插件配置位于其中的 `stepcodeAgentTeam`
+节：全局在 `<agentDir>/settings.json`（沙箱中 agentDir 指向 `sandbox/agent`），
+项目级在 `<cwd>/.stepcode/settings.json`（仅项目被信任时加载）。
+优先级：内置默认 < 旧版专用文件 < settings.json 节 < 环境变量覆盖。
 
 | 层级 | 路径 | 说明 |
 |---|---|---|
-| 全局 | `<agentDir>/stepcode-agent-team.json` | agentDir = `STEP_CODING_AGENT_DIR` 或 `~/.stepcode/agent` |
-| 项目级 | `<cwd>/.stepcode/stepcode-agent-team.json` | 仅项目被信任时加载 |
+| 全局 | `<agentDir>/settings.json` 的 `stepcodeAgentTeam` 节 | agentDir = `STEP_CODING_AGENT_DIR` 或 `~/.stepcode/agent` |
+| 项目级 | `<cwd>/.stepcode/settings.json` 的 `stepcodeAgentTeam` 节 | 仅项目被信任时加载 |
 | 环境变量 | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | 一次性覆盖，优先级最高 |
 
-**如何修改生效**：编辑 JSON 文件（未知键忽略；非法值回退默认并在 debug 日志警告），
-然后**开启新会话**——配置在加载时只读一次。`/reload` 会重新读取，但插件也会随之回到
-默认关闭状态。环境变量覆盖仅对当次运行生效。
+**如何修改生效**：编辑 `settings.json` 的 `stepcodeAgentTeam` 节（未知键忽略；非法值
+回退默认并在 debug 日志警告；插件只读取该节，绝不写入文件），然后**开启新会话**——
+配置在加载时只读一次。`/reload` 会重新读取，但插件也会随之回到默认关闭状态。环境变量
+覆盖仅对当次运行生效。旧版专用文件（`<agentDir>/stepcode-agent-team.json`、
+`<cwd>/.stepcode/stepcode-agent-team.json`）作为回退仍然有效。
 
 ```jsonc
 {
-  "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
-  "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
-  "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
-  "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
-  "oneshot": { "timeoutMs": 180000 },
-  "cost": { "warnThreshold": 1 },
-  "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
-  "storage": { "dir": null },
-  "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
-  "debug": false
+  "stepcodeAgentTeam": {
+    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
+    "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
+    "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
+    "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
+    "oneshot": { "timeoutMs": 180000 },
+    "cost": { "warnThreshold": 1 },
+    "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
+    "storage": { "dir": null },
+    "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
+    "debug": false
+  }
 }
 ```
 
