@@ -20,6 +20,25 @@ enables autonomous selection, pick each member's model from the available list
 deliberately — cheap models for read-only scouting, stronger models for
 implementation — and set its thinking level to match the task.
 
+## Design the communication topology first
+
+Before dispatching work, decide how members may talk to each other and declare
+it with `team_set_topology`. Direct member-to-member messaging is denied unless
+an edge allows it — the default is a star (everything routes through you).
+
+Pick the shape from the task structure:
+
+| Task structure | Shape | Why |
+|---|---|---|
+| Independent parallel strands that you merge | `star` (default) | No peer chatter; you stay the only router |
+| Sequential refinement (scout → planner → worker → reviewer) | `pipeline` | Each stage hands off to the next, in member creation order |
+| Peers must cross-check each other | `mesh`, or a few `custom` edges | Only the pairs that truly need to talk get edges |
+| Circular round-robin review | `ring` | Each member may message the next |
+
+Start from `star` and add the minimum edges the task needs — every edge is a
+potential LLM round-trip spent on coordination instead of work. Members discover
+their allowed neighbors by running `stepcode-team status` inside the team.
+
 ## When to form a team
 
 Form a team when the work has **independent parallel strands**: multi-file

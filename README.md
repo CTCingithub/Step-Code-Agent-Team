@@ -62,7 +62,13 @@ tune the keywords.
 | `team_task` | Task board: `create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
+| `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
 | `/agent-team` | Command: activate the plugin and show the team board |
+
+By default members cannot message each other directly (star topology — everything
+routes through the leader). The leader declares the topology that fits the task
+with `team_set_topology` before dispatching work; details in
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ## Bundled role presets (`agents/`)
 

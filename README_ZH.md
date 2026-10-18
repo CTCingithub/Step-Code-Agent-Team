@@ -59,7 +59,11 @@ step -e ./extensions/index.ts
 | `team_task` | 任务板：`create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
+| `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
 | `/agent-team` | 命令：激活插件并查看团队板 |
+
+默认情况下成员之间不能直接通信（星型拓扑——全部经队长中转）。队长在派活前用
+`team_set_topology` 按任务结构声明拓扑；详见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 ## 内置角色预设（`agents/`）
 

@@ -64,6 +64,10 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
   "storage": {
     "dir": null                       // 团队数据根目录；null = <agentDir>/teams
   },
+  "topology": {
+    "default": "star",                // 新团队默认拓扑形状（star/pipeline/mesh/ring/custom）
+    "requireDeclaration": false       // true 时未显式声明拓扑前禁止派活
+  },
   "debug": false                      // 调试日志（模型裁决、配置警告、socket 错误）
 }
 ```
@@ -97,6 +101,28 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
 
 注意：成员进程自此默认携带 `--thinking high`（此前不传，用 step 默认档），
 单次成本会略高于从前；可用 `thinking` 参数按需调低。
+
+## `topology` 节语义
+
+成员间消息默认走**星型**：全部经队长中转，成员之间不能直接通信。队长用
+`team_set_topology` 工具按任务结构声明拓扑后，成员只能沿声明的边直接通信；
+越界消息会被 team-server 拒绝，并告知可用邻居。
+
+| 形状 | 边 | 适用 |
+|---|---|---|
+| `star`（默认） | 无 | 并行独立 + 队长汇总 |
+| `pipeline` | m1→m2→…→mn（按成员创建顺序） | 顺序精炼流水线 |
+| `mesh` | 全部有序对 | 同伴互查 |
+| `ring` | mi→mi+1（末位回环到首位） | 环形流水 |
+| `custom` | 显式边列表 `[{from, to}]` | 精确控制 |
+
+- `topology.default`：队长声明前新团队的默认形状（默认 `star`）。
+- `topology.requireDeclaration`：`true` 时，未调用 `team_set_topology` 显式声明
+  拓扑前，`team_send` / `team_task` / oneshot 一律拒绝——字面落实"先设计拓扑
+  再开工"（默认 `false`，星型始终可用）。
+
+成员通过 `stepcode-team status` 动态获知自己的可通知邻居（server 按发送方身份
+返回 `mayMessage` 列表）。
 
 ## 示例
 
