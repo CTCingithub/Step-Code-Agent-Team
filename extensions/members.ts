@@ -79,6 +79,12 @@ export interface SendOptions {
 	 * acquiring another one here could deadlock the messaging chain.
 	 */
 	nested?: boolean;
+	/**
+	 * Internal: message-chain length of a nested dispatch. Leader dispatches
+	 * are 0; the team server sets sender length + 1 when a member forwards a
+	 * message, bounding ring circulation via topology.maxLoopCount.
+	 */
+	chainLength?: number;
 }
 
 export interface CreateTaskParams {
@@ -116,6 +122,8 @@ export class TeamManager {
 	private spawning = new Map<string, Promise<MemberRpc>>();
 	/** Whether the topology has been explicitly declared this session. */
 	private topologyDeclared = false;
+	/** Message-chain length per member while a dispatch is running. */
+	private chainLengths = new Map<string, number>();
 
 	private constructor(
 		private reg: TeamRegistry,
@@ -157,6 +165,25 @@ export class TeamManager {
 
 	snapshot(): TeamRegistry {
 		return JSON.parse(JSON.stringify(this.reg)) as TeamRegistry;
+	}
+
+	/** Current message-chain length of a member (0 when not mid-dispatch). */
+	currentChainLength(name: string): number {
+		return this.chainLengths.get(name) ?? 0;
+	}
+
+	/**
+	 * Marks a member as mid-chain at `length` for the duration of `fn`.
+	 * Dispatch wraps every run with this so the bookkeeping lives in one
+	 * place; it also lets probes simulate a mid-chain member without a model.
+	 */
+	async withChainLength<T>(name: string, length: number, fn: () => Promise<T>): Promise<T> {
+		this.chainLengths.set(name, length);
+		try {
+			return await fn();
+		} finally {
+			this.chainLengths.delete(name);
+		}
 	}
 
 	// ------------------------------------------------------------------ members
@@ -477,6 +504,7 @@ export class TeamManager {
 			// Nested (member-to-member) dispatch: the sender already occupies a
 			// running slot, so acquiring another one here could deadlock the
 			// chain (A waits for B while holding the last slot).
+			this.assertLoopBound(options.chainLength ?? 0);
 			return this.runDispatch(member, message, options);
 		}
 		// Concurrency gate BEFORE the process starts: beyond maxConcurrent this
@@ -490,6 +518,12 @@ export class TeamManager {
 	}
 
 	private async runDispatch(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {
+		return this.withChainLength(member.name, options.chainLength ?? 0, () =>
+			this.runDispatchInner(member, message, options),
+		);
+	}
+
+	private async runDispatchInner(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {
 		let rpc: MemberRpc | null = null;
 		let unsubscribe = (): void => {};
 		try {
@@ -661,6 +695,17 @@ export class TeamManager {
 		if (getConfig().topology.requireDeclaration && !this.topologyDeclared) {
 			throw new TopologyError(
 				"Communication topology has not been declared yet. Design it first with team_set_topology (star/pipeline/mesh/ring/custom), then dispatch work.",
+			);
+		}
+	}
+
+	/** Bounds member-to-member chain length (ring circulation); 0 = unlimited. */
+	private assertLoopBound(chainLength: number): void {
+		const limit = getConfig().topology.maxLoopCount;
+		if (limit > 0 && chainLength > limit) {
+			throw new TopologyError(
+				`Message chain length ${chainLength} exceeds the ring loop limit (${limit}). ` +
+					"Report the need to the leader instead of forwarding further.",
 			);
 		}
 	}

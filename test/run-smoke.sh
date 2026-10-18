@@ -24,7 +24,7 @@ SESSION_DIR="$AGENT_DIR/sessions"
 mkdir -p "$SESSION_DIR"
 trap 'rm -rf "$AGENT_DIR"' EXIT
 
-PHASES="${*:-1 2 3 5 6 7 8 9 13}"
+PHASES="${*:-1 2 3 5 6 7 8 9 13 14}"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
 KEY_PHASES="5"

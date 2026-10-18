@@ -83,6 +83,12 @@ export interface TopologyConfig {
 	default: TopologyShape;
 	/** When true, work cannot be dispatched until the topology is declared. */
 	requireDeclaration: boolean;
+	/**
+	 * Maximum length of a member-to-member message chain (hops). A leader
+	 * dispatch is length 0 and each member→member forward adds 1; a hop that
+	 * would exceed the bound is rejected. 0 = unlimited.
+	 */
+	maxLoopCount: number;
 }
 
 export interface PluginConfig {
@@ -146,7 +152,7 @@ export function defaultConfig(): PluginConfig {
 		cost: { warnThreshold: 1 },
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
-		topology: { default: "star", requireDeclaration: false },
+		topology: { default: "star", requireDeclaration: false, maxLoopCount: 2 },
 		debug: false,
 	};
 }
@@ -349,6 +355,7 @@ function validate(config: PluginConfig): string[] {
 		warnings.push("topology.default");
 	}
 	expectBoolean(asRecord(config.topology), "requireDeclaration", d.topology.requireDeclaration, warnings);
+	expectIntRange(asRecord(config.topology), "maxLoopCount", d.topology.maxLoopCount, 0, 64, warnings);
 	expectBoolean(asRecord(config), "debug", d.debug, warnings);
 
 	return warnings;

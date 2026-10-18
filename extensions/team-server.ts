@@ -125,9 +125,21 @@ export class TeamServer {
 					});
 					return;
 				}
+				// Ring loop bound: this hop extends the sender's chain by one.
+				const limit = getConfig().topology.maxLoopCount;
+				const nextLength = manager.currentChainLength(from) + 1;
+				if (limit > 0 && nextLength > limit) {
+					this.reply(conn, {
+						ok: false,
+						error:
+							`message chain would reach ${nextLength} hops, over the ring loop limit (${limit}). ` +
+							"Report the need to the leader instead of forwarding further.",
+					});
+					return;
+				}
 				// Nested dispatch: exempt from the global concurrency gate — the
 				// sender already holds a running slot (see members.ts dispatch).
-				const result = await manager.sendMessage(req.to, req.message, { nested: true });
+				const result = await manager.sendMessage(req.to, req.message, { nested: true, chainLength: nextLength });
 				this.reply(conn, { ok: true, reply: result.text });
 				return;
 			}
