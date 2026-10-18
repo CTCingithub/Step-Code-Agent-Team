@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-53，配置位置迁移到 settings.json 命名节）。
+> 最近更新：2026-10-18（plan-18 复查轮：全面审查、15 项缺陷修复、冒烟集硬化、手动测试清单）。
 
 ## 总览
 
@@ -19,6 +19,7 @@
 | 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针）；零 token 探针入库 test/smoke/ + runner；安装打包审计 + TUI 验证清单 | phase9 旧断言哨兵值越界 |
 | 11 | 拓扑图示化 + 环形 loop 上限 + README 配置文档 + 沙箱测试项目 | plan-52 | topology.maxLoopCount（默认 2、0 无上限；server + manager 双层强制；phase14 探针）；README 主图纵向化 + 五形状 mermaid 总图；README 配置节扩写；沙箱可运行测试小项目 | — |
 | 12 | 配置文件位置迁移到 settings.json 约定 | plan-53 | 配置改存 settings.json 的 stepcodeAgentTeam 节（全局 <agentDir>/settings.json + 项目级 <cwd>/.stepcode/settings.json），旧专用文件保留为只读回退；phase6/9/13/14 先红后绿；沙箱 cfg-* fixture 全迁移 | 探针先红 16 项 |
+| 13 | 全面复查与优化（三路独立审查 + 定向自查） | plan-18 | 修复 15 项缺陷（kill 升级死代码/定时器泄漏/信号量竞态/任务双派/消息环死锁/reaper/oneshot/disband/shim 截断等）；冒烟集结构化判定 + live 接线检查；新增 docs/MANUAL-TESTING.md | runner 曾误判 phase2 日志中的任务状态 failed（已收窄模式） |
 
 ## 明细
 
@@ -124,3 +125,13 @@
 **工作**：① `extensions/config.ts`：`CONFIG_SECTION`/`SETTINGS_FILE_NAME` 常量、`settingsFilePath`/`projectSettingsFilePath`、`readSection`、`applyGlobalTier`、`legacyNote`；`loadConfig`/`applyProjectConfig` 改双层加载。② 探针先红后绿：phase6/9/13/14 改用 settings.json 节并新增旧文件回退断言（先红共 16 项，实现后全绿）；phase9 的项目级测试改用合成 projectDir，避免污染仓库真实的 `.stepcode/settings.json`。③ 沙箱 8 个 cfg-\* fixture 迁移为 settings.json。④ 文档：CONFIGURATION.md 位置/优先级/示例、README 中英配置节、HANDOFF §1 同步。
 
 **验证**：phase6/9/13/14 全绿；phase9 + 迁移后的 cfg-misc 实测 16 项 ambient 检查全过。
+
+### 13. 全面复查与加固（plan-18）
+
+**用户 prompt**：「请再次全面检查并优化项目，然后告诉我有哪些内容需要我手动测试」
+
+**思路**：三路只读审查 subagent 并行（代码正确性 / 文档一致性 / 测试与运维健全性）+ 定向自查（陈旧引用、pristine 漂移、探针暂存风险），汇总后按严重度处理；涉及探针行为的先改探针复现再修；其余记录为已知限制。
+
+**工作**：① 修复 15 项缺陷——rpc-client：SIGKILL 升级死代码（`proc.killed` 送达信号后恒为 true，改用真实退出状态）、settle 定时器与 waiter 泄漏（race 被 close/abort 赢时 finally 清理）；members：acquireSlot/releaseSlot 移交式改造（在飞派发可超过 maxConcurrent 的竞态）、startTask 每任务锁（并发 start 双派发双计费）+ 终态错误不再掩盖真实失败、等待环检测（`wouldCycle`/`withWaitingOn`，把成员互等死锁转为明确拒绝）、reaper 完成时刷新 lastActivity 且 killAndWait、oneshot 标记 running/idle + SIGKILL 升级、disband 清理每成员簿记；team-server：死锁防护、listen 错误始终留痕、每连接请求序列化、stop 销毁存活连接；index：reaper 间隔逐 tick 活读（项目级配置可生效）、getManager 停机守卫；tools：成本告警改团队总花费、截断不拆代理对；config：读取错误与缺失区分（debug 留痕）、自有键合并（防 Object.prototype 阴影）；registry：members/tasks 形状校验；shim：exitCode+end 刷新管道输出、leader 断连即失败。② 冒烟集硬化：runner 结构化判定（DONE 存在且探针日志无 FAIL 标记，替代子串计数）、信号安全清理、新增两个零 token live 检查（受信任项目配置抵达 index.ts 自身配置实例、/agent-team 命令路径）；phase13 移除 vacuous live 块（每个 -e 扩展各自持有 config 模块实例，探针内不可观测）与仓库真实 settings.json 的暂存污染；phase2/7/14 补输入验证、畸形注册表、等待环单测。③ 文档修正 6 处（README 中英 Status 节探针路径、HANDOFF phase 列表与项目配置路径、ARCHITECTURE 配置优先级、TUI-VERIFICATION team_status 预期）+ 沙箱 pristine 同步与 TEST-PLAN fixture 描述校正。④ 新增 `docs/MANUAL-TESTING.md`（8 类人工验证项 + 已知限制）。
+
+**验证**：全量 `npm run smoke` 全绿（10 个 phase + 2 个 live 检查）；phase5 带 key 复跑通过；期间 runner 新模式曾将 phase2 日志中的任务状态 `failed` 误判为失败，收窄失败模式（`FAIL `/`FAILED`）后转绿。

@@ -85,7 +85,9 @@ onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全�
 单任务 detail 50KB）。
 
 TUI 渲染（renderCall/renderResult、`/agent-team` 面板、流式进度、激活 notify）只在交互 TUI
-生效，探针覆盖不到，按 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) 人工验证。
+生效，探针覆盖不到，按 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) 人工验证；完整的手动测试
+清单（真实安装、项目配置信任流、LLM 遵循度、沙箱演示剧本、成本护栏等）见
+[MANUAL-TESTING.md](MANUAL-TESTING.md)。
 
 ## 5. 修复与复跑规则
 
