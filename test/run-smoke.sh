@@ -8,16 +8,17 @@
 #   bash test/run-smoke.sh 1 9 13       # selected phases
 #
 # Each phase runs `step` with a throwaway agent dir (mktemp), so nothing leaks
-# into ~/.stepcode or the gitignored sandbox/. Requires the `step` CLI on PATH.
+# into ~/.stepcode or the gitignored sandbox/. The step binary is resolved via
+# sandbox/step-bin.sh: $STEPCODE_STEP_BIN > sandbox/step-build (built from the
+# pinned submodule) > PATH.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if ! command -v step >/dev/null 2>&1; then
-  echo "run-smoke: 'step' CLI not found on PATH" >&2
-  exit 2
-fi
+# shellcheck source=/dev/null
+source "$ROOT/sandbox/step-bin.sh"
+STEP_BIN="$(resolve_step_bin)" || exit 2
 
 AGENT_DIR="$(mktemp -d)"
 SESSION_DIR="$AGENT_DIR/sessions"
@@ -55,7 +56,7 @@ for p in $PHASES; do
   fi
   out="$(printf '{"id":"1","type":"get_state"}\n' \
     | STEP_CODING_AGENT_DIR="$AGENT_DIR" \
-      timeout 240 step "${ext_args[@]}" \
+      timeout 240 "$STEP_BIN" "${ext_args[@]}" \
       --mode rpc --session-id "smoke-$p" --session-dir "$SESSION_DIR" \
       --approval-mode auto 2>&1)" || true
   # Structural verdict on the probe's own log lines only (step's stderr can
@@ -83,7 +84,7 @@ live_check() {
   mkdir -p "$dir/sessions"
   local out
   out="$(cd "$dir" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
-    | STEP_CODING_AGENT_DIR="$dir/agent" timeout 45 step -e "$ROOT/extensions/index.ts" \
+    | STEP_CODING_AGENT_DIR="$dir/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
       --mode rpc --session-id "live-$name" --session-dir "$dir/sessions" -a 2>&1)" || true
   if echo "$out" | grep -q "$expect"; then
     echo "live-$name: OK"
@@ -105,15 +106,26 @@ live_check "command-activate" "$LIVE2" "Agent team plugin activated (/agent-team
 
 # Args after the command must be forwarded to the agent as a real user message
 # (a slash command otherwise consumes the whole input and drops the request).
+# Tiered evidence: the board announces the forwarding and the harness receives
+# a send_user_message for the args (works without a key); when a working key is
+# present the message is also recorded in the session (strongest proof).
 LIVE3="$(mktemp -d)"
 mkdir -p "$LIVE3/sessions"
 fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team ping-forward-check"}\n' \
-  | STEP_CODING_AGENT_DIR="$LIVE3/agent" timeout 45 step -e "$ROOT/extensions/index.ts" \
+  | STEP_CODING_AGENT_DIR="$LIVE3/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-fwd --session-dir "$LIVE3/sessions" -a 2>&1)" || true
+fwd_ok=0
+echo "$fwd_out" | grep -q 'forwarding your request to the agent' && fwd_ok=1
+echo "$fwd_out" | grep -q '"event":"send_user_message"' && fwd_ok=1
+# Bonus evidence: the message is recorded — needs a working key, and a stale
+# or absent key must not zero out the evidence above.
 if echo "$fwd_out" | grep -q '"text":"ping-forward-check"' || grep -rq '"text":"ping-forward-check"' "$LIVE3"/sessions/ 2>/dev/null; then
+	fwd_ok=1
+fi
+if [ "$fwd_ok" -eq 1 ]; then
   echo "live-args-forward: OK"
 else
-  echo "live-args-forward: FAILED (forwarded request not recorded as a user message)"
+  echo "live-args-forward: FAILED (request after /agent-team was not forwarded)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
 fi
@@ -125,7 +137,7 @@ LIVE4="$(mktemp -d)"
 mkdir -p "$LIVE4/.stepcode" "$LIVE4/sessions"
 echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE4/.stepcode/settings.json"
 na_out="$(cd "$LIVE4" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
-  | STEP_CODING_AGENT_DIR="$LIVE4/agent" timeout 45 step -e "$ROOT/extensions/index.ts" \
+  | STEP_CODING_AGENT_DIR="$LIVE4/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-untrusted --session-dir "$LIVE4/sessions" -na 2>&1)" || true
 if echo "$na_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
   echo "live-untrusted-config: OK"
@@ -141,7 +153,7 @@ EXPORT_DIR="$(mktemp -d)"
 NEUTRAL="$(mktemp -d)"
 if git -C "$ROOT" archive HEAD 2>/dev/null | tar -x -C "$EXPORT_DIR" 2>/dev/null && [ -f "$EXPORT_DIR/extensions/index.ts" ]; then
   exp_out="$(cd "$NEUTRAL" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
-    | STEP_CODING_AGENT_DIR="$EXPORT_DIR/agent" timeout 45 step -e "$EXPORT_DIR/extensions/index.ts" \
+    | STEP_CODING_AGENT_DIR="$EXPORT_DIR/agent" timeout 45 "$STEP_BIN" -e "$EXPORT_DIR/extensions/index.ts" \
       --mode rpc --session-id live-export --session-dir "$EXPORT_DIR/sessions" --approval-mode auto 2>&1)" || true
   if echo "$exp_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
     echo "live-clean-export: OK"
