@@ -1,13 +1,14 @@
 # 测试指南
 
 > 四层测试体系的操作化版本。原则：**先写可复现测试，再修复**；零 token 层优先，
-> LLM 层只在沙箱内用测试 key 做最小调用。探针按 phase 编号递增（见 `sandbox/smoke-phase*.ts`，
-> 历史执行记录见 `sandbox/TEST-PLAN.md`）。
+> LLM 层只在沙箱内用测试 key 做最小调用。探针按 phase 编号递增：零 token 层随仓库分发
+> （`test/smoke/phase*.ts`），LLM 层留在 gitignore 的 `sandbox/`；历史执行记录见 `sandbox/TEST-PLAN.md`。
 
 ## 0. 环境准备
 
-所有测试在 `sandbox/` 内运行，与真实 `~/.stepcode` 完全隔离（`sandbox/` 在 .gitignore 内，
-换环境需按 `sandbox/TEST-PLAN.md` 第三节矩阵重建配置 fixture）。headless 探针必须带
+零 token 层：`test/run-smoke.sh` 自建一次性临时 agentDir（mktemp），无需任何准备，与真实
+`~/.stepcode` 和 gitignore 的 sandbox/ 完全隔离。LLM 层在 `sandbox/` 内运行（`sandbox/` 在
+.gitignore 内，换环境需按 `sandbox/TEST-PLAN.md` 第三节矩阵重建配置 fixture）。headless 探针必须带
 `--approval-mode auto`，否则派生进程的工具会被审批拦截：
 
 ```bash
@@ -29,30 +30,32 @@ LLM 层测试前 `export STEP_API_KEY`（密钥只存于 gitignore 的 `local/te
 | `presets.ts` | frontmatter 解析 | `tools: [a, b]` 数组、引号值、CRLF、缺 name/description 跳过 |
 | `registry.ts` usage | usageDelta/addUsage | 跨进程重置场景 delta 不为负、累计正确 |
 
-## 2. B 层 — 零 token 集成探针（`step -e` + 探针扩展）
+## 2. B 层 — 零 token 集成探针（已入库，`test/smoke/`）
 
-沿用 smoke-phase 模式，一条命令跑一个 phase：
+探针随仓库分发，经 `test/run-smoke.sh` 以一次性临时 agentDir（mktemp）运行，
+不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-for p in 1 2 3 5 6 7 8 9; do
-  printf '{"id":"1","type":"get_state"}\n' \
-    | STEP_CODING_AGENT_DIR="$PWD/sandbox/agent" \
-      step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase$p.ts" \
-      --mode rpc --session-id "reg$p" --session-dir "$PWD/sandbox/agent/sessions" \
-      --approval-mode auto 2>&1 | grep -E 'FAIL|DONE'
-done
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13）
+bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
+
+phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY` 时 runner 显式 SKIP
+而非失败；设置后（密钥见 `local/test-api-key.md`，只经环境变量传递）即纳入回归。
 
 | 探针 | 覆盖 | 成本 |
 |---|---|---|
 | phase1 | 成员生命周期（spawn/握手/disband/重建） | 零 token |
 | phase2 | 任务板状态机（DAG/环/ready-set/持久化） | 零 token |
 | phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
-| phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token |
+| phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token（无 key 时 SKIP） |
 | phase6 | 默认关闭激活 + 配置纯函数 + 模型/思考解析 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
-| phase9 | 配置边界（storage.dir/项目级/非法回退，cfg-misc） | 零 token |
+| phase9 | 配置边界（storage.dir/项目级/非法回退） | 零 token |
+| phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
+
+LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
 
 ## 3. C 层 — LLM 路径测试（测试 key，沙箱内，每条成本极小）
 

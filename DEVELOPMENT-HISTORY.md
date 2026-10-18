@@ -16,7 +16,7 @@
 | 7 | 递归深度/并发上限/README 致谢/上下文节约 | plan-37 | maxRecursionDepth / maxConcurrent=5 / 子队长授予 | — |
 | 8 | 沙箱全面测试与问题优化 | plan-43 | phase9–12 探针 + sandbox/TEST-PLAN.md | 嵌套死锁/门控泄漏/子队长工具饥饿/崩溃状态滞留/提示加固 |
 | 9 | 历程文档 + README 改版 + 交接文档 | plan-50 | 本文档 + mermaid README + HANDOFF.md | — |
-| 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针） | phase9 旧断言哨兵值越界 |
+| 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针）；零 token 探针入库 test/smoke/ + runner | phase9 旧断言哨兵值越界 |
 
 ## 明细
 
@@ -99,4 +99,4 @@
 
 **工作（已完成）**：① `docs/ARCHITECTURE.md`（组件/数据流/护栏位置）、`docs/PROTOCOL.md`（RPC/socket/registry/工具契约，全部对齐源码）、`docs/TESTING.md`（四层测试操作化）；README 中英新增「文档」链接表与「已知限制」小节。② 项目级配置接线：`applyProjectConfig`（trust 门控、session_start 就地合并、env 仍最高优先）+ `STEPCODE_TEAM_MAXDEPTH` 向子成员传播生效深度上限；配套 smoke-phase13（先红后绿，14/14 通过、1 项因探针环境未授信而 SKIP）；phase9 相应断言更新（旧哨兵值 99 越界 1–64 校验范围，改 7）。
 
-**待执行**：探针移入 `test/smoke/` + runner、`step install` 打包审计与 TUI 验证清单。
+**待执行**：`step install` 打包审计与 TUI 验证清单。

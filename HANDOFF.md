@@ -44,7 +44,8 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 | `extensions/index.ts` | 激活接线 | 触发方式、启动副作用 |
 | `extensions/topology.ts` | 拓扑模型 | 新形状 |
 | `extensions/team-server.ts` | 消息强制 | 协议变更 |
-| `sandbox/smoke-phase*.ts` | 回归探针（1–12） | 新功能必须配套探针 |
+| `sandbox/smoke-phase4/10/11/12.ts` | LLM 层回归探针（需测试 key） | 新功能必须配套探针 |
+| `test/run-smoke.sh` + `test/smoke/phase*.ts` | 入库的零 token 冒烟集（1/2/3/5/6/7/8/9/13，hermetic 临时 agentDir；phase5 无 key 时 SKIP） | 新功能必须配套探针 |
 | `docs/ARCHITECTURE.md` · `docs/PROTOCOL.md` | 架构与协议参考（组件/数据流/护栏、RPC/socket/registry/工具契约） | 组件或协议变更必改 |
 | `docs/TESTING.md` | 四层测试操作化指南 | 新探针或测试入口变化必改 |
 
@@ -53,15 +54,15 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 - **项目级配置有两个时序妥协**：`applyProjectConfig` 已在 session_start 就地合并（trust 门控），但注册时固化的工具描述串（模型列表等）与本进程的深度门不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效
 - **LLM 行为不可完全控**：成员可能弃用工具转去排查环境（协调提示已加固，无法根除）
 - **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到
-- **沙箱探针在 gitignore 内**：phase1–12 与 TEST-PLAN.md 未入库，换环境需按其中 JSON 模板重建配置
+- **LLM 层探针在 gitignore 内**：phase4/10/11/12 与 TEST-PLAN.md 未入库（零 token 层已随 `test/smoke/` 分发，`npm run smoke`）；换环境跑 LLM 层需按其中 JSON 模板重建配置
 - **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）
 
 ## 5. 建议下一步（按优先级）
 
-> 进度（plan-51，2026-10-18）：M4 文档三件套（`docs/ARCHITECTURE.md` / `docs/PROTOCOL.md` / `docs/TESTING.md`）与 README 中英「已知限制」已补齐；其余项仍开放，详见 `.stepcode/plans/` 当前会话计划。
+> 进度（plan-51，2026-10-18）：M4 文档三件套、项目级配置接线（smoke-phase13）、零 token 探针入库（`test/smoke/` + `test/run-smoke.sh`）均已落地；其余项仍开放，详见 `.stepcode/plans/` 当前会话计划。
 
-1. 把沙箱探针固化为 CI 冒烟集：零 token 层（phase1/2/3/5/6/7/8/9）可直接自动化；LLM 层需测试 key
-2. 项目级配置接入：`<cwd>/.stepcode/stepcode-agent-teams.json`，trust 门控
+1. ~~把沙箱探针固化为 CI 冒烟集~~ ✅ 已落地：`test/smoke/` + `test/run-smoke.sh`（`npm run smoke`），phase5 无 key 时显式 SKIP；LLM 层留 sandbox/
+2. ~~项目级配置接入~~ ✅ 已落地：`<cwd>/.stepcode/stepcode-agent-team.json`，trust 门控（smoke-phase13）
 3. TUI 渲染人工验证：`/agent-team` 面板、流式进度、renderCall/renderResult
 4. `step install ./` 端到端安装验证（会改真实 settings，由用户执行）
 5. 观察真实使用中 LLM 对拓扑/递归的遵循度，迭代工具描述与 SKILL 指南
@@ -69,25 +70,21 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 ## 6. 验证方法
 
 ```bash
-# 零 token 冒烟（协议/配置/拓扑/深度，不调模型）
-for p in 1 2 3 5 6 7 8 9; do
-  printf '{"id":"1","type":"get_state"}\n' | STEP_CODING_AGENT_DIR="$PWD/sandbox/agent" \
-    step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase$p.ts" \
-    --mode rpc --session-id "reg$p" --session-dir "$PWD/sandbox/agent/sessions" 2>&1 \
-    | grep -E 'FAIL|DONE'
-done
+# 零 token 冒烟（协议/配置/拓扑/深度/项目级配置；hermetic 临时 agentDir）
+npm run smoke                    # phase 1 2 3 5 6 7 8 9 13；phase5 无 STEP_API_KEY 时 SKIP
+bash test/run-smoke.sh 9 13      # 只跑指定 phase
 
 # LLM 路径（先 export STEP_API_KEY，密钥位置见 local/test-api-key.md）
 sleep 300 | step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
 ```
 
-专项配置运行：phase10 用 `sandbox/cfg-conc` / `sandbox/cfg-deadlock`，phase11 用 `sandbox/cfg-deep2`，phase9 用 `sandbox/cfg-misc`；配置若丢失，按 `sandbox/TEST-PLAN.md` 第三节矩阵中的 JSON 重建。
+专项配置运行：phase10 用 `sandbox/cfg-conc` / `sandbox/cfg-deadlock`，phase11 用 `sandbox/cfg-deep2`；配置若丢失，按 `sandbox/TEST-PLAN.md` 第三节矩阵中的 JSON 重建。
 
 ## 7. 开发约定
 
 - **提交**：分批 conventional commit + push + 本地/远程 HEAD 一致性验证（用户已授权自主执行）
-- **测试先行**：新功能先写失败探针再修复；沙箱探针按 phase 编号递增
+- **测试先行**：新功能先写失败探针再修复；零 token 探针入库 `test/smoke/`，LLM 探针留 `sandbox/`，均按 phase 编号递增
 - **危险操作**（npm install / step install / git / 杀进程）由用户执行
 - **密钥**：只在 `local/`（gitignore），经环境变量传递，绝不入库
 

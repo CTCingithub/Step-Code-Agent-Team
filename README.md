@@ -172,18 +172,15 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-# member lifecycle / task board / messaging probes (print [smoke] logs to stderr):
-printf '{"id":"1","type":"get_state"}\n' \
-  | STEP_CODING_AGENT_DIR="$PWD/sandbox/agent" \
-    STEP_CODING_AGENT_SESSION_DIR="$PWD/sandbox/agent/sessions" \
-    step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase1.ts" \
-    --mode rpc --session-id smoke --session-dir "$PWD/sandbox/agent/sessions" 2>&1 \
-  | grep '\[smoke\]'
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13)
+                        # hermetic: throwaway agent dir; phase 5 is skipped
+                        # unless STEP_API_KEY is set (it makes one real call)
 ```
 
-(swap `smoke-phase1.ts` for `smoke-phase2.ts` / `smoke-phase3.ts` for the task
-board and messaging probes). Everything runs inside `sandbox/`, isolated from
-your real `~/.stepcode` state.
+The suite ships in `test/smoke/` with a hermetic runner (`test/run-smoke.sh`,
+temporary agent dir via mktemp). LLM-path probes (`sandbox/smoke-phase4/10/11/12.ts`)
+need a test key and stay in the gitignored sandbox; see
+[docs/TESTING.md](docs/TESTING.md).
 
 > **Headless runs:** `step -p` blocks tools that spawn processes or modify the
 > workspace unless a permission preset is configured. For unattended runs, add
@@ -208,8 +205,10 @@ your real `~/.stepcode` state.
   environment; coordination prompts are hardened but this cannot be eliminated.
 - **TUI rendering is not manually verified**: `render.ts` only runs in the interactive TUI,
   which headless probes do not cover.
-- **Sandbox probes are gitignored**: `sandbox/smoke-phase*.ts` and `sandbox/TEST-PLAN.md` are
-  not in the repo; a fresh environment must rebuild the config fixtures per the test-plan matrix.
+- **LLM-path probes stay in the gitignored sandbox**: `sandbox/smoke-phase4/10/11/12.ts` and
+  `sandbox/TEST-PLAN.md` are not in the repo; the zero-token suite ships in `test/smoke/`
+  (`npm run smoke`), and a fresh environment must rebuild the sandbox config fixtures per the
+  test-plan matrix for the LLM layer.
 - **Depth ≥ 3 is not live-tested with a real LLM chain** (process-level self-bootstrap is
   verified; the depth bound constrains deeper trees).
 

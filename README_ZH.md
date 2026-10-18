@@ -165,16 +165,14 @@ sandbox/       隔离开发环境（gitignored）
 ```bash
 bash sandbox/probe.sh   # RPC 握手探针 → 期望输出 PROBE OK
 
-# 成员生命周期 / 任务板 / 消息链路探针（[smoke] 日志输出到 stderr）：
-printf '{"id":"1","type":"get_state"}\n' \
-  | STEP_CODING_AGENT_DIR="$PWD/sandbox/agent" \
-    STEP_CODING_AGENT_SESSION_DIR="$PWD/sandbox/agent/sessions" \
-    step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase1.ts" \
-    --mode rpc --session-id smoke --session-dir "$PWD/sandbox/agent/sessions" 2>&1 \
-  | grep '\[smoke\]'
+npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13）
+                        # hermetic：一次性临时 agentDir；phase5 未设 STEP_API_KEY 时
+                        # 显式 SKIP（它会发起一次真实调用）
 ```
 
-（将 `smoke-phase1.ts` 换成 `smoke-phase2.ts` / `smoke-phase3.ts` 即对应任务板与消息探针。）全部在 `sandbox/` 内运行，与真实 `~/.stepcode` 状态隔离。
+冒烟集随仓库分发（`test/smoke/` + `test/run-smoke.sh`，临时 agentDir 经 mktemp 创建）。
+LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需测试 key，仍留于 gitignore 的
+`sandbox/`，详见 [docs/TESTING.md](docs/TESTING.md)。
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 
@@ -192,7 +190,7 @@ printf '{"id":"1","type":"get_state"}\n' \
 - **项目级配置有两个时序妥协**：注册时固化的工具描述串（模型列表等）与本进程的深度门不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
 - **LLM 行为不可完全控**：成员可能弃用工具转去排查环境；协调提示已加固，无法根除。
 - **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到。
-- **沙箱探针在 gitignore 内**：`sandbox/smoke-phase*.ts` 与 `sandbox/TEST-PLAN.md` 未入库，换环境需按测试计划矩阵重建配置。
+- **LLM 层探针在 gitignore 内**：`sandbox/smoke-phase4/10/11/12.ts` 与 `sandbox/TEST-PLAN.md` 未入库（零 token 层已随 `test/smoke/` 分发，`npm run smoke`）；换环境跑 LLM 层需按测试计划矩阵重建配置。
 - **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）。
 
 ## 许可证
