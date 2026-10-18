@@ -71,7 +71,8 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
   },
   "topology": {
     "default": "star",                // 新团队默认拓扑形状（star/pipeline/mesh/ring/custom）
-    "requireDeclaration": false       // true 时未显式声明拓扑前禁止派活
+    "requireDeclaration": false,      // true 时未显式声明拓扑前禁止派活
+    "maxLoopCount": 2                 // 环形消息链最大跳数（0 = 无上限，范围 0–64）
   },
   "debug": false                      // 调试日志（模型裁决、配置警告、socket 错误）
 }
@@ -125,6 +126,10 @@ Step-Code-Agent-Team 通过一个 JSON 配置文件控制全部行为参数。
 - `topology.requireDeclaration`：`true` 时，未调用 `team_set_topology` 显式声明
   拓扑前，`team_send` / `team_task` / oneshot 一律拒绝——字面落实"先设计拓扑
   再开工"（默认 `false`，星型始终可用）。
+- `topology.maxLoopCount`：成员间消息链的最大跳数。队长→成员派发记链长 0，成员
+  每转发一次 +1；下一跳会使链长超过上限（上限 ≠ 0）时该消息被 team-server 拒绝，
+  发送方转为向队长汇报——同时防止环形巡游死锁（发送方持运行位等待、目标方又排队
+  等位）。默认 `2`，`0` = 无上限，合法范围 0–64；manager 层在嵌套派发前另有兜底校验。
 
 成员通过 `stepcode-team status` 动态获知自己的可通知邻居（server 按发送方身份
 返回 `mayMessage` 列表）。

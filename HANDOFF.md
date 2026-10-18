@@ -9,7 +9,7 @@ Step Code 的智能体团队插件，对标 DeepSeek Harness agent teams，**功
 
 - **默认关闭激活**：团队工具加载时即被声明不可用；`/agent-team` 命令或 prompt 关键词（`input` + `before_agent_start` 双钩子）才激活
 - **成员生命周期**：长驻 `step --mode rpc` 子进程；同 session-id 重启即续聊；并发/递归/拓扑/成本全链路护栏
-- **通信拓扑**：star/pipeline/mesh/ring/custom 五形状，server 层强制，`team_set_topology` 声明
+- **通信拓扑**：star/pipeline/mesh/ring/custom 五形状，server 层强制（含环形链长上限 `topology.maxLoopCount`，默认 2、0 无上限），`team_set_topology` 声明
 - **递归深度**：`maxRecursionDepth`（默认 1），子队长经 env 授予并自动激活
 - **配置文件**：`<agentDir>/stepcode-agent-team.json`（沙箱经 `STEP_CODING_AGENT_DIR` 隔离）
 
@@ -24,7 +24,7 @@ Step Code 的智能体团队插件，对标 DeepSeek Harness agent teams，**功
   ├── members.ts ── TeamManager：spawn 互斥、模型/思考解析、拓扑方法、
   │    并发门（nested 绕过）、任务调度（重试）、oneshot、reaper
   ├── rpc-client.ts ── JSONL 客户端（严格 \n 分行、id 关联、握手、abort、killAndWait）
-  ├── team-server.ts ── Unix socket：拓扑强制 + status(mayMessage)
+  ├── team-server.ts ── Unix socket：拓扑强制 + 环形链长强制 + status(mayMessage)
   ├── topology.ts ── 五形状构造/校验/解析
   ├── config.ts ── 默认值/文件合并/校验/环境变量覆盖/缓存
   ├── registry.ts ── 团队状态持久化（原子写、storage.dir、旧版兼容）
@@ -71,7 +71,7 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 
 ```bash
 # 零 token 冒烟（协议/配置/拓扑/深度/项目级配置；hermetic 临时 agentDir）
-npm run smoke                    # phase 1 2 3 5 6 7 8 9 13；phase5 无 STEP_API_KEY 时 SKIP
+npm run smoke                    # phase 1 2 3 5 6 7 8 9 13 14；phase5 无 STEP_API_KEY 时 SKIP
 bash test/run-smoke.sh 9 13      # 只跑指定 phase
 
 # LLM 路径（先 export STEP_API_KEY，密钥位置见 local/test-api-key.md）

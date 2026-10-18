@@ -36,7 +36,7 @@ LLM 层测试前 `export STEP_API_KEY`（密钥只存于 gitignore 的 `local/te
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -54,6 +54,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
 | phase9 | 配置边界（storage.dir/项目级/非法回退） | 零 token |
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
+| phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
 

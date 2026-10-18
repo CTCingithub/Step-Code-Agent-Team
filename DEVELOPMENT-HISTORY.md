@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-51，后续工作规划与执行：M4 文档 / 项目级配置 / 探针入库 / 用户侧前置）。
+> 最近更新：2026-10-18（plan-52，拓扑图示化 + 环形 loop 上限 + README 配置文档 + 沙箱测试项目）。
 
 ## 总览
 
@@ -17,6 +17,7 @@
 | 8 | 沙箱全面测试与问题优化 | plan-43 | phase9–12 探针 + sandbox/TEST-PLAN.md | 嵌套死锁/门控泄漏/子队长工具饥饿/崩溃状态滞留/提示加固 |
 | 9 | 历程文档 + README 改版 + 交接文档 | plan-50 | 本文档 + mermaid README + HANDOFF.md | — |
 | 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；项目级配置接线（trust 门控 + phase13 探针）；零 token 探针入库 test/smoke/ + runner；安装打包审计 + TUI 验证清单 | phase9 旧断言哨兵值越界 |
+| 11 | 拓扑图示化 + 环形 loop 上限 + README 配置文档 + 沙箱测试项目 | plan-52 | topology.maxLoopCount（默认 2、0 无上限；server + manager 双层强制；phase14 探针）；README 主图纵向化 + 五形状 mermaid 总图；README 配置节扩写；沙箱可运行测试小项目 | — |
 
 ## 明细
 
@@ -100,3 +101,13 @@
 **工作（已完成）**：① `docs/ARCHITECTURE.md`（组件/数据流/护栏位置）、`docs/PROTOCOL.md`（RPC/socket/registry/工具契约，全部对齐源码）、`docs/TESTING.md`（四层测试操作化）；README 中英新增「文档」链接表与「已知限制」小节。② 项目级配置接线：`applyProjectConfig`（trust 门控、session_start 就地合并、env 仍最高优先）+ `STEPCODE_TEAM_MAXDEPTH` 向子成员传播生效深度上限；配套 smoke-phase13（先红后绿，14/14 通过、1 项因探针环境未授信而 SKIP）；phase9 相应断言更新（旧哨兵值 99 越界 1–64 校验范围，改 7）。
 
 **收尾**：安装打包审计结论——本地路径安装整目录拷贝/硬链、不尊重 .gitignore，README 中英增加「从干净导出物安装」指引，package.json 增加 `files` 白名单（纵深防御）；`docs/TUI-VERIFICATION.md` 交付 TUI 人工验证清单。四项后续工作全部完成，余下为用户侧执行项（TUI 清单打勾、干净导出物安装、LLM 遵循度观察）。
+
+### 11. 拓扑图示化与环形 loop 上限（plan-52）
+
+**用户 prompt**：「README 中 mermaid 画的图改为纵向的；README 中需要提到几类子智能体的拓扑结构，并用画图表示；请添加环形拓扑的最大 loop 次数选项，默认为 2，用 0 表示无上限；请在沙箱中设计一个简单的小项目用于测试；README 中应该包含可配置项的介绍，以及如何修改这些内容」
+
+**思路**：loop 上限约束**成员间消息链长度**（队长→成员派发记链长 0，成员每转发一次 +1），超限即拒并提示发送方向队长汇报——同时天然防止环形巡游死锁（发送方持运行位等待、目标方又排队等位）。簿记收敛为 TeamManager 的 `withChainLength` 原语（派发与探针共用），server 在嵌套派发前计算 next 并拒绝，manager 在 dispatch 前置校验兜底。
+
+**工作**：① `topology.maxLoopCount`（config.ts 默认 2、校验 0–64、0 = 无上限）；members.ts 链长簿记（`currentChainLength` / `withChainLength`）+ `assertLoopBound`；team-server.ts 嵌套派发前拒绝。② `test/smoke/phase14.ts`（先红后绿）：配置面（默认/覆盖/0/越界/类型）、manager 层超限即抛（不到 dispatch）、server 层经 shim 拒绝（withChainLength 确定性模拟中链成员，无时序竞态）、拓扑拒绝优先于 loop 检查、边界（链长 = 上限）放行。③ README 中英：主架构图 `flowchart LR → TD`；拓扑节新增五形状 mermaid 总图（ring 子图标注 loop 上限）；配置节扩写（三级配置位置表 + 可配置项速览 + 修改生效方式 + env 清单补 MAXDEPTH）。④ CONFIGURATION/PROTOCOL/TESTING/HANDOFF 同步。
+
+**验证**：phase14 先红（8 项按预期失败）后绿；`npm run smoke` 全回归通过（phase5 无 key SKIP）。
