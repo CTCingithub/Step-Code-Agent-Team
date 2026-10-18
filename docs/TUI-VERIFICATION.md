@@ -1,7 +1,8 @@
 # TUI 人工验证清单
 
-> `render.ts`（renderCall / renderResult）与 `/agent-team` 面板只在交互 TUI 生效，
-> headless / RPC 探针覆盖不到，需按本清单人工验证。全部在沙箱内进行，与真实
+> `render.ts`（renderCall / renderResult）的**渲染内容**已由 phase15 探针在 headless 下
+> 断言（六工具的 call/result 字符串、折叠/展开、用量行、状态图标）；本清单只剩**观感与
+> 交互**（颜色/布局、toast 停留、ctrl+o、流式节奏）。全部在沙箱内进行，与真实
 > `~/.stepcode` 隔离；涉及模型调用，先导出测试 key（只经环境变量传递）。
 
 ## 环境
