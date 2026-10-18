@@ -6,6 +6,17 @@
     "pi-package"
   ],
   "license": "MIT",
+  "files": [
+    "extensions",
+    "bin",
+    "agents",
+    "prompts",
+    "skills",
+    "docs",
+    "README.md",
+    "README_ZH.md",
+    "LICENSE"
+  ],
   "scripts": {
     "smoke": "bash test/run-smoke.sh"
   },
