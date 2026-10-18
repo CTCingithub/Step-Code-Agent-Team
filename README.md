@@ -6,6 +6,13 @@ Agent team plugin for [Step Code](https://stepfun.com) (`step`): your current se
 
 [简体中文说明 →](./README_ZH.md)
 
+> **⚠️ Cost warning:** every team member is a full agent process with its own
+> context window, running on the conversation's current model (default thinking:
+> `high`). N members working in parallel cost roughly N× a single conversation
+> turn, and long member runs accumulate quickly. The plugin tracks cumulative
+> team spend and warns at `cost.warnThreshold` (default $1, 0 disables) — watch
+> `team_status`, and disband idle members when the work is done.
+
 ## How it works
 
 ```mermaid
@@ -95,36 +102,51 @@ Direct member-to-member messaging is **denied unless the topology allows it**. T
 | `ring` | mi→mi+1 (wraps around) | Round-robin review; chain length bounded by `topology.maxLoopCount` (default 2, 0 = unlimited) |
 | `custom` | explicit `{from, to}` list | Precise control |
 
+**`star` (default)** — no member↔member edges; the leader relays everything:
+
 ```mermaid
 flowchart TD
-    subgraph star["star (default): no member↔member edges — the leader relays everything"]
-        direction LR
-        L["Leader"] --- S1["m1"]
-        L --- S2["m2"]
-        L --- S3["m3"]
-    end
-    subgraph pipeline["pipeline: ordered handoffs (creation order)"]
-        direction LR
-        P1["m1"] --> P2["m2"] --> P3["m3"]
-    end
-    subgraph mesh["mesh: everyone may message everyone"]
-        direction LR
-        M1["m1"] --> M2["m2"]
-        M2 --> M1
-        M1 --> M3["m3"]
-        M3 --> M1
-        M2 --> M3
-        M3 --> M2
-    end
-    subgraph ring["ring: round-robin, chain bounded by topology.maxLoopCount (default 2, 0 = unlimited)"]
-        direction LR
-        R1["m1"] --> R2["m2"] --> R3["m3"] --> R1
-    end
-    subgraph custom["custom: explicit edges"]
-        direction LR
-        C1["m1"] --> C3["m3"]
-        C2["m2"] --> C3
-    end
+    L["Leader"]
+    S1["m1"]
+    S2["m2"]
+    S3["m3"]
+    L --- S1
+    L --- S2
+    L --- S3
+```
+
+**`pipeline`** — ordered handoffs in member creation order:
+
+```mermaid
+flowchart LR
+    P1["m1"] --> P2["m2"] --> P3["m3"]
+```
+
+**`mesh`** — every member may message every other member:
+
+```mermaid
+flowchart LR
+    M1["m1"] --> M2["m2"]
+    M2 --> M1
+    M1 --> M3["m3"]
+    M3 --> M1
+    M2 --> M3
+    M3 --> M2
+```
+
+**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited):
+
+```mermaid
+flowchart LR
+    R1["m1"] --> R2["m2"] --> R3["m3"] --> R1
+```
+
+**`custom`** — explicit `{from, to}` edges:
+
+```mermaid
+flowchart LR
+    C1["m1"] --> C3["m3"]
+    C2["m2"] --> C3
 ```
 
 Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors, which members can query with `stepcode-team status`. In a ring, each forwarded message extends the sender's chain by one hop; a hop that would exceed `topology.maxLoopCount` (default 2, 0 = unlimited) is rejected and the sender is told to report to the leader instead — which also prevents ring-circulation deadlocks. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).

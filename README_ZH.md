@@ -6,6 +6,12 @@
 
 [English →](./README.md)
 
+> **⚠️ 消耗警告：** 每个团队成员都是独立的完整 agent 进程，拥有自己的上下文窗口，
+> 默认使用对话当前模型、思考强度 `high`。N 个成员并行干活的成本约为单轮对话的 N 倍，
+> 长任务累积很快。插件会统计团队累计花费，并在 `cost.warnThreshold`
+> （默认 $1，0 禁用）时告警——请留意 `team_status`，完工后及时 `team_disband`
+> 回收空闲成员。
+
 ## 工作原理
 
 ```mermaid
@@ -92,36 +98,51 @@ step -e ./extensions/index.ts
 | `ring` | mi→mi+1（末位回环） | 环形流水；链长受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限） |
 | `custom` | 显式 `{from, to}` 列表 | 精确控制 |
 
+**`star`（默认）** — 无成员间直连边，全部经队长中转：
+
 ```mermaid
 flowchart TD
-    subgraph star["star（默认）：无成员间直连边——全部经队长中转"]
-        direction LR
-        L["队长"] --- S1["m1"]
-        L --- S2["m2"]
-        L --- S3["m3"]
-    end
-    subgraph pipeline["pipeline：按创建顺序接力"]
-        direction LR
-        P1["m1"] --> P2["m2"] --> P3["m3"]
-    end
-    subgraph mesh["mesh：两两互通"]
-        direction LR
-        M1["m1"] --> M2["m2"]
-        M2 --> M1
-        M1 --> M3["m3"]
-        M3 --> M1
-        M2 --> M3
-        M3 --> M2
-    end
-    subgraph ring["ring：环形接力，链长受 topology.maxLoopCount 约束（默认 2，0 = 无上限）"]
-        direction LR
-        R1["m1"] --> R2["m2"] --> R3["m3"] --> R1
-    end
-    subgraph custom["custom：显式边"]
-        direction LR
-        C1["m1"] --> C3["m3"]
-        C2["m2"] --> C3
-    end
+    L["队长"]
+    S1["m1"]
+    S2["m2"]
+    S3["m3"]
+    L --- S1
+    L --- S2
+    L --- S3
+```
+
+**`pipeline`** — 按成员创建顺序接力：
+
+```mermaid
+flowchart LR
+    P1["m1"] --> P2["m2"] --> P3["m3"]
+```
+
+**`mesh`** — 两两互通（全部有序对）：
+
+```mermaid
+flowchart LR
+    M1["m1"] --> M2["m2"]
+    M2 --> M1
+    M1 --> M3["m3"]
+    M3 --> M1
+    M2 --> M3
+    M3 --> M2
+```
+
+**`ring`** — 每成员可通知下一位（末位回环）；消息链长度受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限）：
+
+```mermaid
+flowchart LR
+    R1["m1"] --> R2["m2"] --> R3["m3"] --> R1
+```
+
+**`custom`** — 显式 `{from, to}` 边：
+
+```mermaid
+flowchart LR
+    C1["m1"] --> C3["m3"]
+    C2["m2"] --> C3
 ```
 
 强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
