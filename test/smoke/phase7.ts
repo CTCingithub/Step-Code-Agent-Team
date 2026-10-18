@@ -163,6 +163,14 @@ export default function (pi: ExtensionAPI) {
 				legacy?.topology.shape === "star" && legacy.topology.edges.length === 0,
 				JSON.stringify(legacy?.topology),
 			);
+			// malformed registries degrade to null instead of crashing the manager
+			fs.writeFileSync(
+				path.join(legacyDir, "registry.json"),
+				JSON.stringify({ schemaVersion: 1, teamId: "legacy-topo", createdAt: 0, cwd: ".", members: "nope", tasks: [] }),
+			);
+			check("malformed registry (members not array) → null", loadRegistry("legacy-topo") === null);
+			fs.writeFileSync(path.join(legacyDir, "registry.json"), "{not json");
+			check("malformed registry (bad JSON) → null", loadRegistry("legacy-topo") === null);
 			fs.rmSync(legacyDir, { recursive: true, force: true });
 
 			// 9. server enforcement through the shim (denial is zero-token)

@@ -23,6 +23,8 @@ AGENT_DIR="$(mktemp -d)"
 SESSION_DIR="$AGENT_DIR/sessions"
 mkdir -p "$SESSION_DIR"
 trap 'rm -rf "$AGENT_DIR"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 PHASES="${*:-1 2 3 5 6 7 8 9 13 14}"
 # Phases that make a real (1-token) model call and need a test key; skipped
@@ -45,16 +47,50 @@ for p in $PHASES; do
       timeout 240 step -e "$ROOT/extensions/index.ts" -e "$probe" \
       --mode rpc --session-id "smoke-$p" --session-dir "$SESSION_DIR" \
       --approval-mode auto 2>&1)" || true
-  fails="$(echo "$out" | grep -c 'FAIL ' || true)"
-  skips="$(echo "$out" | grep -c 'SKIP ' || true)"
-  if echo "$out" | grep -q 'DONE' && [ "$fails" -eq 0 ]; then
+  # Structural verdict on the probe's own log lines only (step's stderr can
+  # contain unrelated "fail" text): a phase passes iff it logged DONE and no
+  # FAIL/failed/SKIP-marker line — never rely on substring counting.
+  probe_log="$(echo "$out" | grep -E '\[smoke[0-9]*\]' || true)"
+  fails="$(echo "$probe_log" | grep -cE 'FAIL |FAILED' || true)"
+  skips="$(echo "$probe_log" | grep -cE 'SKIP ' || true)"
+  done="$(echo "$probe_log" | grep -cE 'DONE' || true)"
+  if [ "$done" -ge 1 ] && [ "$fails" -eq 0 ]; then
     echo "phase$p: OK (fails=0, skips=$skips)"
   else
     echo "phase$p: FAILED (fails=$fails)"
-    echo "$out" | grep -E 'FAIL |FAILED' | head -20
+    echo "$probe_log" | grep -E 'FAIL |FAILED' | head -20
     FAILED+=("$p")
   fi
 done
+
+# ---- live wiring checks (zero-token, hermetic temp cwd) ----
+# index.ts applies the trusted project tier to its own config instance and the
+# /agent-team command surfaces the result. In-probe observation is impossible
+# (each -e extension gets its own config module instance), so verify it here.
+live_check() {
+  local name="$1" dir="$2" expect="$3"
+  mkdir -p "$dir/sessions"
+  local out
+  out="$(cd "$dir" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+    | STEP_CODING_AGENT_DIR="$dir/agent" timeout 45 step -e "$ROOT/extensions/index.ts" \
+      --mode rpc --session-id "live-$name" --session-dir "$dir/sessions" -a 2>&1)" || true
+  if echo "$out" | grep -q "$expect"; then
+    echo "live-$name: OK"
+  else
+    echo "live-$name: FAILED (expected: $expect)"
+    echo "$out" | tail -5
+    FAILED+=("live-$name")
+  fi
+  rm -rf "$dir"
+}
+
+LIVE1="$(mktemp -d)"
+mkdir -p "$LIVE1/.stepcode"
+echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE1/.stepcode/settings.json"
+live_check "project-config" "$LIVE1" "disabled by configuration"
+
+LIVE2="$(mktemp -d)"
+live_check "command-activate" "$LIVE2" "Agent team plugin activated (/agent-team command)"
 
 if [ "${#FAILED[@]}" -gt 0 ]; then
   echo "run-smoke: FAILED phases: ${FAILED[*]}"

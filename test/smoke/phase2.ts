@@ -70,7 +70,31 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			const reg = loadRegistry(manager.teamId);
+			// Input validation must reject clearly — all paths throw before any
+		// spawn or dispatch (zero token).
+		const expectThrow = async (name: string, fn: () => Promise<unknown>): Promise<boolean> => {
+			try {
+				await fn();
+				return false;
+			} catch {
+				log("validation ok:", name);
+				return true;
+			}
+		};
+		const validations: Array<[string, () => Promise<unknown>]> = [
+			["createMember: invalid name", () => manager.createMember({ name: "Bad_Name" })],
+			["sendMessage: unknown member", () => manager.sendMessage("ghost", "hi")],
+			["createTask: empty title", () => manager.createTask({ title: "   " })],
+			["startTask: unknown id", () => manager.startTask("T999")],
+		];
+		for (const [name, fn] of validations) {
+			if (!(await expectThrow(name, fn))) {
+				fail(`${name} should throw`);
+				return;
+			}
+		}
+
+		const reg = loadRegistry(manager.teamId);
 			log("registry persisted:", reg?.tasks.map((t) => `${t.id}:${t.status}`).join(","));
 			log("SMOKE2 DONE");
 		} catch (err) {

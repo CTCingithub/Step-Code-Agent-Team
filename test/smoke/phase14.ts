@@ -19,7 +19,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
-import { TeamManager } from "../../extensions/members.ts";
+import { TeamManager, wouldCycle } from "../../extensions/members.ts";
 import { TeamServer } from "../../extensions/team-server.ts";
 import { agentDir, defaultConfig, getConfig, loadConfig, resetConfigCache } from "../../extensions/config.ts";
 import { shimPath } from "../../extensions/presets.ts";
@@ -101,6 +101,16 @@ export default function (pi: ExtensionAPI) {
 			);
 			check("config: legacy file fallback", loadConfig({ agentDir: tmp }).topology.maxLoopCount === 4, `got ${loadConfig({ agentDir: tmp }).topology.maxLoopCount}`);
 			fs.rmSync(tmp, { recursive: true, force: true });
+
+			// ---- 1b. wait-cycle detection (pure helper behind the server guard) ----
+			const wf = new Map<string, string>([
+				["a", "b"],
+				["b", "c"],
+			]);
+			check("cycle: unrelated pair → no cycle", !wouldCycle(wf, "a", "c"), "c does not wait on a");
+			check("cycle: direct wait → cycle", wouldCycle(wf, "b", "a"), "a waits on b");
+			check("cycle: transitive wait → cycle", wouldCycle(wf, "c", "a"), "a → b → c");
+			check("cycle: empty map → no cycle", !wouldCycle(new Map(), "x", "y"));
 
 			// ---- 2. manager-level rejection (before any dispatch) ----
 			const manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
