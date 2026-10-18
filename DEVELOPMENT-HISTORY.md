@@ -16,6 +16,7 @@
 | 7 | 递归深度/并发上限/README 致谢/上下文节约 | plan-37 | maxRecursionDepth / maxConcurrent=5 / 子队长授予 | — |
 | 8 | 沙箱全面测试与问题优化 | plan-43 | phase9–12 探针 + sandbox/TEST-PLAN.md | 嵌套死锁/门控泄漏/子队长工具饥饿/崩溃状态滞留/提示加固 |
 | 9 | 历程文档 + README 改版 + 交接文档 | plan-50 | 本文档 + mermaid README + HANDOFF.md | — |
+| 10 | 阅读工作区、规划并执行后续工作（文档同步为贯穿要求） | plan-51 | docs/ARCHITECTURE/PROTOCOL/TESTING + README 中英已知限制；规划：项目级配置、探针入库、安装/TUI 前置 | — |
 
 ## 明细
 
@@ -84,8 +85,18 @@
 
 **工作**：`sandbox/TEST-PLAN.md` + phase9–12 探针（配置边界/并发 live/深度2链/杂项覆盖）+ 命令路径测试；修复 4 个产品缺陷 + 1 处提示加固（详见 TEST-PLAN.md 第六节）；修复后 phase1/2/3/5/6/7 + phase4 全量回归通过。
 
-### 9. 文档化与交接（plan-50，进行中）
+### 9. 文档化与交接（plan-50）
 
 **用户 prompt**：「写开发历程文档；README 改用 mermaid 图、英文版加中文版链接、添加拓扑功能介绍；写一个让其他 session 阅读后可继续开发的文档」
 
 **工作**：本文档 + README 中英 mermaid 改版与拓扑专节 + `HANDOFF.md` 交接文档。
+
+### 10. 后续工作规划与执行（plan-51，进行中）
+
+**用户 prompt**：「请阅读工作空间，了解项目与当前进度，然后规划后续工作」（修订：「开始按计划执行，注意同步修改或更新各类相关文档」）
+
+**思路**：通读仓库后确认 Phase 0–5 与 M1–M3 均已落地、phase1–12 探针全绿，剩余缺口收敛为四类：M4 文档补齐 → 项目级配置接线 → 零 token 探针固化为入库资产 → 用户侧验证（`step install` / TUI）前置检查。确定「文档同步」为贯穿要求并写入计划。
+
+**工作（已完成）**：`docs/ARCHITECTURE.md`（组件/数据流/护栏位置）、`docs/PROTOCOL.md`（RPC/socket/registry/工具契约，全部对齐源码）、`docs/TESTING.md`（四层测试操作化）；README 中英新增「文档」链接表与「已知限制」小节（对应 HANDOFF §4）。
+
+**待执行**：项目级配置（trust 门控，smoke-phase13）、探针移入 `test/smoke/` + runner、`step install` 打包审计与 TUI 验证清单。

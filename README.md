@@ -187,6 +187,29 @@ your real `~/.stepcode` state.
 > workspace unless a permission preset is configured. For unattended runs, add
 > `--approval-mode auto` (or `--non-interactive-approval allow`).
 
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, storage layout, guardrail map |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | Member RPC protocol, socket protocol, registry schema, tool contracts |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Config reference |
+| [docs/TESTING.md](docs/TESTING.md) | How to run the four test layers |
+
+## Known limitations
+
+- **Project-level config is not wired yet**: `<cwd>/.stepcode/stepcode-agent-team.json` is
+  reserved in the loader but not applied (project trust information is only available inside
+  event handlers, which would break the "config before tool registration" ordering).
+- **LLM behavior cannot be fully controlled**: members may abandon tools to investigate their
+  environment; coordination prompts are hardened but this cannot be eliminated.
+- **TUI rendering is not manually verified**: `render.ts` only runs in the interactive TUI,
+  which headless probes do not cover.
+- **Sandbox probes are gitignored**: `sandbox/smoke-phase*.ts` and `sandbox/TEST-PLAN.md` are
+  not in the repo; a fresh environment must rebuild the config fixtures per the test-plan matrix.
+- **Depth ≥ 3 is not live-tested with a real LLM chain** (process-level self-bootstrap is
+  verified; the depth bound constrains deeper trees).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

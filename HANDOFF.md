@@ -1,7 +1,7 @@
 # 交接文档（Handoff）
 
 > 目的：让其他 session 阅读本文后即可无缝继续开发。
-> 配套文档：`DEVELOPMENT-HISTORY.md`（开发历程）、`README.md` / `README_ZH.md`（使用说明）、`docs/CONFIGURATION.md`（配置参考）、`sandbox/TEST-PLAN.md`（测试计划与缺陷清单，仅在本地沙箱）。
+> 配套文档：`DEVELOPMENT-HISTORY.md`（开发历程）、`README.md` / `README_ZH.md`（使用说明）、`docs/ARCHITECTURE.md`（架构）、`docs/PROTOCOL.md`（协议）、`docs/CONFIGURATION.md`（配置参考）、`docs/TESTING.md`（测试指南）、`sandbox/TEST-PLAN.md`（测试计划与缺陷清单，仅在本地沙箱）。
 
 ## 1. 项目现状（截至 2026-10-18）
 
@@ -45,6 +45,8 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 | `extensions/topology.ts` | 拓扑模型 | 新形状 |
 | `extensions/team-server.ts` | 消息强制 | 协议变更 |
 | `sandbox/smoke-phase*.ts` | 回归探针（1–12） | 新功能必须配套探针 |
+| `docs/ARCHITECTURE.md` · `docs/PROTOCOL.md` | 架构与协议参考（组件/数据流/护栏、RPC/socket/registry/工具契约） | 组件或协议变更必改 |
+| `docs/TESTING.md` | 四层测试操作化指南 | 新探针或测试入口变化必改 |
 
 ## 4. 已知限制
 
@@ -55,6 +57,8 @@ bin/stepcode-team.mjs ── 成员侧 CLI shim（携带发送方身份）
 - **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）
 
 ## 5. 建议下一步（按优先级）
+
+> 进度（plan-51，2026-10-18）：M4 文档三件套（`docs/ARCHITECTURE.md` / `docs/PROTOCOL.md` / `docs/TESTING.md`）与 README 中英「已知限制」已补齐；其余项仍开放，详见 `.stepcode/plans/` 当前会话计划。
 
 1. 把沙箱探针固化为 CI 冒烟集：零 token 层（phase1/2/3/5/6/7/8/9）可直接自动化；LLM 层需测试 key
 2. 项目级配置接入：`<cwd>/.stepcode/stepcode-agent-teams.json`，trust 门控

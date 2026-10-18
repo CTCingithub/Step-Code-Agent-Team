@@ -176,6 +176,23 @@ printf '{"id":"1","type":"get_state"}\n' \
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 组件、数据流、存储布局、护栏位置 |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | 配置参考 |
+| [docs/TESTING.md](docs/TESTING.md) | 四层测试的运行方法 |
+
+## 已知限制
+
+- **项目级配置未接入**：`<cwd>/.stepcode/stepcode-agent-team.json` 已在 loader 预留但未应用——项目信任信息只在事件处理器中可用，会破坏"注册工具前加载配置"的时序。
+- **LLM 行为不可完全控**：成员可能弃用工具转去排查环境；协调提示已加固，无法根除。
+- **TUI 渲染未实测**：`render.ts` 只在交互 TUI 生效，headless 探针覆盖不到。
+- **沙箱探针在 gitignore 内**：`sandbox/smoke-phase*.ts` 与 `sandbox/TEST-PLAN.md` 未入库，换环境需按测试计划矩阵重建配置。
+- **depth≥3 未做真实 LLM 链测试**（进程级已验证，构造上受深度上限约束）。
+
 ## 许可证
 
 MIT — 见 [LICENSE](LICENSE)。
