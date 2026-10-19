@@ -25,3 +25,6 @@ local/
 # Logs and OS files
 *.log
 .DS_Store
+
+# Session handoff doc — kept locally for session takeover, never published
+HANDOFF.md

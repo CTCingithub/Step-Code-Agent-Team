@@ -1,101 +1,102 @@
-# 架构
+# Architecture
 
-> 本文档描述 Step-Code-Agent-Team 的组件构成、数据流与目录布局，以 `extensions/` 当前实现为准。
-> 协议细节（RPC / socket / registry schema / 工具契约）见 [PROTOCOL.md](PROTOCOL.md)；测试方法见 [TESTING.md](TESTING.md)。
+> [简体中文 →](./ARCHITECTURE_ZH.md)
+> This document describes Step-Code-Agent-Team's component structure, data flow, and directory layout, based on the current `extensions/` implementation.
+> Protocol details (RPC / socket / registry schema / tool contracts) are in [PROTOCOL.md](PROTOCOL.md); testing methodology is in [TESTING.md](TESTING.md).
 
-## 1. 组件总览
+## 1. Component overview
 
 ```
-队长会话（step，加载本扩展）
+Leader session (step, loads this extension)
 │
-├── extensions/index.ts      入口：加载配置 → 深度门 → 注册 6 个工具 →
-│                            setUnavailableTools 关门（默认关闭）；
-│                            激活触发：/agent-team 命令、input 钩子、before_agent_start 钩子、
-│                            STEPCODE_TEAM_AUTOACTIVATE（子队长授予）
-├── extensions/config.ts     配置：settings.json 的 stepcodeAgentTeam 节（默认值 < 旧版专用文件 < settings.json 节 < 环境变量覆盖）；校验与缓存
-├── extensions/activation.ts 激活门：关键词/命令检测、工具释放
-├── extensions/tools.ts      6 个 LLM 工具（create_member / send / task / set_topology / disband / status）
-├── extensions/members.ts    TeamManager：成员生命周期、并发门、任务板调度、拓扑方法、
-│                            每成员 spawn 互斥、失败即杀、oneshot、idle 收割
-├── extensions/rpc-client.ts JSONL RPC 客户端（严格 \n 分行、id 关联、握手、abort、killAndWait）
-├── extensions/team-server.ts Unix socket 服务：拓扑强制 + status(mayMessage)
-├── extensions/topology.ts   五形状拓扑构造/校验/解析
-├── extensions/registry.ts   团队状态持久化（原子写、storage.dir、旧版兼容）
-├── extensions/presets.ts    agents/*.md 预设加载、扩展入口路径、shim 路径
-├── extensions/render.ts     TUI 渲染（renderCall / renderResult）
+├── extensions/index.ts      entry: load config → depth gate → register 6 tools →
+│                            setUnavailableTools closes the gate (off by default);
+│                            activation triggers: /agent-team command, input hook, before_agent_start hook,
+│                            STEPCODE_TEAM_AUTOACTIVATE (sub-leader grant)
+├── extensions/config.ts     config: the stepcodeAgentTeam section of settings.json (defaults < legacy files < settings.json section < environment overrides); validation and caching
+├── extensions/activation.ts activation gate: keyword/command detection, tool release
+├── extensions/tools.ts      6 LLM tools (create_member / send / task / set_topology / disband / status)
+├── extensions/members.ts    TeamManager: member lifecycle, concurrency gate, task-board dispatch, topology methods,
+│                            per-member spawn mutex, kill on failure, oneshot, idle reaping
+├── extensions/rpc-client.ts JSONL RPC client (strict \n line splitting, id correlation, handshake, abort, killAndWait)
+├── extensions/team-server.ts Unix socket server: topology enforcement + status(mayMessage)
+├── extensions/topology.ts   five-shape topology construction/validation/parsing
+├── extensions/registry.ts   team state persistence (atomic write, storage.dir, legacy compatibility)
+├── extensions/presets.ts    agents/*.md preset loading, extension entry path, shim path
+├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │
-├── bin/stepcode-team.mjs    成员侧 CLI shim（msg / status，携带发送方身份）
-└── agents/                  角色预设（scout · planner · worker · reviewer）
+├── bin/stepcode-team.mjs    member-side CLI shim (msg / status, carries sender identity)
+└── agents/                  role presets (scout · planner · worker · reviewer)
 ```
 
-成员是独立的 `step --mode rpc` 子进程，不加载本扩展（除非被授予子团队，见 §4），
-只能经 shim 到达队长进程内的 socket——这是拓扑强制的天然收口点。
+Members are independent `step --mode rpc` subprocesses that do not load this extension (unless granted a sub-team, see §4),
+and can only reach the socket inside the leader process via the shim — this is the natural chokepoint for topology enforcement.
 
-## 2. 数据流
+## 2. Data flow
 
 ```
-队长派活（team_send / team_task start）
-  → dispatch：assertTopologyDeclared
-  → acquireSlot（全局并发门，nested 成员间消息除外——发送方已占位，再取会死锁）
-  → ensureLive（spawning map 去重：同成员并发只起一个进程；失败重启用同一 session-id 续聊）
-  → runDispatch：member.status=running → promptAndSettle（等 agent_settled）
-       ├── 成功：usage 累加 → status=idle → save
-       └── 失败：status=dead → killAndWait（防止新旧 run 在同一 session-id 上交错）→ 抛出
+Leader dispatch (team_send / team_task start)
+  → dispatch: assertTopologyDeclared
+  → acquireSlot (global concurrency gate, except nested member-to-member messages — the sender already holds a slot; taking another would deadlock)
+  → ensureLive (spawning map dedup: concurrent requests for the same member start only one process; a retry after failure resumes the conversation with the same session-id)
+  → runDispatch: member.status=running → promptAndSettle (wait for agent_settled)
+       ├── success: usage accumulates → status=idle → save
+       └── failure: status=dead → killAndWait (prevents old and new runs from interleaving on the same session-id) → throw
   → releaseSlot
 ```
 
-任务板：`team_task create`（validateGraph 拒环/未知依赖 → recomputeReady）→
-`start`（仅 `ready` 可派，assignee 必填，`dispatch.retries` 次重试）→
-成功即 `completeTask`（解锁下游），耗尽重试则 `failTask`。
+Task board: `team_task create` (validateGraph rejects cycles/unknown dependencies → recomputeReady) →
+`start` (only `ready` can be dispatched, assignee required, retries `dispatch.retries` times) →
+on success `completeTask` (unlocks downstream), and on exhausted retries `failTask`.
 
-成员间消息：成员 bash → `node bin/stepcode-team.mjs msg --to B --message ...` →
-socket → server 校验拓扑边 A→B → `manager.sendMessage(B, msg, {nested:true})` → 回复经同一连接返回。
-shim 经 shell 调用：成员工具白名单不含 `bash` 时（如 scout/planner/reviewer 预设）无法发消息，
-`team_set_topology` 与 `team_create_member` 的结果会就此警告，由队长中转兜底。
+Member-to-member messaging: member bash → `node bin/stepcode-team.mjs msg --to B --message ...` →
+socket → server checks topology edge A→B → `manager.sendMessage(B, msg, {nested:true})` → the reply returns over the same connection.
+The shim is invoked through a shell: when a member's tool allowlist lacks `bash` (e.g. the scout/planner/reviewer presets) it cannot send messages,
+and `team_set_topology` and `team_create_member` results warn about this; the leader relays as a fallback.
 
-## 3. 持久化布局
+## 3. Persistence layout
 
 ```
 <agentDir>/teams/<teamId>/
-  registry.json     团队状态（schemaVersion 1；原子写：tmp + rename，mode 0600）
-  sessions/         成员 session 文件（--session-dir；上下文续聊的载体）
-  prompts/          成员系统提示词（含协调段；respawn 时 --append-system-prompt 复用）
-  sock              Unix socket（mode 0600，仅 owner 可连接）
+  registry.json     team state (schemaVersion 1; atomic write: tmp + rename, mode 0600)
+  sessions/         member session files (--session-dir; the carrier for context continuation)
+  prompts/          member system prompts (include the coordination section; reused via --append-system-prompt on respawn)
+  sock              Unix socket (mode 0600, only the owner may connect)
 ```
 
-`<agentDir>` 遵循 `STEP_CODING_AGENT_DIR`（默认 `~/.stepcode/agent`），沙箱因此与真实环境隔离；
-`storage.dir` 可整体改道。teamId 派生自队长 session 文件名（eph- 前缀的会话不可重附）。
+`<agentDir>` follows `STEP_CODING_AGENT_DIR` (default `~/.stepcode/agent`), so the sandbox is isolated from the real environment;
+`storage.dir` can redirect it wholesale. teamId is derived from the leader session's filename (sessions with an eph- prefix cannot be re-attached).
 
-## 4. 深度与并发
+## 4. Depth and concurrency
 
-- **递归深度**：队长 = 0，成员 = 1（`STEPCODE_TEAM_DEPTH` 逐层 +1）。子成员深度
-  `< maxRecursionDepth` 时授予子团队：spawn 参数加 `-e extensions/index.ts` 且
-  `STEPCODE_TEAM_AUTOACTIVATE=1`（子队长自动激活）；达到上限的成员 `--no-extensions`
-  完全隔离（扩展工厂直接返回，零上下文开销）。
-- **并发**：`dispatch.maxConcurrent`（默认 5）是进程启动前的全局信号量——超出即排队，
-  成员进程直到有空位才启动；每成员另有串行队列（同一成员的 prompt 一个接一个）。
-  成员间消息（nested）绕过全局门，避免「A 持位等 B、B 等位」的死锁。
+- **Recursion depth**: leader = 0, member = 1 (`STEPCODE_TEAM_DEPTH` increments by one per level). When a sub-member's depth
+  is `< maxRecursionDepth` it is granted a sub-team: the spawn arguments add `-e extensions/index.ts` and
+  `STEPCODE_TEAM_AUTOACTIVATE=1` (the sub-leader auto-activates); a member that reaches the cap is fully
+  isolated with `--no-extensions` (the extension factory returns directly, zero context overhead).
+- **Concurrency**: `dispatch.maxConcurrent` (default 5) is a global semaphore applied before process startup — beyond it, requests queue,
+  and a member process is not started until a slot frees; each member also has a serialized queue (a member's prompts run one after another).
+  Member-to-member messages (nested) bypass the global gate, avoiding a "A holds a slot waiting for B, B waits for a slot" deadlock.
 
-## 5. 护栏位置一览
+## 5. Guardrail map
 
-| 护栏 | 实现位置 |
+| Guardrail | Implementation |
 |---|---|
-| 默认关闭激活 | activation.ts（setUnavailableTools 关门 + 激活释放） |
-| spawn 竞态互斥 | members.ts `spawning` map + `memberLocks` 串行化 |
-| 失败即杀 | members.ts runDispatch catch → killAndWait |
-| 并发上限 | members.ts acquireSlot/releaseSlot |
-| 拓扑强制 | team-server.ts handle + members.ts mayMessage |
-| 递归深度 | index.ts 深度门 + members.ts buildSpawnArgs |
-| socket 权限 | team-server.ts listen 后 chmod 0600 |
-| 成本告警 | tools.ts costWarning（config.cost.warnThreshold，0 禁用） |
-| idle 收割 | members.ts reapIdleMembers（跳过有排队派发的成员） |
-| 成员名额（仅存活计数） | members.ts createMemberLocked（dead 记录可恢复但不占名额） |
-| 消息能力提示 | members.ts memberCanMessage / messagingWarnings + tools.ts 结果文本 |
-| 退出清理 | index.ts session_shutdown → manager.shutdown（全置 dead + kill） |
+| Default-off activation | activation.ts (setUnavailableTools gate + release on activation) |
+| Spawn race mutex | members.ts `spawning` map + `memberLocks` serialization |
+| Kill on failure | members.ts runDispatch catch → killAndWait |
+| Concurrency cap | members.ts acquireSlot/releaseSlot |
+| Topology enforcement | team-server.ts handle + members.ts mayMessage |
+| Recursion depth | index.ts depth gate + members.ts buildSpawnArgs |
+| Socket permissions | team-server.ts chmod 0600 after listen |
+| Cost warning | tools.ts costWarning (config.cost.warnThreshold, 0 disables) |
+| Idle reaping | members.ts reapIdleMembers (skips members with queued dispatches) |
+| Member slots (live count only) | members.ts createMemberLocked (dead records are resumable but do not occupy a slot) |
+| Messaging capability notice | members.ts memberCanMessage / messagingWarnings + tools.ts result text |
+| Shutdown cleanup | index.ts session_shutdown → manager.shutdown (set all dead + kill) |
 
-## 6. 相关文档
+## 6. Related documents
 
-- [PROTOCOL.md](PROTOCOL.md)：RPC 命令/事件、socket 协议、registry schema、工具契约
-- [CONFIGURATION.md](CONFIGURATION.md)：配置参考
-- [TESTING.md](TESTING.md)：四层测试方法
-- [../README.md](../README.md)：使用说明
+- [PROTOCOL.md](PROTOCOL.md): RPC commands/events, socket protocol, registry schema, tool contracts
+- [CONFIGURATION.md](CONFIGURATION.md): config reference
+- [TESTING.md](TESTING.md): four-layer testing methodology
+- [../README.md](../README.md): usage instructions

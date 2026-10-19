@@ -71,7 +71,7 @@ step -e ./extensions/index.ts
 1. **斜杠命令 `/agent-team`**：调用即激活，并展示团队板；
 2. **自然语言**：prompt 文本命中激活关键词（如 "智能体团队"、"agent team"，可配置）。
 
-激活后在本次会话内保持。完整配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+激活后在本次会话内保持。完整配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md)
 （可整体禁用激活或调整关键词）。
 
 ## 工具
@@ -145,7 +145,7 @@ flowchart LR
     C2["m2"] --> C3
 ```
 
-强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
+强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md)。
 
 ## 内置角色预设（`agents/`）
 
@@ -165,7 +165,7 @@ flowchart LR
 agent 目录、sessions、团队注册表、`auth.json`——在 gitignore 内）。`sandbox/step`
 是钉住本沙箱跟踪版本的 Step Code 源码 submodule；克隆请用
 `--recurse-submodules`（或克隆后 `git submodule update --init sandbox/step`），
-更新与构建流程见 `sandbox/README.md`：
+更新与构建流程见 `sandbox/README_ZH.md`：
 
 ```bash
 ./sandbox/run.sh       # 以沙箱环境变量启动 step（cwd 为 sandbox/project）
@@ -177,7 +177,7 @@ bash sandbox/restore-project.sh  # 还原测试小项目到初始状态（种子
 `STEP_CODING_AGENT_PLAN_DIR` 指向 `sandbox/agent/...`。涉及模型调用的运行前，
 请在当前 shell `export STEP_API_KEY=<你自己的 key>`——密钥绝不落盘。
 LLM 层探针（`sandbox/smoke-phase4/10/11/12.ts`）同样随仓库分发，跑法见
-[docs/TESTING.md](docs/TESTING.md) 与 `sandbox/README.md`。
+[docs/TESTING.md](docs/TESTING_ZH.md) 与 `sandbox/README_ZH.md`。
 
 ## 项目结构
 
@@ -252,7 +252,7 @@ sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitigno
 `members.maxRecursionDepth`（默认 1）界定团队树深度——调大后成员才能组建自己的
 子团队；`dispatch.maxConcurrent`（默认 5）限制同时运行的成员数，超出的派活排队，
 轮到且有空位时才启动成员进程。完整参考：
-[docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
+[docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md)。
 
 环境变量覆盖：`STEPCODE_TEAM_DEBUG=1`（≡ `debug: true`）、
 `STEPCODE_TEAM_COST_WARN=<usd>`（≡ `cost.warnThreshold`）、
@@ -273,7 +273,7 @@ npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,
 
 冒烟集随仓库分发（`test/smoke/` + `test/run-smoke.sh`，临时 agentDir 经 mktemp 创建）。
 LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，跑法见
-[docs/TESTING.md](docs/TESTING.md) 与 `sandbox/README.md`。
+[docs/TESTING.md](docs/TESTING_ZH.md) 与 `sandbox/README_ZH.md`。
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 
@@ -281,10 +281,10 @@ LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，�
 
 | 文档 | 内容 |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 组件、数据流、存储布局、护栏位置 |
-| [docs/PROTOCOL.md](docs/PROTOCOL.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | 配置参考 |
-| [docs/TESTING.md](docs/TESTING.md) | 四层测试的运行方法 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE_ZH.md) | 组件、数据流、存储布局、护栏位置 |
+| [docs/PROTOCOL.md](docs/PROTOCOL_ZH.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md) | 配置参考 |
+| [docs/TESTING.md](docs/TESTING_ZH.md) | 四层测试的运行方法 |
 
 ## 已知限制
 

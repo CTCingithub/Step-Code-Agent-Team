@@ -1,124 +1,124 @@
-# 沙箱全面测试计划（plan-43）
+# Comprehensive Sandbox Test Plan (plan-43)
 
-> 目标：对已上线的功能做一次沙箱内的系统性 live 测试，暴露并修复问题。
-> 原则：零 token 探针优先；LLM 探针只用测试 key 做最小调用；失败先记录再修复再复跑。
+> [简体中文 →](./TEST-PLAN_ZH.md)
+> Goal: a systematic live test of the already-shipped features inside the sandbox, to expose and fix issues.
+> Principles: zero-token probes first; LLM probes make only minimal calls with a test key; on failure, record first, then fix, then re-run.
 >
-> 版本钉住：`sandbox/step` submodule 钉住本沙箱跟踪的 Step Code 版本；step 二进制的
-> 解析顺序（$STEPCODE_STEP_BIN > sandbox/step-build > PATH）见 `sandbox/step-bin.sh`，
-> 更新流程见 `sandbox/README.md`。
+> Version pinning: the `sandbox/step` submodule pins the Step Code revision this sandbox tracks; the step binary
+> resolution order ($STEPCODE_STEP_BIN > sandbox/step-build > PATH) is in `sandbox/step-bin.sh`,
+> and the update workflow is in `sandbox/README.md`.
 
-## 一、已有覆盖（回归基线）
+## I. Existing coverage (regression baseline)
 
-| 探针 | 覆盖 | 成本 |
+| Probe | Coverage | Cost |
 |---|---|---|
-| phase1 | 成员生命周期（spawn/握手/disband/重建） | 零 token |
-| phase2 | 任务板状态机（DAG/环/ready-set/持久化） | 零 token |
-| phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
-| phase4 | LLM 全路径（回复/记忆/恢复/成员间消息） | 少量 token |
-| phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token |
-| phase6 | 默认关闭激活 + 配置纯函数 + 模型/思考解析 | 零 token |
-| phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
-| phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
+| phase1 | Member lifecycle (spawn/handshake/disband/rebuild) | zero-token |
+| phase2 | Task board state machine (DAG/cycles/ready-set/persistence) | zero-token |
+| phase3 | Message service + shim status round-trip + preset loading | zero-token |
+| phase4 | LLM full path (reply/memory/resume/member-to-member messaging) | a few tokens |
+| phase5 | Concurrent-creation races/fail-fast/state machine/socket 0600/abort/shutdown | 1 token |
+| phase6 | Default-off activation + config pure functions + model/thinking parsing | zero-token |
+| phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero-token |
+| phase8 | Recursion depth /proc real check + sub-team self-bootstrap + concurrency defaults | zero-token |
 
-## 二、本次重点覆盖缺口
+## II. Coverage gaps targeted this round
 
-1. **并发上限 live**：`maxConcurrent` 的排队启动语义从未用真实派活验证（phase5 只测 spawn 互斥）
-2. **嵌套消息死锁（预判缺陷）**：成员 A 持信号量经 shim 消息 B 时，B 的派活也要信号量——`maxConcurrent=1` 或信号量耗尽时会死锁到超时。分析结论：server 中介的成员间消息应**绕过全局并发门**（发送方已占一个位，链式获取会自锁）
-3. **递归深度 2 live 链**：phase8 只验证进程级自举；子队长真实创建子成员并回传答案未验证
-4. **oneshot 模式**：自发版以来从未 live 测试
-5. **任务链 live**：`team_task start` 的真实派活→完成→解锁下游
-6. **`/agent-team` 命令路径**：命令激活 + 团队板 notify 从未触发过
-7. **流式进度**：`onUpdate`/interim 文本从未观测
-8. **Unicode/emoji 往返**、**kill -9 崩溃恢复**（含 onClose 后状态 staleness 预判）、**reaper 逻辑**、**配置边界**（storage.dir/项目级不加载/非法回退）
+1. **Concurrency cap live**: the queue-before-start semantics of `maxConcurrent` have never been verified with real dispatches (phase5 only tests spawn mutual exclusion)
+2. **Nested-message deadlock (anticipated defect)**: when member A holds a semaphore slot and messages B via the shim, B's dispatch also needs a slot — with `maxConcurrent=1` or when the semaphore is exhausted it deadlocks until timeout. Analysis conclusion: server-mediated member-to-member messaging should **bypass the global concurrency gate** (the sender already holds a slot; chained acquisition self-locks)
+3. **Recursion depth 2 live chain**: phase8 only verifies process-level self-bootstrap; a sub-leader really creating sub-members and relaying answers back is unverified
+4. **oneshot mode**: never live-tested since release
+5. **Task chain live**: the real dispatch → completion → downstream unlock of `team_task start`
+6. **`/agent-team` command path**: command activation + team board notify have never been triggered
+7. **Streaming progress**: `onUpdate`/interim text has never been observed
+8. **Unicode/emoji round-trip**, **kill -9 crash recovery** (including the anticipated state staleness after onClose), **reaper logic**, **config boundaries** (storage.dir/project-level not loading/invalid fallback)
 
-## 三、测试矩阵
+## III. Test matrix
 
-| 探针 | agentDir/配置 | 成本 | 对应缺口 |
+| Probe | agentDir/config | Cost | Gap |
 |---|---|---|---|
-| smoke-phase9 | cfg-misc（全节覆盖+storage.dir+debug） | 零 token | 8 |
-| smoke-phase10 | cfg-conc（maxConcurrent=2） | ~4 次 token | 1 |
-| smoke-phase10 | cfg-deadlock（maxConcurrent=1, timeoutMs=60s） | ~2 次 token | 2 |
-| smoke-phase11 | cfg-deep2（maxRecursionDepth=2, dispatch.timeoutMs=240s） | ~4 次 token | 3 |
-| smoke-phase12 | 默认配置 | ~6 次 token | 4/5/7/8 |
-| RPC 直发 `/agent-team` | 默认配置 | 零 token | 6 |
-| smoke-phase13 | 默认配置（合成 base/project 目录，settings.json 节 + 旧文件回退） | 零 token | 项目级配置 |
+| smoke-phase9 | cfg-misc (full-section coverage + storage.dir + debug) | zero-token | 8 |
+| smoke-phase10 | cfg-conc (maxConcurrent=2) | ~4 tokens | 1 |
+| smoke-phase10 | cfg-deadlock (maxConcurrent=1, timeoutMs=60s) | ~2 tokens | 2 |
+| smoke-phase11 | cfg-deep2 (maxRecursionDepth=2, dispatch.timeoutMs=240s) | ~4 tokens | 3 |
+| smoke-phase12 | default config | ~6 tokens | 4/5/7/8 |
+| RPC-direct `/agent-team` | default config | zero-token | 6 |
+| smoke-phase13 | default config (synthetic base/project dirs, settings.json section + legacy file fallback) | zero-token | project-level config |
 
-## 四、执行记录
+## IV. Execution record
 
-| 探针/配置 | 结果 | 失败项 | 后续 |
+| Probe/config | Result | Failures | Follow-up |
 |---|---|---|---|
-| phase9 / cfg-misc | ✅ 33/33 | 探针笔误×2（async 漏 await、reaper 阈值小于 spawn 间隔） | 修探针后全过 |
-| phase10 / cfg-conc | ✅ 2/2 | — | 4 并行派活、观测最大并发 2（排队启动正确） |
-| phase10 / cfg-deadlock | ✅ 修复后通过 | **产品缺陷：嵌套消息死锁**（A 持唯一信号量经 shim 消息 B，B 的派活也要信号量→60s 超时） | 已修复：server 派活标记 nested 绕过全局门 |
-| phase11 / cfg-deep2 | ✅ 修复后 4/4 | **产品缺陷①：`team_set_topology` 不在门控清单→激活前泄漏；②子队长 `--tools` 允许清单过滤掉团队工具→深度2 编排失效**（另有 cfg-deep2 配置文件丢失的测试设施问题、探针未启队长 server 问题） | 已修复：门控清单补全、子队长允许清单合并团队工具、协调提示加固（命令失败不排查工具）；探针补启队长 server + 拒答检测 |
-| phase12 / default | ✅ 9/9 | — | oneshot/任务链/Unicode/崩溃恢复/流式全过；顺带验证 **onClose 状态修复**（外部 kill 后不再滞留 idle） |
-| /agent-team 命令 | ✅ | — | RPC 直发 `/agent-team`→激活 notify + 团队板 notify |
-| 回归（修复后） | ✅ phase1/2/3/5/6/7 + phase4 全绿 | — | 三处产品修复无回归 |
-| phase13 / default（plan-51） | ✅ 14/14 通过（1 项 SKIP：探针环境项目未授信，live 受信任分支跳过；不受信 live 断言通过） | phase9 旧断言哨兵值 99 越界（members.max 校验范围 1–64），改 7 后通过——探针缺陷，非产品缺陷 | 项目级配置已接线；phase1–9 零 token 回归全绿 |
-| 探针入库（plan-51） | ✅ `test/smoke/` 承接 phase1/2/3/5/6/7/8/9/13，`test/run-smoke.sh` hermetic 运行；带 key 验证 phase5 通过 | phase5 需 key（此前手工循环以 `grep 'FAIL '` 漏判为通过——探针输出为 `FAILED:` 无尾随空格；runner 以 DONE 标记 + key 门控修正） | sandbox 副本已删；LLM 层（4/10/11/12）留 sandbox |
-| phase18 / 暂存 max=2（plan-55） | ✅ 13/13（先红后绿） | 探针流程缺陷：cap 检查后直接建 scout 会被旧语义拦截致中途退出——修探针（先整队解散再建） | 名额仅计存活成员；恢复参数忽略提示；拓扑/创建的无 bash 警告；随 runner 默认列表入库 |
+| phase9 / cfg-misc | ✅ 33/33 | 2 probe typos (async missing await, reaper threshold shorter than the spawn interval) | All pass after fixing the probe |
+| phase10 / cfg-conc | ✅ 2/2 | — | 4 parallel dispatches; observed max concurrency 2 (queue-before-start correct) |
+| phase10 / cfg-deadlock | ✅ pass after fix | **Product defect: nested-message deadlock** (A holds the only semaphore slot, messages B via the shim, B's dispatch also needs a slot → 60s timeout) | Fixed: server dispatches marked nested bypass the global gate |
+| phase11 / cfg-deep2 | ✅ 4/4 after fix | **Product defects ①: `team_set_topology` not in the gate list → leak before activation; ② sub-leader `--tools` allowlist filters out the team tools → depth-2 orchestration broken** (plus test-harness issues: cfg-deep2 config file missing, probe didn't start the leader server) | Fixed: gate list completed, sub-leader allowlist merges the team tools, coordination prompt hardened (command failure doesn't mean investigating tools); probe now starts the leader server + refusal detection |
+| phase12 / default | ✅ 9/9 | — | oneshot/task chain/Unicode/crash recovery/streaming all pass; also verified the **onClose state fix** (no longer stuck idle after an external kill) |
+| /agent-team command | ✅ | — | RPC-direct `/agent-team` → activation notify + team board notify |
+| Regression (after fixes) | ✅ phase1/2/3/5/6/7 + phase4 all green | — | The three product fixes introduce no regressions |
+| phase13 / default (plan-51) | ✅ 14/14 pass (1 SKIP: the probe's project is untrusted, so the live trusted branch is skipped; the untrusted live assertions pass) | phase9 legacy assertion sentinel value 99 out of range (members.max validation range 1–64), passes after changing to 7 — probe defect, not a product defect | Project-level config is wired up; phase1–9 zero-token regression all green |
+| Probes moved into the repo (plan-51) | ✅ `test/smoke/` now hosts phase1/2/3/5/6/7/8/9/13, `test/run-smoke.sh` runs hermetically; phase5 verified with a key | phase5 needs a key (an earlier manual loop with `grep 'FAIL '` misjudged it as passing — the probe output is `FAILED:` with no trailing space; the runner was corrected with a DONE marker + key gating) | The sandbox copies were deleted; the LLM layer (4/10/11/12) stays in sandbox |
+| phase18 / staged max=2 (plan-55) | ✅ 13/13 (red before, green after) | Probe flow defect: creating a scout right after the cap check was blocked by legacy semantics, aborting the run mid-way — fixed the probe (disband the whole team first, then create) | Slots count only live members; resume ignored-params hint; no-bash warnings on topology/create; checked in with the runner's default list |
 
-## 六、产品缺陷清单（本轮发现并已修复）
+## VI. Product defect list (found and fixed this round)
 
-1. **嵌套消息死锁**（members.ts/team-server.ts）：成员间消息经 server 派活时同样竞争全局信号量，发送方持位等回复、目标方等信号量→死锁至超时。修复：`SendOptions.nested`，server 中介的派活绕过全局门（每成员队列与拓扑门控仍然保留）。
-2. **门控泄漏**（activation.ts）：`team_set_topology` 注册后未加入 `TEAM_TOOL_NAMES`，激活前即可用，破坏默认关闭。修复：清单补全为 6 个工具。
-3. **子队长工具饥饿**（members.ts）：`--tools` 是全量允许清单（覆盖扩展工具），预设角色的清单把子队长的团队工具全部过滤。修复：`canOrchestrate` 时把 `TEAM_TOOL_NAMES` 合并进允许清单。
-4. **崩溃后状态滞留**（members.ts）：成员被外部 kill 后 `onClose` 仅在 running 时置 dead，idle 成员滞留"idle"。修复：任何退出都置 dead。
-5. **协调提示脆弱**（members.ts）：消息命令失败时 LLM 会去排查工具而弃任务。修复：提示中明确"命令失败不排查、继续干活并在汇报中注明"。
+1. **Nested-message deadlock** (members.ts/team-server.ts): member-to-member messages dispatched through the server compete for the same global semaphore; the sender holds a slot waiting for the reply, the target waits for a slot → deadlock until timeout. Fix: `SendOptions.nested`, server-mediated dispatches bypass the global gate (per-member queues and topology gating remain).
+2. **Gate leak** (activation.ts): after registration `team_set_topology` was not added to `TEAM_TOOL_NAMES`, so it was usable before activation, breaking default-off. Fix: the list was completed to 6 tools.
+3. **Sub-leader tool starvation** (members.ts): `--tools` is a full allowlist (overriding extension tools), and the preset role's list filtered out all of the sub-leader's team tools. Fix: merge `TEAM_TOOL_NAMES` into the allowlist when `canOrchestrate`.
+4. **State stuck after crash** (members.ts): after a member was externally killed, `onClose` only set dead when running, so idle members stayed "idle". Fix: any exit sets dead.
+5. **Fragile coordination prompt** (members.ts): when a message command failed, the LLM would go investigate tools and abandon the task. Fix: the prompt now explicitly states "on command failure do not investigate — keep working and note it in the report".
 
-## 五、修复与复跑规则
+## V. Fix and re-run rules
 
-1. 失败先定位根因（产品缺陷 vs 探针缺陷 vs 陈旧状态），记录在本文档
-2. 产品缺陷：修复后必须复跑对应探针 + 受影响回归
-3. 探针缺陷：修探针后重跑
-4. 全部通过后提交推送（修复与文档分开）
+1. On failure, first locate the root cause (product defect vs probe defect vs stale state) and record it in this document
+2. Product defect: after fixing, must re-run the corresponding probe + affected regressions
+3. Probe defect: re-run after fixing the probe
+4. After everything passes, commit and push (fixes and docs separate)
 
-## 七、沙箱测试小项目（plan-52）
+## VII. Sandbox test mini-project (plan-52)
 
-`sandbox/project/` 重建为零依赖 Node.js 小任务管理器（`src/tasks.js` + `src/cli.js` + `test/tasks.test.js`），
-作为团队成员在沙箱内做真实干活的载体（成员在这里勘察/规划/修复/审查，绝不指向真实仓库）。
+`sandbox/project/` was rebuilt as a zero-dependency Node.js mini task manager (`src/tasks.js` + `src/cli.js` + `test/tasks.test.js`),
+serving as the vehicle for team members doing real work inside the sandbox (members scout/plan/fix/review here; it never points at the real repo).
 
-- **种子 bug**：`complete(id)` 用 `id - 1` 索引数组而非按 id 查找；`remove` 之后 id 与数组位置错位，
-  测试 `complete after remove still targets the right task (seeded bug)` 失败（报 `task 3 not found`）。
-- **验证记录**：带 bug 状态 `cd sandbox/project && npm test` = 7/8 通过、退出码 1；临时改为按 id
-  查找后 8/8 全绿（证明可修复），已还原为带 bug 的演示状态。
-- `secret-sample.txt`（假密钥）保留，供路径保护护栏测试使用。
-- **还原机制**（plan-10）：`sandbox/project-pristine/` 为初始快照（不含 data/）；`bash sandbox/restore-project.sh` 用快照覆盖 project/ 已知文件并清除 data/。实测：模拟成员修复（8/8）→ 还原 → 回到 7/8 预期失败。每轮演示前先执行一次。
+- **Seeded bug**: `complete(id)` indexes the array with `id - 1` instead of looking up by id; after `remove`, ids and array positions misalign,
+  so the test `complete after remove still targets the right task (seeded bug)` fails (reporting `task 3 not found`).
+- **Verification record**: with the bug, `cd sandbox/project && npm test` = 7/8 pass, exit code 1; after temporarily switching to lookup by id,
+  8/8 all green (proving it's fixable); already restored to the buggy demo state.
+- `secret-sample.txt` (fake secret) is kept for the path-protection guardrail test.
+- **Restore mechanism** (plan-10): `sandbox/project-pristine/` is the initial snapshot (without data/); `bash sandbox/restore-project.sh` overwrites project/'s known files from the snapshot and clears data/. Verified: simulated member fix (8/8) → restore → back to the 7/8 expected failure. Run it once before each demo round.
 
-### 演示剧本
+### Demo script
 
-| 剧本 | 拓扑 | 步骤 |
+| Script | Topology | Steps |
 |---|---|---|
-| 修复链 | pipeline | scout 定位种子 bug → planner 出修复方案 → worker 修复并跑 `npm test` 转绿 → reviewer 审查 diff |
-| 并行审查 | star | 三个 reviewer 分头审查正确性 / 风格 / 安全，队长汇总 |
-| 巡回审查 | ring | 成员沿环传递审查意见；观察 `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应转为向队长汇报（错误信息明确提示）。2026-10-19 实测：两跳成功、第三跳成员按预判规避未发起 |
+| Fix chain | pipeline | scout locates the seeded bug → planner produces a fix plan → worker fixes and runs `npm test` to green → reviewer reviews the diff |
+| Parallel review | star | three reviewers review correctness / style / security in parallel, the leader merges the findings |
+| Round-robin review | ring | members pass review comments along the ring; watch how `topology.maxLoopCount` (default 2) bounds the review chain length — once exceeded, members should switch to reporting to the leader (the error message says so explicitly). Verified 2026-10-19: two hops succeeded; on the third hop the member declined as anticipated |
 
-## 八、演示项目复审与修复（plan-56，2026-10-19）
+## VIII. Demo project review and fixes (plan-56, 2026-10-19)
 
-来源：第二轮手动验证 session（`sandbox/session-log-2026-10-19.md`，已按 restore
-策略删除）的任务 2（star 三方并行审查）与任务 3（ring 巡回汇总）。复审对象为
-`sandbox/project` 演示代码（非插件本身）。
+Source: task 2 (star three-way parallel review) and task 3 (ring round-robin summary) of the second manual verification session (`sandbox/session-log-2026-10-19.md`, deleted per the restore
+strategy). The review target is the `sandbox/project` demo code (not the plugin itself).
 
-**已修复（project 与 project-pristine 同步；带 bug 7/8、修复态 8/8 基线不变）**：
+**Fixed (project and project-pristine in sync; the buggy 7/8 and fixed 8/8 baselines unchanged)**:
 
-| # | 问题 | 修复 |
+| # | Issue | Fix |
 |---|---|---|
-| M1 | CLI store 调用未捕获：崩溃 + 完整堆栈、exit 1（与参数校验的 exit 2 不一致） | `src/cli.js` 增 `run(fn)` 包装四个 store 调用：`console.error(err.message)` + exit 2 |
-| M2 | `load()` 不校验 state 形状：`{}`/`[]`/`{"tasks":[]}` 通过 JSON.parse 后泄漏进 store——或 TypeError 崩溃，或 nextId=NaN 致 id 全 undefined 静默失效 | `src/tasks.js` `load()` 出口校验（tasks 为数组 + nextId 为正整数），非法回退默认状态（与不可解析文件同语义） |
+| M1 | CLI store calls uncaught: crash + full stack, exit 1 (inconsistent with the exit 2 of argument validation) | `src/cli.js` adds a `run(fn)` wrapper around the four store calls: `console.error(err.message)` + exit 2 |
+| M2 | `load()` doesn't validate the state shape: `{}`/`[]`/`{"tasks":[]}` leak into the store after JSON.parse — either a TypeError crash, or nextId=NaN silently making all ids undefined | `src/tasks.js` `load()` validates on exit (tasks is an array + nextId is a positive integer), invalid values fall back to the default state (same semantics as an unparseable file) |
 
-**有意不修（fixture 设计使然）**：
+**Intentionally not fixed (by fixture design)**:
 
-- 种子 bug（`complete()` 的 `id-1` 索引）：演示靶子，restore 后必须重新存在；
-- 过期文案（测试名 `(seeded bug)`、兜底提示 `Expected demo failure`、README 已知问题 1）：描述的就是 restore 后重新成立的种子 bug；
-- M3 并发写无锁 / 非原子 save：README 已知项，单人 demo 可接受；
-- L6（parseInt 宽松）/ L3（add 非字符串崩溃）/ L8（strict === 字符串 id）/ L9（nextId 非 max+1）/ L10（remove 无返回）：API 健壮性 nit，CLI 层已有守门，demo 保持简单；
-- M5（测试顶层 rmSync 销毁真实 data/、CLI 测试打真实 DATA_FILE）：测试卫生问题，修复需为 store 注入数据目录，改动面超出 demo 定位——留待用户定夺；
+- The seeded bug (`complete()`'s `id-1` indexing): the demo target; it must reappear after restore;
+- Stale copy (test name `(seeded bug)`, fallback message `Expected demo failure`, README known issue 1): they describe exactly the seeded bug that re-establishes itself after restore;
+- M3 unlocked concurrent writes / non-atomic save: a known README item, acceptable for a single-person demo;
+- L6 (lenient parseInt) / L3 (add crashes on non-strings) / L8 (strict === string id) / L9 (nextId not max+1) / L10 (remove returns nothing): API robustness nits, the CLI layer already guards them, the demo stays simple;
+- M5 (top-level rmSync in tests destroys the real data/, CLI tests hit the real DATA_FILE): a test hygiene issue; fixing it requires injecting a data directory into the store, a change beyond the demo's scope — left for the user to decide;
 
-**成员视角误判（已核实）**：
+**Member misjudgments (verified)**:
 
-- 「项目缺 .gitignore，`data/tasks.json` 有被提交风险」：根仓库 .gitignore 已忽略 `sandbox/project/data/`——成员只见项目目录、不见仓库根，误判；
-- 「`secret-sample.txt` 被 git 跟踪属不良模式」：**有意设计**——README 明示的假密钥护栏样本，供「成员不得读取/外传密钥」验证，保持跟踪；
+- "The project lacks a .gitignore, so `data/tasks.json` risks being committed": the root repo's .gitignore already ignores `sandbox/project/data/` — the member only saw the project dir, not the repo root, hence the misjudgment;
+- "`secret-sample.txt` being tracked by git is a bad pattern": **intentional design** — the fake-secret guardrail sample called out in the README, kept tracked so that "members must not read/exfiltrate secrets" can be verified;
 
-**建议后续（可选，未实施）**：H1 区分 ENOENT 与损坏 JSON（损坏时显式报错而非静默重置）；title 控制字符/换行净化（防 list 输出注入）；测试数据目录隔离（M5）。
+**Suggested follow-ups (optional, not implemented)**: H1 distinguishes ENOENT from corrupt JSON (explicit error on corruption instead of a silent reset); sanitize control characters/newlines in title (guards against list output injection); isolate the test data directory (M5).
 
-**验证**：修复态 `npm test` 8/8；M1 复现路径（`add ""` / `done 99`）均为干净 exit 2；M2 复现路径（`{}` / `{"tasks":[]}`）均回退为空列表；restore 后 7/8 基线（种子失败）不变；project 与 project-pristine 逐文件一致。
+**Verification**: fixed state `npm test` 8/8; M1 reproduction paths (`add ""` / `done 99`) all exit cleanly with code 2; M2 reproduction paths (`{}` / `{"tasks":[]}`) all fall back to an empty list; the post-restore 7/8 baseline (seeded failure) unchanged; project and project-pristine file-for-file identical.

@@ -1,68 +1,82 @@
-# TUI 人工验证清单
+# TUI Manual Verification Checklist
 
-> `render.ts`（renderCall / renderResult）的**渲染内容**已由 phase15 探针在 headless 下
-> 断言（六工具的 call/result 字符串、折叠/展开、用量行、状态图标）；本清单只剩**观感与
-> 交互**（颜色/布局、toast 停留、ctrl+o、流式节奏）。全部在沙箱内进行，与真实
-> `~/.stepcode` 隔离；涉及模型调用，先导出测试 key（只经环境变量传递）。
+> [简体中文 →](./TUI-VERIFICATION_ZH.md)
 >
-> **验证记录（2026-10-18）**：`/agent-team <请求>` 全链路已在真实 TUI 实测通过——
-> 激活、团队板、参数转发、7 成员双拓扑（pipeline + star）团队实跑、任务板
-> T1→T4 流转均正常（详见 MANUAL-TESTING.md §5 实测记录）；下方未打勾的观感项
-> 仍待逐项过目。
+> The **rendered content** of `render.ts` (renderCall / renderResult) is already
+> asserted headless by the phase15 probe (the six tools' call/result strings,
+> collapse/expand, usage rows, status icons); what is left in this checklist is
+> only **look, feel, and interaction** (color/layout, toast dwell time, ctrl+o,
+> streaming rhythm). Everything runs inside the sandbox, isolated from your real
+> `~/.stepcode`; it involves model calls, so export the test key first (passed
+> only through the environment).
+>
+> **Verification record (2026-10-18)**: the `/agent-team <request>` full chain
+> has been manually verified in a real TUI — activation, the team board, argument
+> forwarding, a real 7-member two-topology (pipeline + star) team run, and
+> T1→T4 task board transitions all work (see the manual test records in
+> [MANUAL-TESTING.md](MANUAL-TESTING.md) §5); the unchecked look-and-feel items
+> below still need a pass one by one.
 
-## 0. 环境准备（复制粘贴）
+## 0. Environment setup (copy-paste)
 
 ```bash
-cd <本仓库的检出路径>          # 例如 cd ~/GitProjects/Step-Code-Agent-Team
+cd <path to this repo checkout>      # e.g. cd ~/GitProjects/Step-Code-Agent-Team
 export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' local/test-api-key.md | cut -d= -f2)"
-./sandbox/run.sh               # 在 sandbox/project 中启动 step，已加载本扩展
+./sandbox/run.sh                     # starts step inside sandbox/project, with this extension loaded
 ```
 
-`run.sh` 会把 agentDir/session/plan 指向 `sandbox/agent/*`、cwd 指向
-`sandbox/project`，与真实 `~/.stepcode` 完全隔离。没有 key 时成员派活会失败，
-本清单第 5 步起需要 key。
+`run.sh` points agentDir/session/plan at `sandbox/agent/*` and cwd at
+`sandbox/project`, fully isolated from your real `~/.stepcode`. Without a key,
+dispatching work to members fails; from step 5 of this checklist onward a key is
+required.
 
-## 1. 使用方式
+## 1. How to use
 
-清单每一步都是**一整行可直接复制粘贴的 prompt**：队长模型收到后会自行调用对应的
-团队工具，你要做的只是核对渲染效果是否符合「预期」列。按顺序粘贴即可；每步之间
-等上一步渲染完成再粘下一步。第 6 步是按键操作，不是 prompt。
+Each step of the checklist is **a single copy-pasteable prompt line**: once the
+leader model receives it, it calls the matching team tool on its own, and all you
+have to do is check that the rendering matches the "Expected render" column.
+Paste them in order; between steps, wait for the previous render to finish before
+pasting the next one. Step 6 is a key press, not a prompt.
 
-## 2. 清单（按顺序粘贴）
+## 2. Checklist (paste in order)
 
-| # | 复制粘贴 | 预期渲染 | 结果 |
+| # | Copy-paste | Expected render | Result |
 |---|---|---|---|
-| 1 | `我想用智能体团队功能熟悉一下这个沙箱项目` | 激活 notify：「Agent team plugin activated (explicit plugin mention). Team tools are now available.」；团队工具从此对模型可见 | ☐ |
-| 2 | `/agent-team` | 团队板 notify：`Team "<id>"` + 成员行（○/●/✗ 图标 + role + status + model/thinking）+ 任务行（含 blockedBy）+ `spend: $x.xxxx`；空队时提示用 team_create_member | ☐ |
-| 3 | `创建一个 scout 角色的成员，名字叫 scout1` | renderCall：`team +scout1 (scout)`；renderResult：`✓ scout1 (scout) [idle] … thinking=high` | ☐ |
-| 4 | `再创建一个 worker 角色的成员，名字叫 worker1` | 同第 3 步的 `+worker1 (worker)` / `✓ worker1 (worker) [idle]`（为第 7 步的 pipeline 拓扑提供第二个成员） | ☐ |
-| 5 | `让 scout1 用一句话介绍他自己` | renderCall：`team →scout1` + 消息预览（≤70 字符）；长 run 期间 onUpdate 流式刷新（先 "(member is working...)"，随后 interim 文本）；renderResult：用量行（`1 turn, $x.xxxx`）+ 回复正文（默认折叠 3 行，附 "(ctrl+o to expand)"） | ☐ |
-| 6 | *（按键操作，非 prompt）* 在第 5 步的结果上按 `ctrl+o` | 完整正文展开；再按一次折叠回去 | ☐ |
-| 7 | `把通信拓扑设置为 pipeline，然后让 scout1 跟 worker1 问个好` | renderCall：`team topology pipeline`（命名形状不传 edges，故无边数；若模型显式传了 edges 则附 ` N edge(s)`）；renderResult 头：`pipeline · 1 edge(s)`（scout1→worker1）；随后 `team →scout1` 派活成功（pipeline 方向允许） | ☐ |
-| 8 | `创建一个任务：统计这个项目的源文件数量，指派给 scout1，然后启动它` | renderCall：`team task create T1 统计这个项目的源文件数量` → `team task start T1`；renderResult：`T1 [done] @scout1 统计这个项目的源文件数量` + 回复正文 | ☐ |
-| 9 | `汇报一下团队当前状态` | 每成员一行（图标 + name + role + 用量），任务逐行（id [status] title，50 字符预览） | ☐ |
-| 10 | `解散 worker1` | renderCall：`team −worker1`；renderResult：`worker1` | ☐ |
-| 11 | *（退出）* `Ctrl+C` 两次或 `/quit` 退出沙箱会话 | 无孤儿成员进程：`pgrep -f 'team-.*-scout1'` 为空 | ☐ |
+| 1 | `I'd like to use the agent team feature to get familiar with this sandbox project` | Activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
+| 2 | `/agent-team` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/thinking) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
+| 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … thinking=high` | ☐ |
+| 4 | `Create another member with the worker role, named worker1` | Same as step 3: `+worker1 (worker)` / `✓ worker1 (worker) [idle]` (provides the second member for step 7's pipeline topology) | ☐ |
+| 5 | `Ask scout1 to introduce himself in one sentence` | renderCall: `team →scout1` + message preview (≤70 chars); during a long run onUpdate streams updates (first "(member is working...)", then interim text); renderResult: usage row (`1 turn, $x.xxxx`) + the reply body (collapsed to 3 lines by default, with "(ctrl+o to expand)") | ☐ |
+| 6 | *(key press, not a prompt)* Press `ctrl+o` on step 5's result | The full body expands; press again to collapse it | ☐ |
+| 7 | `Set the messaging topology to pipeline, then have scout1 say hi to worker1` | renderCall: `team topology pipeline` (a named shape passes no edges, so there is no edge count; if the model explicitly passes edges, ` N edge(s)` is appended); renderResult header: `pipeline · 1 edge(s)` (scout1→worker1); then `team →scout1` dispatches successfully (allowed in the pipeline direction) | ☐ |
+| 8 | `Create a task: count the source files in this project, assign it to scout1, then start it` | renderCall: `team task create T1 count the source files in this project` → `team task start T1`; renderResult: `T1 [done] @scout1 count the source files in this project` + the reply body | ☐ |
+| 9 | `Report the team's current status` | One line per member (icon + name + role + usage), tasks line by line (id [status] title, 50-char preview) | ☐ |
+| 10 | `Disband worker1` | renderCall: `team −worker1`; renderResult: `worker1` | ☐ |
+| 11 | *(exit)* Press `Ctrl+C` twice or `/quit` to leave the sandbox session | No orphan member processes: `pgrep -f 'team-.*-scout1'` is empty | ☐ |
 
-## 3. 收尾：会话日志（可选）与沙箱还原
+## 3. Wrap-up: session log (optional) and sandbox restore
 
-想留下本次验证的过程记录时，先粘贴下面这条 prompt 让队长生成日志：
+To keep a process record of this verification run, first paste the prompt below
+and let the leader generate the log:
 
 ```text
-请在仓库的 sandbox/ 目录（不是 sandbox/project）中创建日志文件 session-log-<今天日期>.md，记录本 session 的用户 prompt、你的工作记录与各成员的回复内容
+In the repo's sandbox/ directory (not sandbox/project), create a log file session-log-<today's date>.md recording this session's user prompts, your work log, and each member's replies
 ```
 
-随后还原沙箱。演示/验证会改动 `sandbox/project/`（成员可能修复种子 bug）并产生会话、团队注册表等
-运行时状态。按需选择：
+Then restore the sandbox. Demos/verification change `sandbox/project/` (a member
+may fix the seeded bug) and produce runtime state such as sessions and team
+registries. Pick what you need:
 
-**快速还原（每轮验证后必做）**——还原演示项目到种子 bug 状态、清除运行时数据：
+**Quick restore (required after every verification round)** — restore the demo
+project to its seeded-bug state and clear the runtime data:
 
 ```bash
 bash sandbox/restore-project.sh
 ```
 
-**彻底清场（可选，想要全新沙箱时）**——删除 gitignored 的沙箱运行时状态
-（会话、团队注册表、计划、live-context、演示项目 data/；不影响仓库内任何入库文件）：
+**Full reset (optional, when you want a fresh sandbox)** — delete the gitignored
+sandbox runtime state (sessions, team registries, plans, live-context, the demo
+project's data/; does not touch any checked-in file in the repo):
 
 ```bash
 rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
@@ -70,10 +84,11 @@ rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
 bash sandbox/restore-project.sh
 ```
 
-> `sandbox/agent/trust.json`（项目信任记录）会保留——它是沙箱自身的运行时状态，
-> 删除只会让下次重新弹一次信任框，无其他影响。cfg-* 目录下的 sessions/teams
-> 同属运行时状态，需要时可用同样方式清理。
+> `sandbox/agent/trust.json` (the project trust record) is kept — it is the
+> sandbox's own runtime state, and deleting it only makes the trust prompt pop up
+> once next time, with no other effect. The sessions/teams under `cfg-*` are
+> runtime state too; clean them the same way when needed.
 
-## 4. 记录
+## 4. Notes
 
-- 验证日期 / step 版本 / 失败项与备注：＿＿＿＿
+- Verification date / step version / failed items and notes: ＿＿＿＿

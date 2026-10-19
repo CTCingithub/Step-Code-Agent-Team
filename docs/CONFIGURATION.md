@@ -1,168 +1,152 @@
-# 配置参考
+# Configuration Reference
 
-Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节控制全部行为参数（沿用 Step Code 的 settings 约定）。
+> [简体中文 →](./CONFIGURATION_ZH.md)
 
-## 位置与优先级
+Step-Code-Agent-Team controls all behavior parameters through the `stepcodeAgentTeam` config section in `settings.json` (following Step Code's settings conventions).
+
+## Location and Precedence
 
 ```
-全局：  <agentDir>/settings.json 的 "stepcodeAgentTeam" 节
-       （agentDir 遵循 STEP_CODING_AGENT_DIR，默认 ~/.stepcode/agent；
-         开发沙箱中自动指向 sandbox/agent，互不干扰）
-项目级：<cwd>/.stepcode/settings.json 的 "stepcodeAgentTeam" 节
-       （仅当项目被信任时加载；信任信息只在事件处理器中可用，
-         故在 session_start 时就地合并进已加载的配置）
+Global:  the "stepcodeAgentTeam" section of <agentDir>/settings.json
+        (agentDir follows STEP_CODING_AGENT_DIR, default ~/.stepcode/agent;
+         in the dev sandbox it automatically points at sandbox/agent, so the two never interfere)
+Project: the "stepcodeAgentTeam" section of <cwd>/.stepcode/settings.json
+        (loaded only when the project is trusted; trust info is only available
+         inside event handlers, so it is merged in place into the loaded config at session_start)
 ```
 
-优先级（全局与项目级两个层级各自如此）：**内置默认 < 旧版专用文件 < settings.json 节 < 环境变量覆盖**。
+Precedence (the same within each of the global and project tiers): **built-in defaults < legacy dedicated files < settings.json section < environment overrides**.
 
-- 文件为标准 JSON（不支持注释）；插件**只读取**自己的节，绝不写入 settings.json（step 自身命令会保留未知键）。
-- 未知键会被忽略（`debug: true` 时在 stderr 打印提示）。
-- 非法值回退为默认值并在 debug 日志中警告。
-- 配置在扩展加载时读取一次并缓存；项目级配置在首个事件上下文可用时就地合并（同一次会话内生效）；其余修改需新会话生效（`/reload` 会重新读取，但插件也会随之回到默认关闭状态）。
-- 已知妥协：注册时固化的工具描述串（如模型列表）与本进程的深度门（`maxRecursionDepth`）不随项目级配置刷新——生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
-- **旧版兼容**：此前的专用文件 `<agentDir>/stepcode-agent-team.json` 与 `<cwd>/.stepcode/stepcode-agent-team.json` 仍然有效（在同层级的 settings 节之前应用，debug 模式提示迁移）；建议尽早搬入 settings.json 的 `stepcodeAgentTeam` 节。
+- Files are standard JSON (no comments supported); the plugin only **reads** its own section and never writes to `settings.json` (step's own commands preserve unknown keys).
+- Unknown keys are ignored (a note is printed to stderr when `debug: true`).
+- Invalid values fall back to defaults with a warning in the debug log.
+- Config is read once and cached at extension load; project-level config is merged in place as soon as the first event context is available (takes effect within the same session); other changes take effect in a new session (`/reload` re-reads it, but the plugin also returns to its default-off state).
+- Known compromise: tool description strings fixed at registration (e.g. the model list) and this process's depth gate (`maxRecursionDepth`) are not refreshed by a project-level override — the effective depth bound is propagated to sub-members via `STEPCODE_TEAM_MAXDEPTH`, and description changes take effect next session.
+- **Legacy compatibility**: the previous dedicated files `<agentDir>/stepcode-agent-team.json` and `<cwd>/.stepcode/stepcode-agent-team.json` are still honored (applied before the settings section at the same tier, with a migration hint in debug mode); migrate them into the `stepcodeAgentTeam` section of `settings.json` as early as possible.
 
-## 环境变量覆盖
+## Environment Overrides
 
-| 变量 | 作用 |
+| Variable | Purpose |
 |---|---|
-| `STEPCODE_TEAM_DEBUG=1` | 等价 `debug: true` |
-| `STEPCODE_TEAM_COST_WARN=<usd>` | 覆盖 `cost.warnThreshold`（非法值忽略） |
-| `STEPCODE_TEAM_MAXDEPTH=<n>` | 覆盖 `members.maxRecursionDepth`（1–4，非法值忽略）；队长按生效值注入子成员进程 |
-| `STEPCODE_TEAM_SOCK` | 由队长自动注入成员进程，指向团队服务 socket（无需手动设置） |
+| `STEPCODE_TEAM_DEBUG=1` | Equivalent to `debug: true` |
+| `STEPCODE_TEAM_COST_WARN=<usd>` | Overrides `cost.warnThreshold` (invalid values ignored) |
+| `STEPCODE_TEAM_MAXDEPTH=<n>` | Overrides `members.maxRecursionDepth` (1–4; invalid values ignored); the leader injects the effective value into sub-member processes |
+| `STEPCODE_TEAM_SOCK` | Injected automatically by the leader into member processes, pointing at the team service socket (no manual setup needed) |
 
-## 完整配置项
+## Full Configuration
 
-以下内容放入 `<agentDir>/settings.json`（全局）或 `<cwd>/.stepcode/settings.json`（项目级）的 `stepcodeAgentTeam` 节内：
+Put the following in the `stepcodeAgentTeam` section of `<agentDir>/settings.json` (global) or `<cwd>/.stepcode/settings.json` (project):
 
 ```jsonc
 {
   "activation": {
-    "enabled": true,                  // 总开关：false 时任何触发都不激活
-    "keywords": ["agent team", "智能体团队", "..."],   // 自然语言触发词；[] = 禁用关键词激活
-    "notifyOnActivate": true          // 激活时是否 notify 提示
+    "enabled": true,                  // master switch: no trigger activates when false
+    "keywords": ["agent team", "智能体团队", "..."],   // natural-language trigger keywords; [] disables keyword activation
+    "notifyOnActivate": true          // whether to notify on activation
   },
   "models": {
-    "available": ["step-5-preview"],  // 成员可用模型列表
-    "autonomousSelection": false,     // 对话模型自主为子代理选模型
-    "autonomousThinking": false       // 对话模型自主为子代理选思考强度
+    "available": ["step-5-preview"],  // model list available to members
+    "autonomousSelection": false,     // conversation model autonomously picks models for sub-agents
+    "autonomousThinking": false       // conversation model autonomously picks thinking effort for sub-agents
   },
   "members": {
-    "max": 8,                         // 存活成员上限（1–64；dead 成员可恢复但不占名额）
-    "defaultRole": "worker",          // 未指定 role 时的默认角色（命中同名预设）
-    "defaultTools": null,             // 成员默认工具白名单；null = 用预设或全量
-    "maxRecursionDepth": 1            // 团队树最大深度（1–4）：队长=0，其成员=1
+    "max": 8,                         // live-member cap (1–64; dead members can be resumed but don't occupy a slot)
+    "defaultRole": "worker",          // default role when role is unspecified (matches the same-named preset)
+    "defaultTools": null,             // member default tool allowlist; null = use the preset or all tools
+    "maxRecursionDepth": 1            // max team-tree depth (1–4): leader=0, its members=1
   },
   "dispatch": {
-    "maxConcurrent": 5,               // 同时运行的成员上限（1–16）；超出的派活排队，轮到才启动
-    "timeoutMs": 180000,              // 单次 dispatch/promptAndSettle 超时
-    "handshakeTimeoutMs": 15000,      // 成员 spawn 握手超时
-    "retries": 1                      // 任务失败重试次数（0–5）
+    "maxConcurrent": 5,               // cap on simultaneously running members (1–16); dispatches beyond it queue and start when their turn comes
+    "timeoutMs": 180000,              // single dispatch/promptAndSettle timeout
+    "handshakeTimeoutMs": 15000,      // member spawn handshake timeout
+    "retries": 1                      // task failure retry count (0–5)
   },
   "oneshot": {
-    "timeoutMs": 180000               // oneshot 进程超时
+    "timeoutMs": 180000               // oneshot process timeout
   },
   "cost": {
-    "warnThreshold": 1                // 累计花费告警阈值（美元）；0 = 禁用
+    "warnThreshold": 1                // cumulative spend warning threshold (USD); 0 = disabled
   },
   "idle": {
-    "reapAfterMs": 1800000,           // 空闲成员回收阈值（30 分钟）
-    "reapIntervalMs": 300000          // 回收检查间隔（5 分钟）
+    "reapAfterMs": 1800000,           // idle member reaping threshold (30 minutes)
+    "reapIntervalMs": 300000          // reaping check interval (5 minutes)
   },
   "storage": {
-    "dir": null                       // 团队数据根目录；null = <agentDir>/teams
+    "dir": null                       // team data root directory; null = <agentDir>/teams
   },
   "topology": {
-    "default": "star",                // 新团队默认拓扑形状（star/pipeline/mesh/ring/custom）
-    "requireDeclaration": false,      // true 时未显式声明拓扑前禁止派活
-    "maxLoopCount": 2                 // 环形消息链最大跳数（0 = 无上限，范围 0–64）
+    "default": "star",                // default topology shape for new teams (star/pipeline/mesh/ring/custom)
+    "requireDeclaration": false,      // when true, dispatch is forbidden before the topology is explicitly declared
+    "maxLoopCount": 2                 // max hops in a ring message chain (0 = unlimited, range 0–64)
   },
-  "debug": false                      // 调试日志（模型裁决、配置警告、socket 错误）
+  "debug": false                      // debug logging (model decisions, config warnings, socket errors)
 }
 ```
 
-## 激活机制（默认关闭）
+## Activation Mechanism (default off)
 
-插件加载后团队工具即被声明为不可用（`pi.setUnavailableTools`）：模型看不到它们，
-系统提示词中也不出现，不会创建 socket、定时器或成员进程。两种触发方式：
+After the plugin loads, the team tools are declared unavailable (`pi.setUnavailableTools`): the model cannot see them, they do not appear in the system prompt, and no socket, timer, or member process is created. Two trigger modes:
 
-1. **斜杠命令 `/agent-team`**：命令被调用即激活，并展示团队板。
-2. **自然语言**：prompt 文本命中 `activation.keywords`（大小写不敏感）即激活。
+1. **Slash command `/agent-team`**: invoking the command activates the plugin and shows the team board.
+2. **Natural language**: a prompt whose text matches `activation.keywords` (case-insensitive) activates the plugin.
 
-激活后：工具释放、消息服务启动、空闲收割启动，并保持粘性至会话结束。
-`activation.enabled: false` 时两种触发都无效，`/agent-team` 会提示已被配置禁用。
+Once activated: the tools are released, the message service starts, idle reaping starts, and it stays sticky until the session ends. When `activation.enabled: false`, neither trigger works, and `/agent-team` reports that it has been disabled by configuration.
 
-## `models` 节语义
+## `models` Section Semantics
 
-**模型解析**（队长当前模型 = 会话正在使用的模型）：
+**Model resolution** (the leader's current model = the model the session is using):
 
-| `autonomousSelection` | 行为 |
+| `autonomousSelection` | Behavior |
 |---|---|
-| `false`（默认） | 所有成员**强制使用队长当前模型**；预设模型与显式 `model` 参数被忽略（debug 日志记录） |
-| `true` | 解析链：显式 `model` → 预设角色模型 → 队长当前模型。显式参数不在 `available` 中 → **报错并列出可用模型**；预设模型不在列表中 → 回退到 `available[0]` |
+| `false` (default) | All members **are forced onto the leader's current model**; preset models and the explicit `model` parameter are ignored (recorded in the debug log) |
+| `true` | Resolution chain: explicit `model` → preset role model → leader's current model. If the explicit parameter is not in `available` → **error listing the available models**; if the preset model is not in the list → fall back to `available[0]` |
 
-**思考强度解析**（合法档位：`off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`）：
+**Thinking effort resolution** (valid levels: `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`):
 
-| `autonomousThinking` | 行为 |
+| `autonomousThinking` | Behavior |
 |---|---|
-| `false`（默认） | 成员思考强度**默认为 `high`**；`team_create_member` 的显式 `thinking` 参数可覆盖 |
-| `true` | 工具描述告知队长 LLM 可逐成员从合法档位自主选择；显式 `thinking` 被采用；未指定时仍为 `high` |
+| `false` (default) | Member thinking effort **defaults to `high`**; the explicit `thinking` parameter of `team_create_member` can override it |
+| `true` | The tool description tells the leader LLM it may choose per member from the valid levels; an explicit `thinking` is adopted; when unspecified it is still `high` |
 
-注意：成员进程自此默认携带 `--thinking high`（此前不传，用 step 默认档），
-单次成本会略高于从前；可用 `thinking` 参数按需调低。
+Note: member processes now carry `--thinking high` by default (previously it was not passed, and step's default level was used), so a single run costs slightly more than before; use the `thinking` parameter to lower it as needed.
 
-## `topology` 节语义
+## `topology` Section Semantics
 
-成员间消息默认走**星型**：全部经队长中转，成员之间不能直接通信。队长用
-`team_set_topology` 工具按任务结构声明拓扑后，成员只能沿声明的边直接通信；
-越界消息会被 team-server 拒绝，并告知可用邻居。
+Member-to-member messaging defaults to a **star**: everything is relayed through the leader, and members cannot communicate directly. After the leader declares a topology matching the task structure with the `team_set_topology` tool, members may communicate directly only along the declared edges; out-of-bounds messages are rejected by the team-server, which reports the available neighbors.
 
-| 形状 | 边 | 适用 |
+| Shape | Edges | Fits |
 |---|---|---|
-| `star`（默认） | 无 | 并行独立 + 队长汇总 |
-| `pipeline` | m1→m2→…→mn（按成员创建顺序） | 顺序精炼流水线 |
-| `mesh` | 全部有序对 | 同伴互查 |
-| `ring` | mi→mi+1（末位回环到首位） | 环形流水 |
-| `custom` | 显式边列表 `[{from, to}]` | 精确控制 |
+| `star` (default) | none | Independent parallel strands that the leader merges |
+| `pipeline` | m1→m2→…→mn (in member creation order) | Sequential refinement pipeline |
+| `mesh` | all ordered pairs | Peers cross-checking each other |
+| `ring` | mi→mi+1 (last wraps to first) | Round-robin pipeline |
+| `custom` | explicit edge list `[{from, to}]` | Precise control |
 
-- `topology.default`：队长声明前新团队的默认形状（默认 `star`）。
-- `topology.requireDeclaration`：`true` 时，未调用 `team_set_topology` 显式声明
-  拓扑前，`team_send` / `team_task` / oneshot 一律拒绝——字面落实"先设计拓扑
-  再开工"（默认 `false`，星型始终可用）。
-- `topology.maxLoopCount`：成员间消息链的最大跳数。队长→成员派发记链长 0，成员
-  每转发一次 +1；下一跳会使链长超过上限（上限 ≠ 0）时该消息被 team-server 拒绝，
-  发送方转为向队长汇报——同时防止环形巡游死锁（发送方持运行位等待、目标方又排队
-  等位）。默认 `2`，`0` = 无上限，合法范围 0–64；manager 层在嵌套派发前另有兜底校验。
+- `topology.default`: the default shape for new teams before the leader declares one (default `star`).
+- `topology.requireDeclaration`: when `true`, `team_send` / `team_task` / oneshot are all rejected until `team_set_topology` has explicitly declared the topology — literally enforcing "design the topology before work" (default `false`; the star is always available).
+- `topology.maxLoopCount`: the max hop count for member-to-member message chains. A leader→member dispatch counts as chain length 0, and each member forward adds 1; if the next hop would push the chain length over the limit (limit ≠ 0), the message is rejected by the team-server and the sender is told to report to the leader instead — which also prevents ring-circulation deadlocks (the sender holds a running slot while waiting, and the target queues waiting for a slot). Default `2`; `0` = unlimited; valid range 0–64; the manager layer has an additional fallback check before nested dispatches.
 
-成员通过 `stepcode-team status` 动态获知自己的可通知邻居（server 按发送方身份
-返回 `mayMessage` 列表）。
+Members learn their notifiable neighbors dynamically via `stepcode-team status` (the server returns the `mayMessage` list based on the sender's identity).
 
-## 递归深度与并发上限
+## Recursion Depth and Concurrency Limits
 
-**`members.maxRecursionDepth`（默认 1）**——团队树最大深度（队长会话 = 0，其成员 = 1）：
+**`members.maxRecursionDepth` (default 1)** — the maximum team-tree depth (leader session = 0, its members = 1):
 
-| 值 | 行为 |
+| Value | Behavior |
 |---|---|
-| `1`（默认） | 成员不能再组建团队：成员以 `--no-extensions` 启动，扩展在其会话中完全惰性（零上下文开销） |
-| `2` | 成员可组建自己的子团队：成员进程加载本扩展并自动激活（父级经 env 授予），其子成员深度为 2 |
-| `3` / `4` | 依此类推（配置上限 4，防止成本失控） |
+| `1` (default) | Members cannot form teams: members start with `--no-extensions`, and the extension is fully inert in their sessions (zero context overhead) |
+| `2` | Members can form their own sub-teams: the member process loads this extension and activates automatically (granted by the parent via env), and its sub-members are at depth 2 |
+| `3` / `4` | And so on (config cap 4, to prevent runaway costs) |
 
-实现要点（全部走代码与环境变量，不占用模型上下文）：深度经 `STEPCODE_TEAM_DEPTH`
-逐层传递；达到深度上限的会话中，扩展工厂直接返回——不注册工具、不挂钩子、不起
-服务；子队长的团队是**独立的 team**（独立注册表与 socket），兄弟间消息仍受父级
-拓扑约束。
+Implementation notes (all handled in code and environment variables, not consuming model context): depth is propagated level by level via `STEPCODE_TEAM_DEPTH`; in a session that has reached the depth cap, the extension factory returns directly — no tools registered, no hooks attached, no service started; a sub-leader's team is an **independent team** (independent registry and socket), and sibling messaging is still constrained by the parent topology.
 
-**`dispatch.maxConcurrent`（默认 5）**——同时运行的成员上限。派活
-（`team_send` / `team_task` / oneshot）在**启动成员进程之前**先获取运行位：
-超出上限的派活排队，轮到且有空位时才启动该成员——即"部分子智能体等待其他
-子智能体完成后再启动"。`team_create_member` 仍会立即启动成员进程（空闲待命），
-上限约束的是"正在工作"的成员数。
+**`dispatch.maxConcurrent` (default 5)** — the cap on simultaneously running members. Dispatch (`team_send` / `team_task` / oneshot) acquires a running slot **before starting the member process**: dispatches beyond the cap queue, and the member is started only when its turn comes and a slot is free — i.e., "some sub-agents wait for other sub-agents to finish before starting". `team_create_member` still starts the member process immediately (idle and standing by); the cap constrains the number of members that are "working".
 
-## 示例
+## Examples
 
-**默认（零配置即可）**：不创建配置文件——默认关闭激活、成员用队长模型、思考强度 high、花费阈值 $1。
+**Default (zero config needed)**: no config file needed — activation is off by default, members use the leader's model, thinking effort high, spend threshold $1.
 
-**多模型自主（队长按任务挑模型）**：
+**Multi-model autonomy (the leader picks models per task)**:
 
 ```json
 {
@@ -175,7 +159,7 @@ Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节�
 }
 ```
 
-**保守（禁用关键词激活，只认 /agent-team；关闭花费告警）**：
+**Conservative (disable keyword activation; only `/agent-team` counts; turn off the spend warning)**:
 
 ```json
 {
@@ -184,10 +168,10 @@ Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节�
 }
 ```
 
-**调试**：
+**Debug**:
 
 ```json
 { "debug": true }
 ```
 
-等价于运行前 `export STEPCODE_TEAM_DEBUG=1`。
+Equivalent to running `export STEPCODE_TEAM_DEBUG=1` before the run.

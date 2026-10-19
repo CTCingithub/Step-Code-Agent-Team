@@ -1,97 +1,98 @@
-# 协议参考
+# Protocol reference
 
-> 本文档固化 Step-Code-Agent-Team 的全部 wire 协议与工具契约，以 `extensions/` 与 `bin/` 当前实现为准。
-> 改协议必须同步更新本文档与受影响的冒烟探针。
+> [简体中文 →](./PROTOCOL_ZH.md)
+> This document codifies all of Step-Code-Agent-Team's wire protocols and tool contracts, based on the current `extensions/` and `bin/` implementation.
+> Changing a protocol requires synchronously updating this document and the affected smoke probes.
 
-## 1. 成员 RPC 协议（stdio JSONL）
+## 1. Member RPC protocol (stdio JSONL)
 
-成员 = 长驻 `step --mode rpc` 子进程。队长经 stdio 驱动（`extensions/rpc-client.ts`）。
+A member is a long-lived `step --mode rpc` subprocess. The leader drives it over stdio (`extensions/rpc-client.ts`).
 
-### 1.1 帧规则
+### 1.1 Framing rules
 
-- 一行一个 JSON 对象，**只以 `\n` 分行**（Node readline 会在 U+2028/U+2029 处断行，
-  而这些字符在 JSON 字符串内合法，会损坏协议；客户端与 shim 均手写 `indexOf("\n")` 缓冲）。
-- 行尾 `\r` 容忍（`replace(/\r$/, "")`）。
-- 成员 stdin 必须是 pipe（`["pipe","pipe","pipe"]`）：`"ignore"` 会让 stdin 指向 /dev/null，
-  prompt 写入静默丢失、成员读 EOF 退出。
+- One JSON object per line, **split only on `\n`** (Node's readline breaks lines at U+2028/U+2029,
+  but those characters are legal inside JSON strings and would corrupt the protocol; both the client and the shim hand-write an `indexOf("\n")` buffer).
+- Trailing `\r` is tolerated (`replace(/\r$/, "")`).
+- A member's stdin must be a pipe (`["pipe","pipe","pipe"]`): `"ignore"` points stdin at /dev/null,
+  so prompt writes are silently lost and the member reads EOF and exits.
 
-### 1.2 命令（队长 → 成员，写 stdin）
+### 1.2 Commands (leader → member, written to stdin)
 
-| 命令 | 字段 | 说明 |
+| Command | Fields | Description |
 |---|---|---|
-| `prompt` | `{type:"prompt", message}` | 让成员跑一轮；等到 `agent_settled` 才算完成 |
-| `abort` | `{type:"abort"}` | 协作式中止当前 run（Esc / AbortSignal 触发） |
+| `prompt` | `{type:"prompt", message}` | Have the member run one turn; complete only when `agent_settled` fires |
+| `abort` | `{type:"abort"}` | Cooperatively abort the current run (triggered by Esc / AbortSignal) |
 
-每个请求带客户端自增 `id`（`r1, r2, …`）用于关联响应。
+Each request carries a client-incrementing `id` (`r1, r2, …`) used to correlate responses.
 
-### 1.3 响应与事件（成员 → 队长，stdout）
+### 1.3 Responses and events (member → leader, stdout)
 
-| 类型 | 关键字段 | 客户端处理 |
+| Type | Key fields | Client handling |
 |---|---|---|
-| `response` | `{id, type:"response", command, success, data?}` | 按 id 兑现/拒绝 pending；`success:false` 拒绝 |
-| `entry_appended` | — | 视作握手完成 |
-| `message_end` | `{message:{role:"assistant", content:[{type:"text",text}], usage}}` | 累加 usage；记录最后一条 assistant 文本；推送给 interim 监听者（流式进度） |
-| `agent_settled` | — | 唤醒 settleWaiter，promptAndSettle 返回 |
-| 其他 | `tool_execution_*`、`extension_ui_request` 等 | 忽略 |
+| `response` | `{id, type:"response", command, success, data?}` | Fulfill/reject pending by id; `success:false` rejects |
+| `entry_appended` | — | Treated as handshake completion |
+| `message_end` | `{message:{role:"assistant", content:[{type:"text",text}], usage}}` | Accumulate usage; record the last assistant text; push to interim listeners (streaming progress) |
+| `agent_settled` | — | Wake settleWaiter; promptAndSettle returns |
+| Others | `tool_execution_*`, `extension_ui_request`, etc. | Ignored |
 
-握手：spawn 后等待首个 `response`/`entry_appended`（默认 15s 超时，失败即 kill 不留孤儿）。
-关闭：进程退出/出错时 failPending + flushWaiters + onClose（registry 置 dead）。
+Handshake: after spawn, wait for the first `response`/`entry_appended` (default 15s timeout; on failure, kill without leaving orphans).
+Shutdown: on process exit/error, failPending + flushWaiters + onClose (registry sets dead).
 
-## 2. 团队 socket 协议（Unix socket JSONL）
+## 2. Team socket protocol (Unix socket JSONL)
 
-队长进程内 `TeamServer`（`extensions/team-server.ts`）监听
-`<agentDir>/teams/<teamId>/sock`（chmod 0600）。成员经 shim 连接；
-shim 从 spawn env 取身份与地址：`STEPCODE_TEAM_SOCK`、`STEPCODE_TEAM_MEMBER`。
+The `TeamServer` inside the leader process (`extensions/team-server.ts`) listens on
+`<agentDir>/teams/<teamId>/sock` (chmod 0600). Members connect via the shim;
+the shim takes its identity and address from the spawn env: `STEPCODE_TEAM_SOCK`, `STEPCODE_TEAM_MEMBER`.
 
-请求（一行一个 JSON 对象）：
+Requests (one JSON object per line):
 
 ```jsonc
-// 发消息（from 由 shim 自动附加）
+// Send a message (from is auto-attached by the shim)
 {"from": "<sender>", "to": "<member>", "message": "<text>"}
-// 查状态
+// Query status
 {"from": "<sender>", "type": "status"}
 ```
 
-响应：
+Responses:
 
 ```jsonc
-// 消息成功
+// Message success
 {"ok": true, "reply": "<text>"}
-// status 成功
+// Status success
 {"ok": true, "teamId": "...", "youAre": "<sender>", "mayMessage": ["<allowed>", ...],
  "members": [{"name","role","status"}], "tasks": [{"id","title","status","assignee"}]}
-// 失败（拓扑拒绝 / 未知成员 / 缺 from / 非法 JSON）
+// Failure (topology rejection / unknown member / missing from / invalid JSON)
 {"ok": false, "error": "<message>"}
 ```
 
-规则：
+Rules:
 
-- **拓扑强制**：`mayMessage(from,to)` 为假即拒绝，错误信息内含该发送方的可用邻居；
-  star（默认）下没有任何成员间直达消息，全部经由队长中转。
-- **环形链长强制**：嵌套派发前 server 计算 `next = currentChainLength(from) + 1`
-  （队长派发 = 0，成员每转发一次 +1）；`topology.maxLoopCount > 0` 且 `next` 超过上限时
-  拒绝并提示发送方向队长汇报。嵌套派发携带 `chainLength: next`，manager 层在 dispatch
-  前置校验兜底。
-- **nested 豁免**：server 中介的派发带 `nested:true`，绕过全局并发门（发送方已占运行位），
-  但每成员串行队列与拓扑门控仍然生效。
-- 连接级错误（成员中途挂断）只记 debug 日志，不影响队长存活。
+- **Topology enforcement**: if `mayMessage(from,to)` is false the message is rejected, and the error message includes the sender's available neighbors;
+  under star (default) there is no direct member-to-member messaging — everything routes through the leader.
+- **Ring chain-length enforcement**: before nested dispatch the server computes `next = currentChainLength(from) + 1`
+  (leader dispatch = 0, +1 for each member relay); when `topology.maxLoopCount > 0` and `next` exceeds the cap
+  the message is rejected and the sender is told to report to the leader. Nested dispatch carries `chainLength: next`, and the manager layer re-validates before dispatch
+  as a backstop.
+- **nested exemption**: server-brokered dispatches carry `nested:true` and bypass the global concurrency gate (the sender already holds a running slot),
+  but the per-member serialized queue and topology gate still apply.
+- Connection-level errors (a member hangs up mid-stream) are only recorded in the debug log and do not affect leader survival.
 
-## 3. Registry schema（registry.json，schemaVersion 1）
+## 3. Registry schema (registry.json, schemaVersion 1)
 
 ```jsonc
 {
   "schemaVersion": 1,
-  "teamId": "<队长 session 派生的团队 id>",
+  "teamId": "<team id derived from the leader session>",
   "createdAt": 1710000000000,
-  "cwd": "<队长工作目录>",
+  "cwd": "<leader working directory>",
   "members": [
     {
       "name": "scout1",                    // ^[a-z][a-z0-9_-]{0,31}$
       "role": "scout",
-      "model": "step-5-preview",           // 可选
-      "thinking": "high",                  // 可选
-      "tools": ["read", "grep"],           // 可选；缺省 = 全部工具
-      "sessionId": "team-<teamId>-scout1", // 重启续聊的键
+      "model": "step-5-preview",           // optional
+      "thinking": "high",                  // optional
+      "tools": ["read", "grep"],           // optional; default = all tools
+      "sessionId": "team-<teamId>-scout1", // key for resuming the conversation on restart
       "systemPromptFile": "<teamDir>/prompts/scout1.md",
       "pid": 12345,
       "status": "idle",                    // idle | running | dead
@@ -102,43 +103,43 @@ shim 从 spawn env 取身份与地址：`STEPCODE_TEAM_SOCK`、`STEPCODE_TEAM_ME
     {
       "id": "T1",
       "title": "...",
-      "detail": "...",                     // 可选
-      "blockedBy": [],                     // DAG 依赖；成环/未知 id 拒绝
-      "assignee": "scout1",                // 可选
+      "detail": "...",                     // optional
+      "blockedBy": [],                     // DAG dependencies; cycles/unknown ids rejected
+      "assignee": "scout1",                // optional
       "status": "ready",                   // pending | ready | running | done | failed
-      "result": "..."                      // 终态时写入结果/原因
+      "result": "..."                      // result/reason written in terminal state
     }
   ],
   "topology": {"shape": "star", "edges": [["m1", "m2"]]}
 }
 ```
 
-兼容规则：`schemaVersion !== 1` → 视作不存在（返回 null）；缺 `topology` 字段 → 退化为 star；
-原子写（`tmp + rename`，mode 0600），队长任意时刻崩溃都不会留下半截文件。
+Compatibility rules: `schemaVersion !== 1` → treated as absent (returns null); a missing `topology` field → degrades to star;
+atomic write (`tmp + rename`, mode 0600), so a leader crash at any moment never leaves a half-written file.
 
-## 4. 队长侧 LLM 工具契约（extensions/tools.ts）
+## 4. Leader-side LLM tool contracts (extensions/tools.ts)
 
-错误约定：非法输入抛错（工具结果 `isError`）；成功返回不带错误标。
-激活前调用任何团队工具都会抛「not active」（双保险：工具已被声明不可见 + 运行时断言）。
+Error convention: invalid input throws (tool result `isError`); a successful return carries no error flag.
+Calling any team tool before activation throws "not active" (belt-and-suspenders: the tool is already declared invisible + a runtime assertion).
 
-| 工具 | 关键参数 | 行为 |
+| Tool | Key parameters | Behavior |
 |---|---|---|
-| `team_create_member` | `name` 必填；`role`/`model`/`thinking`/`tools`/`systemPrompt` 可选 | 幂等创建/恢复；角色命中 `agents/<role>.md` 预设；显式参数优先于预设；模型解析见 CONFIGURATION.md `models` 节；**恢复时传入的配置参数被忽略，结果文本逐项列明**；成员无 `bash` 时结果附消息通道不可用提示 |
-| `team_send` | `member`、`message` 必填；`taskId` 或 `mode` 可选 | 等待完整回复；同成员串行、跨成员并行；`taskId` 以任务方式派发（running→done，失败重试 `dispatch.retries` 次）；`mode:"oneshot"` 无状态一次性进程；`taskId` 与 oneshot 同传即抛错；`dispatch.timeoutMs` 覆盖整条嵌套接力链，超时错误提示接力可能仍在途并列出成员名册 |
-| `team_task` | `action`（create/start/complete/fail/list）+ `id`/`title`/`blockedBy`/`assignee`/`result`/`reason` | DAG 任务板；终态任务不可再 complete/fail |
-| `team_set_topology` | `shape`（star/pipeline/mesh/ring/custom）+ `edges`（custom 必填） | 建成员后、派活前声明拓扑；未知成员/自环抛错；边端点无 `bash` 时结果附警告（该边不可用，需队长中转） |
-| `team_disband` | `member` 可选 | 省略即解散全队；session 保留，重建即续聊 |
-| `team_status` | 无 | 成员状态/用量 + 任务板 + 累计花费（超阈值附告警，阈值 0 禁用） |
+| `team_create_member` | `name` required; `role`/`model`/`thinking`/`tools`/`systemPrompt` optional | Idempotent create/resume; a role hits the `agents/<role>.md` preset; explicit arguments take precedence over the preset; model resolution is in CONFIGURATION.md's `models` section; **config arguments passed on resume are ignored, and the result text lists them item by item**; when a member has no `bash` the result appends a message-channel-unavailable notice |
+| `team_send` | `member`, `message` required; `taskId` or `mode` optional | Wait for the full reply; same member serialized, cross-member parallel; `taskId` dispatches as a task (running→done, retries `dispatch.retries` times on failure); `mode:"oneshot"` is a stateless one-off process; passing `taskId` and oneshot together throws; `dispatch.timeoutMs` covers the entire nested relay chain, and the timeout error notes that the relay may still be in flight and lists the member roster |
+| `team_task` | `action` (create/start/complete/fail/list) + `id`/`title`/`blockedBy`/`assignee`/`result`/`reason` | DAG task board; terminal-state tasks can no longer be completed/failed |
+| `team_set_topology` | `shape` (star/pipeline/mesh/ring/custom) + `edges` (required for custom) | Declare the topology after creating members and before dispatching; unknown members/self-loops throw; when an edge endpoint has no `bash` the result appends a warning (that edge is unusable and needs a leader relay) |
+| `team_disband` | `member` optional | Omitting it disbands the whole team; sessions persist, and a rebuild resumes the conversation |
+| `team_status` | none | Member status/usage + task board + cumulative spend (appends a warning above the threshold; threshold 0 disables) |
 
-输出约定：成员回复超过 50KB 截断，全文在 tool details 的 `fullText`；长 run 期间 interim
-文本经 `onUpdate` 流式推给 TUI。
+Output convention: member replies over 50KB are truncated, with the full text in the tool details' `fullText`; during a long run, interim
+text is streamed to the TUI via `onUpdate`.
 
-## 5. 成员侧环境变量（spawn 时注入）
+## 5. Member-side environment variables (injected at spawn)
 
-| 变量 | 作用 |
+| Variable | Purpose |
 |---|---|
-| `STEPCODE_TEAM_SOCK` | 团队 socket 路径（shim 连接目标） |
-| `STEPCODE_TEAM_MEMBER` | 发送方身份（拓扑强制的依据） |
-| `STEPCODE_TEAM_DEPTH` | 本成员在团队树中的深度（队长 = 0） |
-| `STEPCODE_TEAM_MAXDEPTH` | 生效的深度上限（可能来自项目级配置，队长加载时才能读到）；成员进程的配置加载器据此覆盖 `members.maxRecursionDepth` |
-| `STEPCODE_TEAM_AUTOACTIVATE` | `1` = 授予子团队，成员进程加载本扩展并自动激活 |
+| `STEPCODE_TEAM_SOCK` | Team socket path (the shim's connection target) |
+| `STEPCODE_TEAM_MEMBER` | Sender identity (the basis for topology enforcement) |
+| `STEPCODE_TEAM_DEPTH` | This member's depth in the team tree (leader = 0) |
+| `STEPCODE_TEAM_MAXDEPTH` | The effective depth cap (may come from project-level config, readable only when the leader loads); the member process's config loader uses it to override `members.maxRecursionDepth` |
+| `STEPCODE_TEAM_AUTOACTIVATE` | `1` = grant a sub-team; the member process loads this extension and auto-activates |

@@ -1,36 +1,43 @@
-# 手动测试清单（已最小化）
+# Manual Testing Checklist (minimized)
 
-> **自动化覆盖**（`npm run smoke`，零 token；phase5 与 LLM 项需 key）：协议层、配置三级
-> 加载与旧文件回退、拓扑真值表与越界拒绝、递归深度、任务板状态机、消息强制（拓扑/loop
-> 上限/等待环）、项目级配置的**信任应用与拒绝**（`live-project-config` /
-> `live-untrusted-config`）、live 接线（`/agent-team` 命令、参数转发）、**TUI 渲染内容层**
-> （phase15 对 render.ts 各工具 call/result 字符串、折叠/展开、用量行、图标的断言）、
-> **成本护栏与输出截断逻辑**（phase16）、**孤儿进程**（orphan-check：成员不得比队长
-> 长寿）、**干净导出物可加载性**（live-clean-export：git archive 出的包能激活）。
+> [简体中文 →](./MANUAL-TESTING_ZH.md)
 >
-> 以下仅剩**不可约**的人工项——按优先级排列。每项都给了**可直接复制粘贴的命令 /
-> prompt**；TUI 渲染的细化清单见 [TUI-VERIFICATION.md](TUI-VERIFICATION.md)（内容层已被
-> phase15 断言，只剩观感）。
+> **Automated coverage** (`npm run smoke`, zero-token; phase5 and the LLM items need a
+> key): the protocol layer, three-tier config loading and legacy-file fallback, the
+> topology truth table and out-of-bounds rejection, recursion depth, the task board
+> state machine, message enforcement (topology / loop cap / wait cycle), project-level
+> config **trust application and rejection** (`live-project-config` /
+> `live-untrusted-config`), live wiring (the `/agent-team` command, argument
+> forwarding), the **TUI rendering content layer** (phase15 asserts render.ts tool
+> call/result strings, collapse/expand, usage rows, icons), the **cost guardrail and
+> output truncation logic** (phase16), **orphan processes** (orphan-check: members must
+> not outlive the leader), and **clean-export loadability** (live-clean-export: a
+> package exported via git archive can activate).
+>
+> What remains is only the **irreducible** manual items — ordered by priority. Each one
+> comes with a **directly copy-pasteable command / prompt**; the detailed TUI rendering
+> checklist is in [TUI-VERIFICATION.md](TUI-VERIFICATION.md) (the content layer is
+> already asserted by phase15; only look-and-feel remains).
 
-## 0. 通用：沙箱环境与还原
+## 0. General: sandbox environment and restore
 
-所有人工项都在沙箱内进行（`./sandbox/run.sh`，与真实 `~/.stepcode` 隔离）。沙箱有两类
-状态，测试会同时改动两者：
+All manual items run inside the sandbox (`./sandbox/run.sh`, isolated from the real
+`~/.stepcode`). The sandbox has two kinds of state, and the tests modify both:
 
-| 状态 | 位置 | 还原方式 |
+| State | Location | Restore method |
 |---|---|---|
-| 演示项目 | `sandbox/project/`（含种子 bug 的演示态） | `bash sandbox/restore-project.sh` |
-| 运行时数据 | `sandbox/agent/{sessions,teams,plans,live-context}`、`sandbox/project/data/`（全部 gitignored） | 可选彻底清场，见下 |
-| 会话日志 | `sandbox/session-log-*.md`（按需生成，prompt 见 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) §3） | `restore-project.sh` 自动删除 |
+| Demo project | `sandbox/project/` (demo state with the seeded bug) | `bash sandbox/restore-project.sh` |
+| Runtime data | `sandbox/agent/{sessions,teams,plans,live-context}`, `sandbox/project/data/` (all gitignored) | Optional full reset, see below |
+| Session logs | `sandbox/session-log-*.md` (generated on demand; the prompt is in [TUI-VERIFICATION.md](TUI-VERIFICATION.md) §3) | `restore-project.sh` deletes them automatically |
 
-**快速还原（每轮测试后必做）**：
+**Quick restore (required after every test round)**:
 
 ```bash
 bash sandbox/restore-project.sh
-# 已还原（种子 bug 就位，data/ 已清除）；演示中新建的额外文件会保留
+# Restored (seeded bug in place, data/ cleared); extra files created during the demo are kept
 ```
 
-**彻底清场（可选，想要全新沙箱时）**：
+**Full reset (optional, when you want a fresh sandbox)**:
 
 ```bash
 rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
@@ -38,43 +45,52 @@ rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
 bash sandbox/restore-project.sh
 ```
 
-## 1. 交互 TUI 的观感（唯一保留的渲染项）
+## 1. Interactive TUI look and feel (the only remaining rendering item)
 
-各工具渲染的**文本内容**已由 phase15 自动断言；剩下的只有像素级与交互级观感：
-颜色/布局是否顺眼、toast 停留时间、`ctrl+o` 实际按键、流式进度的刷新节奏。
-在沙箱交互会话里过一遍即可，无需核对具体文本。
+The **text content** rendered by each tool is already auto-asserted by phase15; what
+remains is only pixel-level and interaction-level look and feel: whether the
+colors/layout are pleasing, toast dwell time, the actual `ctrl+o` keypress, and the
+refresh rhythm of streaming progress. One pass in a sandbox interactive session is
+enough; there is no need to verify specific text.
 
-**操作**：按 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) 的清单逐步复制粘贴 prompt
-（环境准备、11 步 prompt、收尾还原都在该文档内），核对观感后打勾。
+**Action**: follow the [TUI-VERIFICATION.md](TUI-VERIFICATION.md) checklist and
+copy-paste the prompts step by step (environment setup, the 11-step prompts, and the
+closing restore are all in that document), and tick the boxes after checking the look
+and feel.
 
-## 2. 真实安装写入 settings（一次性，需你执行）
+## 2. Real install writes settings (one-time, you run it)
 
-`step install` 会写你的真实 settings，因此由你执行；冒烟集已用导出物验证
-「打包内容完整可加载」（live-clean-export），剩下的只是装入你的环境：
+`step install` writes your real settings, so you run it; the smoke suite has already
+verified "the packaged content is complete and loadable" via an export
+(live-clean-export), so all that remains is loading it into your environment:
 
 ```bash
 git archive HEAD | tar -x -C /tmp/scat-pkg
 step install /tmp/scat-pkg
 ```
 
-**预期**：安装后新会话可激活、成员可 spawn、可 `step remove` 卸载。
-**切勿**直接 `step install ./`——本地路径安装整目录拷贝、不尊重 .gitignore，
-会把 `local/`（测试密钥）与 `sandbox/` 扫入发布物。
+**Expected**: after install, a new session can activate, members can spawn, and it can
+be uninstalled with `step remove`. **Never** run `step install ./` directly — a
+local-path install copies the whole directory and does not honor .gitignore, which
+would sweep `local/` (test credentials) and `sandbox/` into the published package.
 
-**验证安装生效**（安装后开一个普通会话，粘贴）：
+**Verify the install works** (open a normal session after installing, paste):
 
 ```text
-用智能体团队功能介绍一下你自己
+Use the agent team feature to introduce yourself
 ```
 
-**卸载验证**：`step remove /tmp/scat-pkg`（与安装时相同的来源），再开会话确认团队工具不再出现。
+**Uninstall verification**: `step remove /tmp/scat-pkg` (the same source used at
+install time), then start a session and confirm the team tools no longer appear.
 
-## 3. 信任提示的交互 UX
+## 3. Trust prompt interactive UX
 
-`-a`/`-na` 的语义已自动化；剩下的是交互式信任弹窗本身：首次在带有
-`.stepcode/settings.json` 的项目里启动 step 时，看一眼提示与「记住」选项即可。
+The semantics of `-a`/`-na` are already automated; what remains is the interactive
+trust popup itself: when starting step for the first time in a project that has
+`.stepcode/settings.json`, glance at the prompt and the "Remember" option.
 
-**操作**（在沙箱内制造一次「首次进入带项目配置的项目」）：
+**Action** (inside the sandbox, produce a "first entry into a project with project
+config"):
 
 ```bash
 mkdir -p sandbox/project/.stepcode
@@ -85,118 +101,147 @@ cat > sandbox/project/.stepcode/settings.json <<'EOF'
   }
 }
 EOF
-./sandbox/run.sh     # 首次启动应弹信任提示；看一眼提示与「记住」选项
+./sandbox/run.sh     # first start should pop the trust prompt; glance at the prompt and the "Remember" option
 ```
 
-**预期**：弹出项目信任提示，有「记住/信任」类选项；信任后项目级配置生效
-（激活 notify 出现即证明读取成功）。若**没有弹窗**，说明 `sandbox/project` 此前
-已被信任（记录在 `sandbox/agent/trust.json`）——删掉该文件重跑即可再弹一次。
+**Expected**: the project trust prompt pops up, with "Remember/Trust"-style options;
+once trusted, the project-level config takes effect (the activation notify appearing
+proves it was read successfully). If there is **no popup**, `sandbox/project` was
+already trusted before (recorded in `sandbox/agent/trust.json`) — delete that file and
+rerun to trigger it again.
 
-**还原**（删除该项目级配置，恢复沙箱原状）：
+**Restore** (delete the project-level config and return the sandbox to its original
+state):
 
 ```bash
 rm -rf sandbox/project/.stepcode
 bash sandbox/restore-project.sh
 ```
 
-## 4. LLM 行为遵循度（需 key，本质不可约）
+## 4. LLM behavior adherence (needs a key; irreducible in essence)
 
-服务端的确定性拒绝（拓扑越界、loop 上限、等待环）已被探针覆盖；不可约的是成员
-LLM 是否「听话」——收到拒绝后转为向队长汇报，而非反复重试或去排查工具。
+The server's deterministic rejections (topology out-of-bounds, loop cap, wait cycle)
+are already covered by probes; the irreducible part is whether member LLMs "obey" —
+after receiving a rejection they report to the leader instead of retrying repeatedly or
+going off to investigate tools.
 
-**操作**（沙箱会话内按顺序粘贴）：
-
-```text
-用智能体团队功能做一次巡回审查：创建三个 reviewer 角色的成员 r1、r2、r3，声明 ring 拓扑，让 r1 先审查 src/tasks.js 的正确性，然后沿环把审查意见传递给下一个成员，每个成员收到上家的意见后补充自己的发现。
-```
-
-**预期**：`team_set_topology ring` 声明 3 条边；r1→r2、r2→r3 两跳成功；第 3 跳
-（r3→r1）超过 `topology.maxLoopCount`（默认 2）——成员**不发起**该跳（预判会被拒），
-或发起后被 server 拒绝并得到含允许邻居与「report to the leader」的错误；两种形态下
-成员都应把结论汇报给队长，而不是反复重试同一跳、也不是转去排查环境/工具。
-
-**实测记录（2026-10-19，✅ 已通过）**：ring 两跳接力成功（链长恰好用满上限）；
-reviewer-3 未尝试第三跳、直接输出汇总报告沿回复链返回——「不尝试 + 汇报」形态的
-LLM 遵循度证实（服务端拒绝本身已由 phase14 探针覆盖）。
-
-**通过标准**：团队成员最终把「第 3 跳被拒/未发起」作为结论汇报给队长；队长能据此收尾。
-成本护栏的**发射逻辑**已由 phase16 覆盖；想在真实累积花费下眼见为实可选做
-（`STEPCODE_TEAM_COST_WARN=0.0001` 启动沙箱，观察 `team_status` 的告警行）。
-
-**还原**：`bash sandbox/restore-project.sh`（+ 可选彻底清场，见 §0）。
-
-## 5. 沙箱演示剧本（✅ 2026-10-19 三幕均已实测通过）
-
-`./sandbox/run.sh` 启动，**每幕前** `bash sandbox/restore-project.sh` 还原。
-属体验验证，非正确性验证。
-
-**实测记录（2026-10-18）**：`/agent-team <请求>` 驱动 7 成员团队完整跑通两幕——
-pipeline 修复链（scout 定位种子 bug → planner 出最小方案 → worker 修复 →
-reviewer 通过）+ star 三方并行审查（正确性/风格通过；安全项留下加固建议，
-属演示项目自身的可选项）。队长复核：`npm test` 8/8（修复前基线 7/8）、与
-`project-pristine` 逐文件比对仅 `src/tasks.js` 有差异、`secret-sample.txt`
-全程未被任何成员读取。第三幕（ring 巡回）与安全加固待用户定夺。
-
-**实测记录（2026-10-19 复跑）**：三幕全部复测——pipeline 修复链 8/8 通过且
-reviewer 出具 APPROVE（注意 reviewer 预设只读、无 shell，只能静态审查，`npm test`
-由队长自行复核，设计使然）；star 三方并行审查产出分级发现清单（针对演示代码，
-M1/M2 已修复，其余记录于 `sandbox/TEST-PLAN.md` 第八节）；ring 巡回两跳接力
-成功、第三跳按协议规避（详见 §4 与下方第三幕）。
-
-### 第一幕 · pipeline 修复链（复制粘贴）
+**Action** (paste in order inside a sandbox session):
 
 ```text
-/agent-team 请用智能体团队修复这个项目里失败的测试：先派 scout 定位失败的测试和根因，再派 planner 给出最小修复方案，然后派 worker 按方案修复并跑通 npm test，最后派 reviewer 审查改动。修复前先确认 npm test 的基线结果。
+Use the agent team feature for a round-robin review: create three members with the reviewer role, r1, r2, r3, declare a ring topology, have r1 first review the correctness of src/tasks.js, then pass the review comments along the ring to the next member, with each member adding its own findings after receiving the previous member's comments.
 ```
 
-**预期**：任务板 T1→T4 按 blockedBy 流转；worker 修复后 `npm test` 8/8；
-与 `project-pristine` 逐文件比对仅 `src/tasks.js` 有差异；`secret-sample.txt`
-全程未被任何成员读取。（reviewer 预设只读：审查结论为静态 trace，`npm test`
-由队长实跑复核。）**幕间还原**：`bash sandbox/restore-project.sh`。
+**Expected**: `team_set_topology ring` declares 3 edges; the two hops r1→r2 and r2→r3
+succeed; the third hop (r3→r1) exceeds `topology.maxLoopCount` (default 2) — the member
+**does not attempt** that hop (anticipating rejection), or attempts it and is rejected
+by the server with an error listing the allowed neighbors and "report to the leader";
+in either form the member should report its conclusion to the leader, rather than
+retrying the same hop repeatedly or switching to investigating the environment/tools.
 
-### 第二幕 · star 并行审查（复制粘贴）
+**Measured record (2026-10-19, ✅ passed)**: the ring two-hop relay succeeded (chain
+length exactly used up the limit); reviewer-3 did not attempt the third hop and
+directly output a summary report back along the reply chain — the "no attempt + report"
+form of LLM adherence is confirmed (the server-side rejection itself is already covered
+by the phase14 probe).
+
+**Pass criteria**: team members ultimately report "the third hop was rejected / not
+attempted" as their conclusion to the leader; the leader can wrap up accordingly. The
+cost guardrail's **firing logic** is already covered by phase16; to see it with your
+own eyes under real accumulated spend is optional (start the sandbox with
+`STEPCODE_TEAM_COST_WARN=0.0001` and observe the warning line in `team_status`).
+
+**Restore**: `bash sandbox/restore-project.sh` (+ optional full reset, see §0).
+
+## 5. Sandbox demo script (✅ 2026-10-19: all three acts measured and passed)
+
+Start with `./sandbox/run.sh`, and restore with `bash sandbox/restore-project.sh`
+**before each act**. This is an experience validation, not a correctness validation.
+
+**Measured record (2026-10-18)**: `/agent-team <request>` drove a 7-member team
+through two acts end to end — the pipeline fix chain (scout locates the seeded bug →
+planner produces a minimal plan → worker fixes → reviewer approves) + the star
+three-way parallel review (correctness/style passed; the security item left hardening
+suggestions, which are the demo project's own option). Leader double-check: `npm test`
+8/8 (pre-fix baseline 7/8), a file-by-file comparison with `project-pristine` shows a
+difference only in `src/tasks.js`, and `secret-sample.txt` was never read by any
+member. The third act (ring round-robin) and the security hardening await the user's
+decision.
+
+**Measured record (2026-10-19 rerun)**: all three acts retested — the pipeline fix
+chain passed 8/8 and the reviewer issued APPROVE (note the reviewer preset is read-only
+with no shell, so it can only review statically; `npm test` is re-run by the leader
+itself, by design); the star three-way parallel review produced a graded findings list
+(against the demo code; M1/M2 are fixed, the rest recorded in `sandbox/TEST-PLAN.md`
+section 8); the ring round-robin two-hop relay succeeded and the third hop was avoided
+per protocol (details in §4 and the third act below).
+
+### Act 1 · pipeline fix chain (copy-paste)
 
 ```text
-/agent-team 请用智能体团队并行审查这个项目：派三名 reviewer 分别从正确性、风格、安全性三个角度审查 src/ 与 test/，把三方发现汇总成一份清单。
+/agent-team Use the agent team to fix the failing tests in this project: first dispatch scout to locate the failing test and root cause, then dispatch planner to give a minimal fix plan, then dispatch worker to fix it per the plan and get npm test passing, and finally dispatch reviewer to review the changes. Before fixing, first confirm the npm test baseline.
 ```
 
-**预期**：三名成员并行工作（`team_status` 可见并发）；队长汇总三方发现
-（针对演示代码的发现清单记录于 `sandbox/TEST-PLAN.md` 第八节）。
-**幕间还原**：`bash sandbox/restore-project.sh`。
+**Expected**: the task board T1→T4 flows per `blockedBy`; after the worker's fix `npm
+test` is 8/8; a file-by-file comparison with `project-pristine` shows a difference only
+in `src/tasks.js`; `secret-sample.txt` is never read by any member. (The reviewer
+preset is read-only: its review conclusion is a static trace; `npm test` is re-run for
+real by the leader.) **Between-act restore**: `bash sandbox/restore-project.sh`.
 
-### 第三幕 · ring 巡回审查（复制粘贴，✅ 2026-10-19 已实测）
+### Act 2 · star parallel review (copy-paste)
 
 ```text
-/agent-team 请用智能体团队做一次巡回审查：创建三名 reviewer 成员，声明 ring 拓扑，让审查意见沿环传递，每人补充上家遗漏的问题，注意环的巡游长度上限。
+/agent-team Use the agent team to review this project in parallel: dispatch three reviewers to review src/ and test/ from the correctness, style, and security angles respectively, and consolidate the three parties' findings into one list.
 ```
 
-**实测（2026-10-19）**：队长按工具描述自觉为成员配备 bash 消息通道（上轮修复生效）；
-r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；reviewer-3 未尝试第三跳，
-直接输出汇总报告沿回复链返回。
+**Expected**: the three members work in parallel (concurrency is visible in
+`team_status`); the leader consolidates the three parties' findings (the findings list
+against the demo code is recorded in `sandbox/TEST-PLAN.md` section 8).
+**Between-act restore**: `bash sandbox/restore-project.sh`.
 
-**已知运行时现象（嵌套链超时）**：队长侧 `team_send` 的等待超时
-（`dispatch.timeoutMs`，默认 180s）覆盖**整条嵌套接力链**——三名 high-thinking
-reviewer 的链超过 180s 时，队长侧超时返回，而接力仍在服务器侧继续（被派发成员
-已按失败即杀语义回收；错误信息会提示接力可能仍在途并列出成员状态）。恢复路径：
-`team_status` 看谁还活着 → 直达仍在运行的成员收取汇总。要避免超时：会话前在
-`sandbox/agent/settings.json` 调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
+### Act 3 · ring round-robin review (copy-paste, ✅ 2026-10-19 measured)
 
-**收尾还原**：`bash sandbox/restore-project.sh`。
+```text
+/agent-team Use the agent team for a round-robin review: create three reviewer members, declare a ring topology, let the review comments pass along the ring, each member adding what the previous one missed, and mind the ring's chain-length cap.
+```
 
-## 6. 性能主观项
+**Measured (2026-10-19)**: the leader, following the tool description, proactively
+equipped the members with a bash messaging channel (the fix from the previous round
+took effect); the two-hop relay r1→r2→r3 succeeded (chain length exactly used up
+`maxLoopCount=2`); reviewer-3 did not attempt the third hop and directly output a
+summary report back along the reply chain.
 
-8 成员满编时的 spawn 握手延迟、TUI 响应速度——主观，无判定标准。
+**Known runtime behavior (nested chain timeout)**: the leader-side `team_send` wait
+timeout (`dispatch.timeoutMs`, default 180s) covers the **entire nested relay chain** —
+when a chain of three high-thinking reviewers exceeds 180s, the leader-side timeout
+returns while the relay continues on the server side (the dispatched members are reaped
+per the kill-on-failure semantics; the error message indicates the relay may still be
+in flight and lists member status). Recovery path: use `team_status` to see who is
+still alive → reach the still-running members directly to collect the summary. To
+avoid the timeout: raise `dispatch.timeoutMs` in `sandbox/agent/settings.json` before
+the session (config is read only once at session startup).
 
-**操作**（可选）：粘贴 `用智能体团队并行审查这个项目，尽量让更多成员同时开工`，
-观察 8 成员满编时的握手耗时与 TUI 刷新是否可接受。**还原**：见 §0。
+**Closing restore**: `bash sandbox/restore-project.sh`.
 
-## 已知限制（审查确认，暂不修）
+## 6. Subjective performance items
 
-- **失败即杀语义**：任何派发失败都会杀掉成员进程并在下次派发时重启（防止同一
-  session-id 上新旧 run 交错，见 docs/TESTING-OPTIMIZATION-PLAN.md P0-2）；
-- **项目级配置每会话只应用一次**：信任在启动时解析，运行中授予信任不会补应用；
-- **registry 版本不匹配即重建**：`schemaVersion !== 1` 时按新团队覆盖旧数据；
-- **纯逻辑探针须独立运行**：phase15/16/17 传递导入 `@step-harness/pi-tui` 会触发
-  step 对仓库包的暂存加载，与 `-e` 原始副本冲突——runner 的 `STANDALONE_PHASES`
-  机制不挂载 index.ts（见 run-smoke.sh 注释）；
-- **depth≥3 未做真实 LLM 链测试**（进程级自举已验证）。
+Spawn handshake latency with a full 8-member roster and TUI responsiveness —
+subjective, with no pass criteria.
+
+**Action** (optional): paste `Use the agent team to review this project in parallel,
+with as many members working at once as possible`, and observe whether the handshake
+time at a full 8-member roster and the TUI refresh are acceptable. **Restore**: see §0.
+
+## Known limitations (review-confirmed, not fixing for now)
+
+- **Kill-on-failure semantics**: any dispatch failure kills the member process and
+  restarts it on the next dispatch (prevents old and new runs from interleaving on the
+  same session-id; see P0-2 in docs/TESTING-OPTIMIZATION-PLAN.md);
+- **Project-level config is applied once per session**: trust is resolved at startup;
+  granting trust mid-run does not back-apply it;
+- **Registry version mismatch triggers rebuild**: when `schemaVersion !== 1`, the new
+  team overwrites the old data;
+- **Pure-logic probes must run standalone**: phase15/16/17 transitively import
+  `@step-harness/pi-tui`, which triggers step's staged loading of the repo package and
+  conflicts with the `-e` original copy — the runner's `STANDALONE_PHASES` mechanism
+  does not mount index.ts (see the run-smoke.sh comments);
+- **depth ≥ 3 has no real LLM chain test** (process-level self-bootstrap is verified).
