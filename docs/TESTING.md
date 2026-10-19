@@ -17,6 +17,32 @@ export STEP_CODING_AGENT_SESSION_DIR="$PWD/sandbox/agent/sessions"
 
 LLM 层测试前 `export STEP_API_KEY=<你自己的 key>`（经环境变量传递，绝不写入任何文件）。
 
+### 沙箱运行时状态与还原
+
+沙箱的可复用设施（脚本、探针、`cfg-*` fixture、`project-pristine/`）随仓库分发；下列
+**运行时状态**（均 gitignored）会随测试累积，需要时清理：
+
+| 状态 | 位置 | 清理方式 |
+|---|---|---|
+| 演示项目 | `sandbox/project/`（会被成员改动，如修复种子 bug） | `bash sandbox/restore-project.sh` 还原为种子态 |
+| 会话 / 团队 / 计划 / live-context | `sandbox/agent/{sessions,teams,plans,live-context}` | `rm -rf` 后重跑（全新沙箱） |
+| 演示项目运行数据 | `sandbox/project/data/` | `restore-project.sh` 自动清除 |
+| 各 fixture 的运行时状态 | `sandbox/cfg-*/{sessions,teams,teams-*,live-context}` | 同上，按需清理 |
+
+```bash
+# 快速还原（每轮 LLM 层测试后必做）：种子 bug 就位、data/ 清除
+bash sandbox/restore-project.sh
+
+# 彻底清场（可选）：删除全部沙箱运行时状态后还原演示项目
+rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
+       sandbox/agent/live-context sandbox/project/data
+bash sandbox/restore-project.sh
+```
+
+交互 TUI 的人工验证（含可复制粘贴的 prompt）见
+[TUI-VERIFICATION.md](TUI-VERIFICATION.md)；完整手动测试清单（含各项还原命令）见
+[MANUAL-TESTING.md](MANUAL-TESTING.md)。
+
 ## 1. A 层 — 单元测试（无 LLM，无进程）
 
 纯函数层，用 node/jiti 直接加载模块（当前以探针内断言方式覆盖，未单列 runner）：

@@ -73,7 +73,7 @@ sandbox/（随仓库分发）── step/（Step Code 源码 submodule，钉住�
 
 1. ~~把沙箱探针固化为 CI 冒烟集~~ ✅ 已落地：`test/smoke/` + `test/run-smoke.sh`（`npm run smoke`），phase5 无 key 时显式 SKIP；LLM 层留 sandbox/
 2. ~~项目级配置接入~~ ✅ 已落地：`<cwd>/.stepcode/settings.json` 的 `stepcodeAgentTeam` 节，trust 门控（smoke-phase13；旧专用文件仅作只读回退）
-3. TUI 渲染人工验证：清单见 `docs/TUI-VERIFICATION.md` 与 `docs/MANUAL-TESTING.md`（沙箱内逐项打勾并记录结果）
+3. TUI 渲染人工验证：清单见 `docs/TUI-VERIFICATION.md`（11 步均为可直接复制粘贴的 prompt，预期与 render.ts 实际渲染对齐；含收尾还原命令）与 `docs/MANUAL-TESTING.md`（每项含可执行步骤与沙箱还原命令；沙箱内逐项打勾并记录结果）
 4. `step install ./` 端到端安装验证（由用户执行）：**从干净导出物安装**——本地路径安装整目录拷贝/硬链且不尊重 .gitignore，会把 `local/`（密钥）与 `sandbox/` 扫入发布物；用 `git archive HEAD | tar -x -C /tmp/pkg && step install /tmp/pkg`。package.json 已加 `files` 白名单作为纵深防御
 5. 观察真实使用中 LLM 对拓扑/递归/loop 上限的遵循度（验证步骤见 `docs/MANUAL-TESTING.md` §4），迭代工具描述与 SKILL 指南
 

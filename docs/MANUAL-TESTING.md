@@ -8,14 +8,43 @@
 > **成本护栏与输出截断逻辑**（phase16）、**孤儿进程**（orphan-check：成员不得比队长
 > 长寿）、**干净导出物可加载性**（live-clean-export：git archive 出的包能激活）。
 >
-> 以下仅剩**不可约**的人工项——按优先级排列。TUI 渲染的细化清单见
-> [TUI-VERIFICATION.md](TUI-VERIFICATION.md)（其内容层已被 phase15 断言，只剩观感）。
+> 以下仅剩**不可约**的人工项——按优先级排列。每项都给了**可直接复制粘贴的命令 /
+> prompt**；TUI 渲染的细化清单见 [TUI-VERIFICATION.md](TUI-VERIFICATION.md)（内容层已被
+> phase15 断言，只剩观感）。
+
+## 0. 通用：沙箱环境与还原
+
+所有人工项都在沙箱内进行（`./sandbox/run.sh`，与真实 `~/.stepcode` 隔离）。沙箱有两类
+状态，测试会同时改动两者：
+
+| 状态 | 位置 | 还原方式 |
+|---|---|---|
+| 演示项目 | `sandbox/project/`（含种子 bug 的演示态） | `bash sandbox/restore-project.sh` |
+| 运行时数据 | `sandbox/agent/{sessions,teams,plans,live-context}`、`sandbox/project/data/`（全部 gitignored） | 可选彻底清场，见下 |
+
+**快速还原（每轮测试后必做）**：
+
+```bash
+bash sandbox/restore-project.sh
+# 已还原（种子 bug 就位，data/ 已清除）；演示中新建的额外文件会保留
+```
+
+**彻底清场（可选，想要全新沙箱时）**：
+
+```bash
+rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
+       sandbox/agent/live-context sandbox/project/data
+bash sandbox/restore-project.sh
+```
 
 ## 1. 交互 TUI 的观感（唯一保留的渲染项）
 
 各工具渲染的**文本内容**已由 phase15 自动断言；剩下的只有像素级与交互级观感：
 颜色/布局是否顺眼、toast 停留时间、`ctrl+o` 实际按键、流式进度的刷新节奏。
 在沙箱交互会话里过一遍即可，无需核对具体文本。
+
+**操作**：按 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) 的清单逐步复制粘贴 prompt
+（环境准备、11 步 prompt、收尾还原都在该文档内），核对观感后打勾。
 
 ## 2. 真实安装写入 settings（一次性，需你执行）
 
@@ -31,22 +60,70 @@ step install /tmp/scat-pkg
 **切勿**直接 `step install ./`——本地路径安装整目录拷贝、不尊重 .gitignore，
 会把 `local/`（测试密钥）与 `sandbox/` 扫入发布物。
 
+**验证安装生效**（安装后开一个普通会话，粘贴）：
+
+```text
+用智能体团队功能介绍一下你自己
+```
+
+**卸载验证**：`step remove /tmp/scat-pkg`（与安装时相同的来源），再开会话确认团队工具不再出现。
+
 ## 3. 信任提示的交互 UX
 
 `-a`/`-na` 的语义已自动化；剩下的是交互式信任弹窗本身：首次在带有
 `.stepcode/settings.json` 的项目里启动 step 时，看一眼提示与「记住」选项即可。
 
+**操作**（在沙箱内制造一次「首次进入带项目配置的项目」）：
+
+```bash
+mkdir -p sandbox/project/.stepcode
+cat > sandbox/project/.stepcode/settings.json <<'EOF'
+{
+  "stepcodeAgentTeam": {
+    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true }
+  }
+}
+EOF
+./sandbox/run.sh     # 首次启动应弹信任提示；看一眼提示与「记住」选项
+```
+
+**预期**：弹出项目信任提示，有「记住/信任」类选项；信任后项目级配置生效
+（激活 notify 出现即证明读取成功）。若**没有弹窗**，说明 `sandbox/project` 此前
+已被信任（记录在 `sandbox/agent/trust.json`）——删掉该文件重跑即可再弹一次。
+
+**还原**（删除该项目级配置，恢复沙箱原状）：
+
+```bash
+rm -rf sandbox/project/.stepcode
+bash sandbox/restore-project.sh
+```
+
 ## 4. LLM 行为遵循度（需 key，本质不可约）
 
 服务端的确定性拒绝（拓扑越界、loop 上限、等待环）已被探针覆盖；不可约的是成员
 LLM 是否「听话」——收到拒绝后转为向队长汇报，而非反复重试或去排查工具。
-建 3 个成员声明 ring 拓扑实跑一次观察即可（第 3 跳应被拒且成员汇报）。
-成本护栏的**发射逻辑**已由 phase16 覆盖；想在真实累积花费下眼见为实可选做。
 
-## 5. 沙箱演示剧本（✅ 2026-10-18 已实测通过）
+**操作**（沙箱会话内按顺序粘贴）：
 
-pipeline 修复链 / star 并行审查 / ring 巡回审查——`./sandbox/run.sh`，
-每轮前 `bash sandbox/restore-project.sh` 还原。属体验验证，非正确性验证。
+```text
+用智能体团队功能做一次巡回审查：创建三个 reviewer 角色的成员 r1、r2、r3，声明 ring 拓扑，让 r1 先审查 sandbox/project/src/tasks.js 的正确性，然后沿环把审查意见传递给下一个成员，每个成员收到上家的意见后补充自己的发现。
+```
+
+**预期**：`team_set_topology ring` 声明 3 条边；r1→r2、r2→r3 两跳成功；第 3 跳
+（r3→r1）被 server 拒绝（超过 `topology.maxLoopCount` 默认 2），成员收到明确错误后
+**向队长汇报**（错误信息含允许的邻居与「report to the leader」指引），而不是反复重试
+同一跳、也不是转去排查环境/工具。
+
+**通过标准**：团队成员最终把「第 3 跳被拒」作为结论汇报给队长；队长能据此收尾。
+成本护栏的**发射逻辑**已由 phase16 覆盖；想在真实累积花费下眼见为实可选做
+（`STEPCODE_TEAM_COST_WARN=0.0001` 启动沙箱，观察 `team_status` 的告警行）。
+
+**还原**：`bash sandbox/restore-project.sh`（+ 可选彻底清场，见 §0）。
+
+## 5. 沙箱演示剧本（✅ 2026-10-18 前两幕已实测通过）
+
+`./sandbox/run.sh` 启动，**每幕前** `bash sandbox/restore-project.sh` 还原。
+属体验验证，非正确性验证。
 
 **实测记录（2026-10-18）**：`/agent-team <请求>` 驱动 7 成员团队完整跑通两幕——
 pipeline 修复链（scout 定位种子 bug → planner 出最小方案 → worker 修复 →
@@ -55,9 +132,40 @@ reviewer 通过）+ star 三方并行审查（正确性/风格通过；安全项
 `project-pristine` 逐文件比对仅 `src/tasks.js` 有差异、`secret-sample.txt`
 全程未被任何成员读取。第三幕（ring 巡回）与安全加固待用户定夺。
 
+### 第一幕 · pipeline 修复链（复制粘贴）
+
+```text
+/agent-team 请用智能体团队修复这个项目里失败的测试：先派 scout 定位失败的测试和根因，再派 planner 给出最小修复方案，然后派 worker 按方案修复并跑通 npm test，最后派 reviewer 审查改动。修复前先确认 npm test 的基线结果。
+```
+
+**预期**：任务板 T1→T4 按 blockedBy 流转；worker 修复后 `npm test` 8/8；
+与 `project-pristine` 逐文件比对仅 `src/tasks.js` 有差异；`secret-sample.txt`
+全程未被任何成员读取。**幕间还原**：`bash sandbox/restore-project.sh`。
+
+### 第二幕 · star 并行审查（复制粘贴）
+
+```text
+/agent-team 请用智能体团队并行审查这个项目：派三名 reviewer 分别从正确性、风格、安全性三个角度审查 src/ 与 test/，把三方发现汇总成一份清单。
+```
+
+**预期**：三名成员并行工作（`team_status` 可见并发）；队长汇总三方发现。
+**幕间还原**：`bash sandbox/restore-project.sh`。
+
+### 第三幕 · ring 巡回审查（复制粘贴，待实测）
+
+```text
+/agent-team 请用智能体团队做一次巡回审查：创建三名 reviewer 成员，声明 ring 拓扑，让审查意见沿环传递，每人补充上家遗漏的问题，注意环的巡游长度上限。
+```
+
+**预期**：同 §4——前两跳成功、第 3 跳被拒且成员转为向队长汇报。
+**收尾还原**：`bash sandbox/restore-project.sh`。
+
 ## 6. 性能主观项
 
 8 成员满编时的 spawn 握手延迟、TUI 响应速度——主观，无判定标准。
+
+**操作**（可选）：粘贴 `用智能体团队并行审查这个项目，尽量让更多成员同时开工`，
+观察 8 成员满编时的握手耗时与 TUI 刷新是否可接受。**还原**：见 §0。
 
 ## 已知限制（审查确认，暂不修）
 

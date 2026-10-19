@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-18（plan-42，人工测试清单答复与文档收尾；此前为 plan-38）。
+> 最近更新：2026-10-19（plan-54，测试流程文档可执行化；此前为 plan-42）。
 
 ## 总览
 
@@ -25,6 +25,7 @@
 | 16 | 沙箱同步 GitHub + 配置位置确认 | plan-34 | .gitignore 粒度化（沙箱 29 个可复用文件入库，排除 agent/auth.json/运行时状态）；cfg-misc storage.dir 改可移植相对路径；新增 sandbox/README.md；确认配置位于 settings.json 的 stepcodeAgentTeam 节 | auth.json 为 OAuth 凭证（access/refresh），dry-run 核验零泄漏 |
 | 17 | 沙箱引入 Step-Code submodule + 全面文档检查 | plan-38 | sandbox/step submodule 钉住 b5dbed9（上游无 tag）；step-bin.sh 解析器 + build-step.sh 可选构建；live-args-forward 分层断言（陈旧 key 不误判）；README 中英/TESTING/HANDOFF/TEST-PLAN 同步 | 用户轮换 key 后环境仍持旧 key，曾致 live-args-forward 误报，已修 |
 | 18 | 罗列剩余人工测试项 + 文档收尾 | plan-42 | 答复人工测试清单（6 项不可约项：TUI 观感/真实安装/信任弹窗 UX/LLM 行为遵循度/演示剧本/性能主观）；DEVELOPMENT-HISTORY 与 HANDOFF 刷新供新 session 接手 | — |
+| 19 | 测试流程文档可执行化（复制粘贴 prompt + 沙箱还原命令） | plan-54 | TUI-VERIFICATION 重写为 11 步可复制粘贴清单（预期与 render.ts 实际渲染对齐）；MANUAL-TESTING 每项补可执行步骤 + 新增 §0 沙箱还原通用节；TESTING §0 补沙箱运行时状态与清场命令 | 修正 `team_set_topology` 命名形状的 renderCall 不含边数、`step remove` 须用安装源两处文档与实现不符 |
 
 ## 明细
 
@@ -182,3 +183,13 @@
 **顺带修复**：live-args-forward 检查在用户轮换 API key 后误报——环境中仍持有已失效的旧 key，使 key 分支进入但转发消息未落盘、`fwd_ok` 被重置清零。改为分层断言：团队板转发声明 + `send_user_message` 事件为必备证据，消息落盘为增益证据（只增不减），陈旧/缺失 key 不再造成误判。
 
 **验证**：`bash sandbox/probe.sh` → PROBE OK；`run-smoke.sh 1 15` 全绿（含旧 key 场景）；五个脚本 `bash -n` 通过；子模块与暂存内容经 git status 核验。
+
+### 19. 测试流程文档可执行化（plan-54）
+
+**用户 prompt**：「请修改 docs 中的文档，把整个测试流程写得更信息，比如 TUI-VERIFICATION 中要写可直接让我复制粘帖的 prompt，以及测试修改完后恢复沙箱环境的命令」
+
+**思路**：开发侧工作已收官（plan-42），剩余人工项的执行 friction 集中在两点——验证步骤是描述性文字而非可直接粘贴的 prompt、测试后没有成文的沙箱还原手段。本轮把 docs/ 的测试流程从「读起来合理」改为「照做即可」，且所有预期值与实现严格对齐。
+
+**工作**：① `docs/TUI-VERIFICATION.md` 重写：环境准备复制粘贴块、11 步「每步一整行 prompt」清单（激活 → 团队板 → 建 scout1/worker1 → 派活 → ctrl+o → pipeline 拓扑 → 任务板 → status → disband → 退出孤儿检查）、收尾还原节。预期字符串逐一核对 `extensions/render.ts` 实际输出；顺带修正两处文档与实现不符——命名形状（pipeline 等）不传 `edges` 时 renderCall 只有 `team topology pipeline`（边数只在 renderResult 头 `pipeline · 1 edge(s)` 出现），旧文档写在 renderCall 上是错的；`step remove` 须用与安装相同的来源（`step remove /tmp/scat-pkg`，语法经 `sandbox/step` 的 packages.md/usage.md 核实）。② `docs/MANUAL-TESTING.md`：6 项不可约人工项全部补可执行步骤——§3 信任 UX 给了创建 `.stepcode/settings.json` 的完整命令块与还原命令；§4 LLM 遵循度给了 ring 三成员实测 prompt 与通过标准；§5 三幕演示剧本各给一整行 `/agent-team` prompt 与幕间还原；新增 §0「沙箱环境与还原」通用节（快速还原 vs 彻底清场，列出全部 gitignored 运行时状态位置）。③ `docs/TESTING.md` §0 补「沙箱运行时状态与还原」表 + 命令块，并交叉引用两份清单文档。
+
+**验证**：`npm run smoke` 全量回归通过（13 phase + 6 live 检查，phase5 无 key SKIP——本轮纯文档改动，冒烟集为防回归的确认性运行）；文档中所有命令核验存在性（run.sh / restore-project.sh / 探针路径）；`step remove`、`/quit` 语法经 sandbox/step 文档核实。
