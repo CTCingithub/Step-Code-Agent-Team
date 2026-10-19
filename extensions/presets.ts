@@ -61,6 +61,11 @@ export function extensionEntryPath(): string {
 	return path.join(extensionDir(), "index.ts");
 }
 
+/** Absolute path to the member-side messaging extension (team_msg tool, via -e). */
+export function memberMessagingEntryPath(): string {
+	return path.join(extensionDir(), "member-messaging.ts");
+}
+
 interface Frontmatter {
 	[key: string]: string;
 }

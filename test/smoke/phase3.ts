@@ -22,6 +22,7 @@ import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { TeamManager } from "../../extensions/members.ts";
 import { TeamServer } from "../../extensions/team-server.ts";
 import { loadPreset, shimPath } from "../../extensions/presets.ts";
+import memberMessaging from "../../extensions/member-messaging.ts";
 
 function runShim(
 	shim: string,
@@ -100,14 +101,91 @@ export default function (pi: ExtensionAPI) {
 			log("member model:", member.model, "tools:", member.tools?.join(","));
 			log(
 				"prompt has coordination section:",
-				promptBody.includes("Team messaging") && promptBody.includes(shim),
+				promptBody.includes("Team messaging") && promptBody.includes("team_msg"),
 			);
-			if (member.model !== preset.model || !promptBody.includes("Team messaging") || !promptBody.includes(shim)) {
+			if (member.model !== preset.model || !promptBody.includes("Team messaging") || !promptBody.includes("team_msg")) {
 				fail("preset wiring broken");
 				await manager.disband();
 				server.stop();
 				return;
 			}
+
+			// 5: the member-side team_msg tool (0.2.x) — registered only inside a
+			// member process (env-driven), speaks the socket protocol directly
+			// (no bash), and surfaces topology denials.
+			const savedSock = process.env.STEPCODE_TEAM_SOCK;
+			const savedMember = process.env.STEPCODE_TEAM_MEMBER;
+			const loadMsgTools = (): Array<{
+				name: string;
+				description?: string;
+				parameters?: unknown;
+				execute?: (...args: unknown[]) => Promise<unknown>;
+			}> => {
+				const tools: Array<{
+					name: string;
+					description?: string;
+					parameters?: unknown;
+					execute?: (...args: unknown[]) => Promise<unknown>;
+				}> = [];
+				memberMessaging({ registerTool: (t: (typeof tools)[number]) => tools.push(t) } as unknown as ExtensionAPI);
+				return tools;
+			};
+
+			delete process.env.STEPCODE_TEAM_SOCK;
+			delete process.env.STEPCODE_TEAM_MEMBER;
+			const inertTools = loadMsgTools();
+			if (inertTools.length !== 0) {
+				fail(`team_msg must stay inert outside a member process (got ${inertTools.length} tools)`);
+			} else {
+				log("team_msg: inert without member env: OK");
+			}
+
+			process.env.STEPCODE_TEAM_SOCK = sock;
+			process.env.STEPCODE_TEAM_MEMBER = "rev1";
+			const msgTools = loadMsgTools();
+			const msgTool = msgTools[0];
+			if (msgTools.length !== 1 || !msgTool || msgTool.name !== "team_msg") {
+				fail("team_msg tool not registered inside a member process");
+			} else {
+				log("team_msg: registered inside a member process: OK");
+				const params = msgTool.parameters as { type?: string; properties?: Record<string, unknown>; required?: string[] };
+				if (
+					params?.type !== "object" ||
+					!params.properties?.to ||
+					!params.properties?.message ||
+					!(params.required ?? []).includes("to") ||
+					!(params.required ?? []).includes("message")
+				) {
+					fail("team_msg schema must require to + message");
+				} else {
+					log("team_msg: schema requires to + message: OK");
+				}
+				if (!(msgTool.description ?? "").includes("topology")) {
+					fail("team_msg description must mention the topology gate");
+				} else {
+					log("team_msg: description mentions the topology gate: OK");
+				}
+				// Socket round-trip: star topology (no edges) → the server denies
+				// and lists the allowed teammates. Proves connect + write + parse +
+				// the error path, zero-token (a denial never dispatches).
+				if (msgTool.execute) {
+					const res = (await msgTool.execute("probe", { to: "ghost", message: "hello" })) as {
+						content?: Array<{ text?: string }>;
+						isError?: boolean;
+					};
+					const text = res.content?.map((c) => c.text ?? "").join("\n") ?? "";
+					if (res.isError !== true || !/topology denies|Allowed teammates/i.test(text)) {
+						fail(`team_msg socket round-trip broken: ${text.slice(0, 160)}`);
+					} else {
+						log("team_msg: topology denial surfaces with the allowed list: OK");
+					}
+				}
+			}
+
+			if (savedSock === undefined) delete process.env.STEPCODE_TEAM_SOCK;
+			else process.env.STEPCODE_TEAM_SOCK = savedSock;
+			if (savedMember === undefined) delete process.env.STEPCODE_TEAM_MEMBER;
+			else process.env.STEPCODE_TEAM_MEMBER = savedMember;
 
 			await manager.disband();
 			server.stop();

@@ -359,9 +359,9 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"pipeline (ordered handoffs in member creation order), mesh (everyone may message everyone),",
 			"ring (each member may message the next), custom (explicit edges).",
 			"Match the shape to the task: parallel independent work needs only star; sequential refinement fits",
-			"pipeline; cross-checking peers fit mesh or a few custom edges. Members learn their allowed",
-			"neighbors from the team status the shim reports. Members need bash in their tool allowlist to",
-			"message each other; the result warns about edges touching members without bash.",
+			"pipeline; cross-checking peers fit mesh or a few custom edges. Members message teammates through",
+			"the built-in team_msg tool (no bash required — read-only presets can use their edges too); a",
+			"rejection tells the sender its allowed neighbors.",
 		].join(" "),
 		promptGuidelines: [
 			"Use team_set_topology to design the member communication topology (star/pipeline/mesh/ring/custom) after creating members and before dispatching work with team_send or team_task.",
@@ -387,7 +387,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			assertActive();
 			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
 			const topology = manager.setTopology(params.shape, edges);
-			// Edges are only usable if both endpoints can run the messaging shim.
+			// Warn about edges whose endpoints cannot message at all (no bash, no team_msg).
 			const lines = ["Topology set:", manager.describeTopology()];
 			lines.push(...messagingWarnings(manager.snapshot().members, topology.edges));
 			return {

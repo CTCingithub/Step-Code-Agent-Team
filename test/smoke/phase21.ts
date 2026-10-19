@@ -55,7 +55,10 @@ export default function (pi: ExtensionAPI) {
 			check("tier: model decides (not a fixed roster)", zhTier.includes("不要照搬"));
 			check("tier: no cost multipliers", !zhTier.includes("×") && !zhTier.includes("~"));
 			const enTier = tierInstruction(getTier("performance"), "en");
-			check("tier: en label + degradation note", enTier.includes("[Team plan · Performance]") && enTier.includes("leader relay"));
+			check(
+				"tier: en label + team_msg mechanism",
+				enTier.includes("[Team plan · Performance]") && enTier.includes("team_msg tool") && enTier.includes("no bash needed"),
+			);
 			check("tier: en non-binding example", enTier.includes("a suggestion, not a fixed plan"));
 
 			// 4. picker options: localized, multiplier-free

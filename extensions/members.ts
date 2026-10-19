@@ -28,7 +28,7 @@ import {
 	saveRegistry,
 	teamDir,
 } from "./registry.ts";
-import { type AgentPreset, extensionEntryPath, loadPreset, shimPath } from "./presets.ts";
+import { type AgentPreset, extensionEntryPath, loadPreset, memberMessagingEntryPath } from "./presets.ts";
 import { nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
 import {
 	DEFAULT_MEMBER_THINKING,
@@ -101,12 +101,14 @@ function debugNote(message: string): void {
 }
 
 /**
- * Whether a member can run the messaging shim: the shim is invoked through a
- * shell (`node bin/stepcode-team.mjs ...`), so a member needs bash in its tool
- * allowlist. An undefined or empty allowlist means "all tools".
+ * Whether a member can message teammates: either bash (the CLI shim, which
+ * runs through a shell) or the team_msg extension tool (direct socket, no
+ * shell). Every spawned member receives team_msg, so read-only presets can
+ * use their topology edges too. An undefined or empty allowlist means
+ * "all tools".
  */
 export function memberCanMessage(tools: readonly string[] | undefined): boolean {
-	return !tools || tools.length === 0 || tools.includes("bash");
+	return !tools || tools.length === 0 || tools.includes("bash") || tools.includes("team_msg");
 }
 
 /**
@@ -127,8 +129,9 @@ export function resumeIgnoredParams(params: CreateMemberParams, member: MemberRe
 }
 
 /**
- * Warnings for topology edges whose endpoints cannot run the messaging shim
- * (no bash in their allowlist). One warning per flagged member, deduplicated.
+ * Warnings for topology edges whose endpoints cannot message at all (no bash
+ * and no team_msg). One warning per flagged member, deduplicated. Since every
+ * spawned member receives team_msg, this is a defensive backstop.
  */
 export function messagingWarnings(
 	members: ReadonlyArray<Pick<MemberRecord, "name" | "tools">>,
@@ -480,7 +483,7 @@ export class TeamManager {
 
 	/**
 	 * Writes the member's system prompt file, appending a coordination section
-	 * that tells the member how to reach teammates through the CLI shim.
+	 * that tells the member how to reach teammates through the team_msg tool.
 	 * The file is persisted (not tmp): respawns need the same
 	 * --append-system-prompt file to resume with identical configuration.
 	 */
@@ -488,16 +491,14 @@ export class TeamManager {
 		const promptsDir = memberPromptsDir(this.reg.teamId);
 		fs.mkdirSync(promptsDir, { recursive: true });
 		const file = path.join(promptsDir, `${member.name}.md`);
-		const shim = shimPath();
 		const coordination = [
 			"",
 			"## Team messaging",
 			`You are member "${member.name}" of an agent team coordinated by a leader.`,
 			"Direct member-to-member messaging is gated by the team topology.",
-			`Run \`node ${shim} status\` to see which teammates you may message.`,
-			`Run \`node ${shim} msg --to <teammate> --message "<text>"\` to message an allowed teammate.`,
-			"If a teammate is not in your allowed list, state the need in your final report instead — the leader will relay it.",
-			"If a messaging command fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
+			"Use the team_msg tool to message an allowed teammate (to = their name).",
+			"A rejection lists the teammates you may message. If none of them fits, state the need in your final report instead — the leader will relay it.",
+			"If team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
 		].join("\n");
 		fs.writeFileSync(file, `${basePrompt}\n${coordination}\n`, { encoding: "utf-8", mode: 0o600 });
@@ -508,7 +509,8 @@ export class TeamManager {
 	 * Spawn arguments and environment for a member process. When the member's
 	 * depth is below maxRecursionDepth it is granted its own sub-team: this
 	 * extension is loaded and auto-activated. Otherwise the member stays
-	 * isolated (--no-extensions, no recursive teams).
+	 * isolated (--no-extensions, no recursive teams) except for the member-side
+	 * messaging extension, which only registers the team_msg tool.
 	 */
 	private buildSpawnArgs(member: MemberRecord): { args: string[]; env: Record<string, string> } {
 		const childDepth = currentDepth() + 1;
@@ -530,18 +532,23 @@ export class TeamManager {
 			STEPCODE_TEAM_MAXDEPTH: String(getConfig().members.maxRecursionDepth),
 		};
 		if (canOrchestrate) {
-			args.push("-e", extensionEntryPath());
+			args.push("-e", extensionEntryPath(), "-e", memberMessagingEntryPath());
 			env.STEPCODE_TEAM_AUTOACTIVATE = "1";
 		} else {
-			// Isolation: members must not load this extension (no recursive teams).
-			args.push("--no-extensions");
+			// Isolation: members must not load package extensions (no recursive
+			// teams). The member-side messaging extension is the single explicit
+			// exception — it only registers the team_msg tool (no orchestration
+			// capability), so read-only roles can use their topology edges
+			// without bash. `--no-extensions -e <path>` is a supported combo.
+			args.push("--no-extensions", "-e", memberMessagingEntryPath());
 		}
 		if (member.model) args.push("--model", member.model);
 		if (member.thinking) args.push("--thinking", member.thinking);
 		if (member.tools && member.tools.length > 0) {
-			// --tools is an allowlist over built-in AND extension tools: sub-leaders
-			// need the team tools on top of their preset allowlist.
-			const allow = canOrchestrate ? [...new Set([...member.tools, ...TEAM_TOOL_NAMES])] : member.tools;
+			// --tools is an allowlist over built-in AND extension tools. team_msg
+			// is team infrastructure (no bash needed) and the sub-leader team
+			// tools are added on top of the preset/explicit allowlist.
+			const allow = [...new Set([...member.tools, "team_msg", ...(canOrchestrate ? TEAM_TOOL_NAMES : [])])];
 			args.push("--tools", allow.join(","));
 		}
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);

@@ -14,7 +14,7 @@ import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { currentDepth, TeamManager } from "../../extensions/members.ts";
 import { defaultConfig, getConfig } from "../../extensions/config.ts";
-import { extensionEntryPath } from "../../extensions/presets.ts";
+import { extensionEntryPath, memberMessagingEntryPath } from "../../extensions/presets.ts";
 import { teamsRoot } from "../../extensions/registry.ts";
 
 function procCmdline(pid: number): string[] {
@@ -77,10 +77,16 @@ export default function (pi: ExtensionAPI) {
 			check("spawn: depth env = 1", env.STEPCODE_TEAM_DEPTH === "1", `got ${env.STEPCODE_TEAM_DEPTH}`);
 			check("spawn: member identity env", env.STEPCODE_TEAM_MEMBER === "m1", `got ${env.STEPCODE_TEAM_MEMBER}`);
 			check("spawn: sock env points at the team server", (env.STEPCODE_TEAM_SOCK ?? "").endsWith("/sock"), `got ${env.STEPCODE_TEAM_SOCK}`);
+			// team_msg is team infrastructure: present in the --tools allowlist for
+			// every member (no bash needed, so read-only presets can message too).
+			const toolsIdx = cmdline.indexOf("--tools");
+			const allowlist = toolsIdx >= 0 ? (cmdline[toolsIdx + 1] ?? "").split(",") : [];
+			check("spawn: team_msg in the tools allowlist", allowlist.includes("team_msg"), `got ${allowlist.join(",")}`);
 
 			if (canOrchestrate) {
 				// Depth grant: the extension is loaded and auto-activated in the member.
 				check("depth grant: extension entry arg (-e)", cmdline.includes("-e") && cmdline.includes(entry), cmdline.join(" ").slice(0, 200));
+				check("depth grant: messaging extension also loads", cmdline.includes(memberMessagingEntryPath()), cmdline.join(" ").slice(0, 240));
 				check("depth grant: auto-activate env", env.STEPCODE_TEAM_AUTOACTIVATE === "1", `got ${env.STEPCODE_TEAM_AUTOACTIVATE}`);
 				check("depth grant: not --no-extensions", !cmdline.includes("--no-extensions"));
 
@@ -99,7 +105,16 @@ export default function (pi: ExtensionAPI) {
 				// Depth 1: the member stays isolated.
 				check("depth 1: member isolated (--no-extensions)", cmdline.includes("--no-extensions"), cmdline.join(" ").slice(0, 200));
 				check("depth 1: no auto-activate env", env.STEPCODE_TEAM_AUTOACTIVATE === undefined, `got ${env.STEPCODE_TEAM_AUTOACTIVATE}`);
-				check("depth 1: no extension entry arg", !cmdline.includes("-e"));
+				// Depth 1: only the member-side messaging extension loads (team_msg);
+				// the team extension itself stays out (no recursive teams).
+				check(
+					"depth 1: only the messaging extension loads",
+					cmdline.includes("--no-extensions") &&
+						cmdline.includes("-e") &&
+						cmdline.includes(memberMessagingEntryPath()) &&
+						!cmdline.includes(extensionEntryPath()),
+					cmdline.join(" ").slice(0, 240),
+				);
 				const subDir = path.join(teamsRoot(), `team-${manager.teamId}-m1`);
 				await new Promise((r) => setTimeout(r, 1500));
 				check("depth 1: no sub-team directory", !fs.existsSync(subDir), subDir);

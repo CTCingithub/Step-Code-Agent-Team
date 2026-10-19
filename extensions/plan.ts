@@ -90,8 +90,8 @@ const TIERS: Record<PlanTierId, TeamTier> = {
 			en: "Complete the request at the highest quality regardless of cost: many members, high effort, deep collaboration — parallel racing with a final pick is fine.",
 		},
 		example: {
-			zh: "示例（仅供参考，非固定方案）：scout + planner + 3 名 worker + 2 名 reviewer，effort 取 high/xhigh；可用 custom 拓扑表达依赖方向——只读角色没有 bash，指向它们的边会退化为队长中转，依赖请同时用任务板 blockedBy 表达。",
-			en: "Example (a suggestion, not a fixed plan): scout + planner + 3 workers + 2 reviewers, effort high/xhigh; a custom topology may express dependency direction — read-only roles have no bash, so edges touching them degrade to leader relay, and dependencies should also be expressed via the task board's blockedBy.",
+			zh: "示例（仅供参考，非固定方案）：scout + planner + 3 名 worker + 2 名 reviewer，effort 取 high/xhigh；可用 custom 拓扑表达依赖方向——成员经内置 team_msg 工具直达通信（只读角色无需 bash 也可用），依赖请同时用任务板 blockedBy 表达。",
+			en: "Example (a suggestion, not a fixed plan): scout + planner + 3 workers + 2 reviewers, effort high/xhigh; a custom topology may express dependency direction — members message teammates through the built-in team_msg tool (no bash needed, read-only roles included), and dependencies should also be expressed via the task board's blockedBy.",
 		},
 	},
 };
