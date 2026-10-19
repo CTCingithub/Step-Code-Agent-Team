@@ -69,7 +69,7 @@ step remove /absolute/path/to/Step-Code-Agent-Team  # 卸载（同一路径）
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team        # 跟踪默认分支
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.0 # 或钉住标签
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.1 # 或钉住标签
 step install npm:step-code-agent-team                               # 发布到 npm 后
 ```
 

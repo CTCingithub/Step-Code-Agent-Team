@@ -72,7 +72,7 @@ From git or npm — no packaging step needed, it is a standard step package:
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team        # tracks the default branch
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.0 # or pin a tag
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.1 # or pin a tag
 step install npm:step-code-agent-team                               # once published to npm
 ```
 
