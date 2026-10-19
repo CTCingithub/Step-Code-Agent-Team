@@ -1,6 +1,6 @@
 # Architecture
 
-> [简体中文 →](./ARCHITECTURE_ZH.md)
+> [简体中文 →](./ARCHITECTURE_CN.md)
 > This document describes Step-Code-Agent-Team's component structure, data flow, and directory layout, based on the current `extensions/` implementation.
 > Protocol details (RPC / socket / registry schema / tool contracts) are in [PROTOCOL.md](PROTOCOL.md); testing methodology is in [TESTING.md](TESTING.md).
 
@@ -11,7 +11,7 @@ Leader session (step, loads this extension)
 │
 ├── extensions/index.ts      entry: load config → depth gate → register 6 tools →
 │                            setUnavailableTools closes the gate (off by default);
-│                            activation triggers: /agent-team command, input hook, before_agent_start hook,
+│                            activation triggers: /topo command (deprecated alias /agent-team), input hook, before_agent_start hook,
 │                            STEPCODE_TEAM_AUTOACTIVATE (sub-leader grant)
 ├── extensions/config.ts     config: the [stepcodeAgentTeam] table of the unified config.toml (defaults < global < project < environment overrides); validation, caching, and first-activation seeding
 ├── extensions/activation.ts activation gate: keyword/command detection, tool release

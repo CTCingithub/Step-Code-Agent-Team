@@ -73,17 +73,61 @@ step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.2 # 或钉住�
 step install npm:step-code-agent-team                               # 发布到 npm 后
 ```
 
-然后在会话里下达目标，例如："用智能体团队并行审查这个仓库"（或先运行 `/agent-team`——插件在此之前保持静默）。
+然后在会话里下达目标，例如："用智能体小队并行审查这个仓库"（或先运行 `/topo`——插件在此之前保持静默）。
 
 ## 激活机制（默认关闭）
 
 插件在会话启动时**不激活**：团队工具对模型不可见，也不存在 socket、定时器或成员进程。两种触发方式：
 
-1. **斜杠命令 `/agent-team`**：调用即激活，并展示团队板；
-2. **自然语言**：prompt 文本命中激活关键词（如 "智能体团队"、"agent team"，可配置）。
+1. **斜杠命令 `/topo`**：调用即激活，并展示团队板；
+2. **自然语言**：prompt 文本命中激活关键词（清单见下，可配置）。
 
-激活后在本次会话内保持。完整配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md)
-（可整体禁用激活或调整关键词）。
+激活后在本次会话内保持。**`/topo off`** 可再次停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复）。**迁移说明：** `/agent-team` 为 deprecated 别名，保留至 0.3.0——行为相同，仅多一条弃用提示。
+
+### 激活关键词（0.2.0 默认清单）
+
+仅插件专属关键词会激活插件。"智能体团队" / "agent team" / "组队" 等裸词已在 0.2.0 刻意移除，避免与未来官方智能体团队功能撞车：
+
+```text
+智能体小队 · 多智能体小队 · 组小队 · stepcode 小队 · topo team · topo-agent ·
+stepcode topo · topology team · agent squad · stepcode-agent-team ·
+step code agent team · team_create_member · team_send · team_task
+```
+
+（共 14 个；经 `activation.keywords` 调整——见
+[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。）
+
+### 防误触护栏（默认开启）
+
+关键词激活经过三层护栏——斜杠命令是显式意图，**不经过**任何一层：
+
+- **L1 启发式否决**（`activation.guardEnabled`）：读作否定句（"不用组小队"）、元讨论（"什么是智能体小队"）或代码引用（反引号、import、函数调用）的命中不激活；
+- **L2 TUI 确认**（`activation.confirmBeforeActivate`）：交互 TUI 中关键词命中先弹确认框；
+- **L3 headless/RPC 自动激活**（`activation.headlessAutoActivate`）：脚本化运行无人应答，直接激活。
+
+三项默认均为 `true`。
+
+## 团队方案（默认关闭）
+
+可选的预设团队。`plan.enabled = true` 时，经 `/topo` 激活会先弹选单：
+
+```toml
+# ~/.stepcode/config.toml（或 <项目>/.stepcode/config.toml）
+[stepcodeAgentTeam.plan]
+enabled = false
+defaultTier = "balanced"
+```
+
+| 档位 | 成员（角色 × 数量 · 思考强度） | 拓扑 | 规模 | 约成本 | 适用 |
+|---|---|---|---|---|---|
+| 经济 economy | scout×1（low）+ worker×1（medium） | pipeline | 2 | ~0.3× | 只读调研、小改动 |
+| 快速 fast | worker×2（low） | star | 2 | ~0.5× | 格式化、批量小改 |
+| 均衡 balanced *（默认）* | scout×1（low）+ planner×1（medium）+ worker×2（medium）+ reviewer×1（medium） | star | 5 | ~1.0× | 常规功能开发 |
+| 性能 performance | scout×1（medium）+ planner×1（high）+ worker×3（high）+ reviewer×2（xhigh） | custom（菱形） | 7 | ~2.2× | 大规模重构、深度审查 |
+
+选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → 思考强度），自由文字需求随请求一并携带。档位由队长通过常规团队工具落地：固定角色组合、思考强度、成员名（`scout1`、`planner1`、`worker1`……）与拓扑；派发并发/超时维持全局配置。
+
+选单行为：30 秒超时回退 `defaultTier`；headless/RPC 激活跳过选单直接应用 `defaultTier`；`/topo <档位名>`（如 `/topo performance`）不弹选单直接应用。成本倍率为相对单轮会话的预估值。
 
 ## 工具
 
@@ -95,7 +139,7 @@ step install npm:step-code-agent-team                               # 发布到 
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
 | `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
-| `/agent-team` | 命令：激活插件并查看团队板；命令后的文本将作为团队请求转发给 agent（明确指示使用智能体团队完成） |
+| `/topo` | 命令：激活插件并查看团队板。`/topo off` 停用并重新隐藏团队工具；`/topo <档位>`（economy/fast/balanced/performance/custom）应用团队方案（见「团队方案」）；命令后的文本**逐字转发**给 agent——「使用团队」指令经 context 事件 request-local 注入，不写入会话文件。deprecated 别名 `/agent-team`（行为相同，0.3.0 移除） |
 
 ## 成员通信拓扑
 
@@ -156,7 +200,7 @@ flowchart LR
     C2["m2"] --> C3
 ```
 
-强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md)。
+强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。
 
 ## 内置角色预设（`agents/`）
 
@@ -167,6 +211,10 @@ flowchart LR
 | `worker` | 全量 | 执行计划、运行检查 |
 | `reviewer` | 只读 | 对抗式审查（正确性 / 风格 / 安全） |
 
+预设 thinking 默认值：`scout`=low、`planner`=medium、`worker`=medium、
+`reviewer`=high。`team_create_member` 显式传 `thinking` 仍优先；无预设的成员
+回退 `high`。
+
 另附 `prompts/team-review.md`（并行多审查员链）与
 `skills/team-orchestration/SKILL.md`（何时以及如何组队）。
 
@@ -176,7 +224,7 @@ flowchart LR
 agent 目录、sessions、团队注册表、`auth.json`——在 gitignore 内）。`sandbox/step`
 是钉住本沙箱跟踪版本的 Step Code 源码 submodule；克隆请用
 `--recurse-submodules`（或克隆后 `git submodule update --init sandbox/step`），
-更新与构建流程见 `sandbox/README_ZH.md`：
+更新与构建流程见 `sandbox/README_CN.md`：
 
 ```bash
 ./sandbox/run.sh       # 以沙箱环境变量启动 step（cwd 为 sandbox/project）
@@ -188,14 +236,15 @@ bash sandbox/restore-project.sh  # 还原测试小项目到初始状态（种子
 `STEP_CODING_AGENT_PLAN_DIR` 指向 `sandbox/agent/...`。涉及模型调用的运行前，
 请在当前 shell `export STEP_API_KEY=<你自己的 key>`——密钥绝不落盘。
 LLM 层探针（`sandbox/smoke-phase4/10/11/12.ts`）同样随仓库分发，跑法见
-[docs/TESTING.md](docs/TESTING_ZH.md) 与 `sandbox/README_ZH.md`。
+[docs/TESTING.md](docs/TESTING_CN.md) 与 `sandbox/README_CN.md`。
 
 ## 项目结构
 
 ```
 extensions/    index.ts（接线）· config.ts · activation.ts · rpc-client.ts ·
                members.ts · tasks.ts · registry.ts · team-server.ts ·
-               topology.ts · presets.ts · tools.ts · render.ts
+               topology.ts · presets.ts · plan.ts · forward.ts · tools.ts ·
+               render.ts
 bin/           stepcode-team.mjs（成员侧 CLI shim）
 agents/        角色预设（scout · planner · worker · reviewer）
 prompts/       team-review.md
@@ -227,7 +276,7 @@ defaultRole = "worker"
 maxConcurrent = 5
 ```
 
-完整参考（全部配置节、语义与拓扑形状）：[docs/CONFIGURATION_ZH.md](docs/CONFIGURATION_ZH.md)。
+完整参考（全部配置节、语义与拓扑形状）：[docs/CONFIGURATION_CN.md](docs/CONFIGURATION_CN.md)。
 `STEPCODE_TEAM_SOCK` 由队长自动注入成员进程。
 
 ## 开发
@@ -237,14 +286,14 @@ maxConcurrent = 5
 ```bash
 bash sandbox/probe.sh   # RPC 握手探针 → 期望输出 PROBE OK
 
-npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14）
+npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21）
                         # hermetic：一次性临时 agentDir；phase5 未设 STEP_API_KEY 时
                         # 显式 SKIP（它会发起一次真实调用）
 ```
 
 冒烟集随仓库分发（`test/smoke/` + `test/run-smoke.sh`，临时 agentDir 经 mktemp 创建）。
 LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，跑法见
-[docs/TESTING.md](docs/TESTING_ZH.md) 与 `sandbox/README_ZH.md`。
+[docs/TESTING.md](docs/TESTING_CN.md) 与 `sandbox/README_CN.md`。
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 
@@ -252,10 +301,10 @@ LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，�
 
 | 文档 | 内容 |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE_ZH.md) | 组件、数据流、存储布局、护栏位置 |
-| [docs/PROTOCOL.md](docs/PROTOCOL_ZH.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md) | 配置参考 |
-| [docs/TESTING.md](docs/TESTING_ZH.md) | 四层测试的运行方法 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE_CN.md) | 组件、数据流、存储布局、护栏位置 |
+| [docs/PROTOCOL.md](docs/PROTOCOL_CN.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md) | 配置参考 |
+| [docs/TESTING.md](docs/TESTING_CN.md) | 四层测试的运行方法 |
 
 ## 已知限制
 
@@ -296,7 +345,7 @@ export STEP_API_KEY=<你的key>
 #       → 验证 team_create_member + team_send（真实 LLM 回复）
 #    b. "用一句话向它总结你发现的问题"
 #       → 验证成员上下文记忆（同一进程内多轮）
-#    c. "/agent-team"
+#    c. "/topo"
 #       → 验证激活与团队板展示
 #    d. "创建两个成员并行审查不同侧重，然后合并结论"
 #       → 验证并行调度与结果合并

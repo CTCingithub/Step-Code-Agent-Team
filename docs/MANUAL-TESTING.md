@@ -1,13 +1,13 @@
 # Manual Testing Checklist (minimized)
 
-> [简体中文 →](./MANUAL-TESTING_ZH.md)
+> [简体中文 →](./MANUAL-TESTING_CN.md)
 >
 > **Automated coverage** (`npm run smoke`, zero-token; phase5 and the LLM items need a
 > key): the protocol layer, three-tier config loading and legacy-file fallback, the
 > topology truth table and out-of-bounds rejection, recursion depth, the task board
 > state machine, message enforcement (topology / loop cap / wait cycle), project-level
 > config **trust application and rejection** (`live-project-config` /
-> `live-untrusted-config`), live wiring (the `/agent-team` command, argument
+> `live-untrusted-config`), live wiring (the `/topo` command, argument
 > forwarding), the **TUI rendering content layer** (phase15 asserts render.ts tool
 > call/result strings, collapse/expand, usage rows, icons), the **cost guardrail and
 > output truncation logic** (phase16), **orphan processes** (orphan-check: members must
@@ -94,7 +94,7 @@ uninstalls.
 **Verify the install works** (open a normal session after installing, paste):
 
 ```text
-Use the agent team feature to introduce yourself
+Use the topo team feature to introduce yourself
 ```
 
 **Uninstall verification**: `step remove <absolute path to the repo>`, then start
@@ -114,7 +114,7 @@ mkdir -p sandbox/project/.stepcode
 cat > sandbox/project/.stepcode/config.toml <<'EOF'
 [stepcodeAgentTeam.activation]
 enabled = true
-keywords = ["agent team", "智能体团队"]
+keywords = ["智能体小队", "topo team"]
 notifyOnActivate = true
 EOF
 ./sandbox/run.sh     # first start should pop the trust prompt; glance at the prompt and the "Remember" option
@@ -144,7 +144,7 @@ going off to investigate tools.
 **Action** (paste in order inside a sandbox session):
 
 ```text
-Use the agent team feature for a round-robin review: create three members with the reviewer role, r1, r2, r3, declare a ring topology, have r1 first review the correctness of src/tasks.js, then pass the review comments along the ring to the next member, with each member adding its own findings after receiving the previous member's comments.
+Use the topo team feature for a round-robin review: create three members with the reviewer role, r1, r2, r3, declare a ring topology, have r1 first review the correctness of src/tasks.js, then pass the review comments along the ring to the next member, with each member adding its own findings after receiving the previous member's comments.
 ```
 
 **Expected**: `team_set_topology ring` declares 3 edges; the two hops r1→r2 and r2→r3
@@ -173,7 +173,7 @@ own eyes under real accumulated spend is optional (start the sandbox with
 Start with `./sandbox/run.sh`, and restore with `bash sandbox/restore-project.sh`
 **before each act**. This is an experience validation, not a correctness validation.
 
-**Measured record (2026-10-18)**: `/agent-team <request>` drove a 7-member team
+**Measured record (2026-10-18)**: `/topo <request>` drove a 7-member team
 through two acts end to end — the pipeline fix chain (scout locates the seeded bug →
 planner produces a minimal plan → worker fixes → reviewer approves) + the star
 three-way parallel review (correctness/style passed; the security item left hardening
@@ -194,7 +194,7 @@ per protocol (details in §4 and the third act below).
 ### Act 1 · pipeline fix chain (copy-paste)
 
 ```text
-/agent-team Use the agent team to fix the failing tests in this project: first dispatch scout to locate the failing test and root cause, then dispatch planner to give a minimal fix plan, then dispatch worker to fix it per the plan and get npm test passing, and finally dispatch reviewer to review the changes. Before fixing, first confirm the npm test baseline.
+/topo Use the topo team to fix the failing tests in this project: first dispatch scout to locate the failing test and root cause, then dispatch planner to give a minimal fix plan, then dispatch worker to fix it per the plan and get npm test passing, and finally dispatch reviewer to review the changes. Before fixing, first confirm the npm test baseline.
 ```
 
 **Expected**: the task board T1→T4 flows per `blockedBy`; after the worker's fix `npm
@@ -206,7 +206,7 @@ real by the leader.) **Between-act restore**: `bash sandbox/restore-project.sh`.
 ### Act 2 · star parallel review (copy-paste)
 
 ```text
-/agent-team Use the agent team to review this project in parallel: dispatch three reviewers to review src/ and test/ from the correctness, style, and security angles respectively, and consolidate the three parties' findings into one list.
+/topo Use the topo team to review this project in parallel: dispatch three reviewers to review src/ and test/ from the correctness, style, and security angles respectively, and consolidate the three parties' findings into one list.
 ```
 
 **Expected**: the three members work in parallel (concurrency is visible in
@@ -217,7 +217,7 @@ against the demo code is recorded in `sandbox/TEST-PLAN.md` section 8).
 ### Act 3 · ring round-robin review (copy-paste, ✅ 2026-10-19 measured)
 
 ```text
-/agent-team Use the agent team for a round-robin review: create three reviewer members, declare a ring topology, let the review comments pass along the ring, each member adding what the previous one missed, and mind the ring's chain-length cap.
+/topo Use the topo team for a round-robin review: create three reviewer members, declare a ring topology, let the review comments pass along the ring, each member adding what the previous one missed, and mind the ring's chain-length cap.
 ```
 
 **Measured (2026-10-19)**: the leader, following the tool description, proactively
@@ -243,7 +243,7 @@ the session (config is read only once at session startup).
 Spawn handshake latency with a full 8-member roster and TUI responsiveness —
 subjective, with no pass criteria.
 
-**Action** (optional): paste `Use the agent team to review this project in parallel,
+**Action** (optional): paste `Use the topo team to review this project in parallel,
 with as many members working at once as possible`, and observe whether the handshake
 time at a full 8-member roster and the TUI refresh are acceptable. **Restore**: see §0.
 

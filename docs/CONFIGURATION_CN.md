@@ -21,8 +21,11 @@
 ```toml
 [stepcodeAgentTeam.activation]
 enabled = true                       # 总开关；false 时两种触发都无效
-keywords = ["agent team", "智能体团队"]   # 自然语言激活关键词；[] = 禁用关键词激活
+keywords = ["智能体小队", "多智能体小队", "组小队", "stepcode 小队", "topo team", "topo-agent", "stepcode topo", "topology team", "agent squad", "stepcode-agent-team", "step code agent team", "team_create_member", "team_send", "team_task"]   # 插件专属关键词；[] = 禁用关键词激活
 notifyOnActivate = true              # 激活时是否 notify 提示
+guardEnabled = true                  # L1：忽略否定句/元讨论/代码引用式提及
+confirmBeforeActivate = true         # L2：TUI 中关键词命中先弹确认框（headless 忽略）
+headlessAutoActivate = true          # L3：headless/RPC 关键词命中直接激活，不弹框
 
 [stepcodeAgentTeam.models]
 available = ["step-5-preview"]       # 成员模型池
@@ -59,6 +62,10 @@ default = "star"                     # star/pipeline/mesh/ring/custom
 requireDeclaration = false           # true = 未显式声明拓扑前禁止派活
 maxLoopCount = 2                     # 环形消息链跳数上限（0 = 无上限，0–64）
 
+[stepcodeAgentTeam.plan]
+enabled = false                      # 团队方案选单：激活时给出经济/快速/均衡/性能 + 自定义
+defaultTier = "balanced"             # 选单超时或 headless 时应用的档位
+
 [stepcodeAgentTeam]
 debug = false                        # 调试日志
 ```
@@ -67,8 +74,8 @@ debug = false                        # 调试日志
 
 | 配置节 | 控制内容 |
 |---|---|
-| `activation` | 默认关闭门：`/agent-team` 命令或关键词提及（大小写不敏感）即激活，会话内粘性。`enabled: false` 时两种触发都无效，`/agent-team` 会提示已被配置禁用 |
-| `models` | 成员模型池。`autonomousSelection` 关（默认）时所有成员强制使用对话当前模型（预设/显式 `model` 忽略）；开时解析链为显式 `model` → 预设 → 对话当前模型（显式模型不在列表则报错并列出可用模型，预设模型不在列表则回退 `available[0]`）。`autonomousThinking` 关时成员默认 `high` 思考；开时由队长逐成员选择 |
+| `activation` | 默认关闭门：`/topo` 命令（deprecated 别名 `/agent-team` 保留至 0.3.0；`/topo off` 停用并重新隐藏工具）或关键词提及（大小写不敏感）即激活，会话内粘性。`enabled: false` 时两种触发都无效，命令会提示已被配置禁用。`guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` 三层防误触——斜杠命令不经过防护 |
+| `models` | 成员模型池。`autonomousSelection` 关（默认）时所有成员强制使用对话当前模型（预设/显式 `model` 忽略）；开时解析链为显式 `model` → 预设 → 对话当前模型（显式模型不在列表则报错并列出可用模型，预设模型不在列表则回退 `available[0]`）。`autonomousThinking` 关时成员用预设的 thinking 默认值（`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`）；开时由队长逐成员选择 |
 | `members` | `max` 只计**存活**成员（dead 记录可恢复但不占名额）。`maxRecursionDepth`：1 = 成员不能组建团队（其会话中扩展完全惰性）；2+ 授予子队长独立团队（独立注册表与 socket），上限 4 |
 | `dispatch` | `maxConcurrent` 在**进程启动前**门控（排队启动）；oneshot 共享同一预算；嵌套成员间接力绕过全局门以避免链式死锁 |
 | `oneshot` | 无状态 `mode: "oneshot"` 派发超时 |
@@ -76,6 +83,7 @@ debug = false                        # 调试日志
 | `idle` | 空闲成员被回收（session 保留可恢复）；运行中成员永不回收 |
 | `storage` | 团队数据根目录（注册表、sessions、prompts、socket）；null = `<agentDir>/teams` |
 | `topology` | 成员间消息默认拒绝，除非声明的边允许。`requireDeclaration` 落实「先设计再开工」。`maxLoopCount` 约束链长（队长派发 = 0，每转发 +1）；超限跳被拒且发送方转报队长——同时防止环形巡游死锁 |
+| `plan` | 团队方案选单（默认关）：激活时队长给出经济/快速/均衡/性能四档 + 自定义流程（规模 → 拓扑 → 思考强度）；`defaultTier` 兜底选单超时与 headless/RPC。档位固定角色组合、思考强度、成员名与拓扑——派发并发/超时维持全局配置 |
 | `debug` | stderr 诊断日志 |
 
 拓扑形状（建成员后、派活前用 `team_set_topology` 声明）：

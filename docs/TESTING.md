@@ -1,6 +1,6 @@
 # Testing Guide
 
-> [简体中文 →](./TESTING_ZH.md)
+> [简体中文 →](./TESTING_CN.md)
 >
 > The operational version of the four-layer testing system. Principle: **write a
 > reproducible test first, then fix**; the zero-token layer comes first, and the
@@ -138,7 +138,7 @@ invalid member name / unknown task id / unknown member all get explicit errors),
 missing directories (createMember still works after the sessions directory is
 deleted), and scale (8-member cap / 999-task cap / 50KB per-task detail).
 
-TUI rendering (renderCall/renderResult, the `/agent-team` panel, streaming
+TUI rendering (renderCall/renderResult, the `/topo` panel, streaming
 progress, activation notify) only takes effect in the interactive TUI and is not
 covered by probes; verify it manually per
 [TUI-VERIFICATION.md](TUI-VERIFICATION.md). The full manual testing checklist

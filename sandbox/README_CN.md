@@ -12,7 +12,7 @@ export STEP_API_KEY=<你自己的 key>   # 仅涉及模型调用时才需要；�
 ./sandbox/run.sh                     # 在 sandbox/project 中启动 step（已加载本扩展）
 ```
 
-启动后在会话里输入 `/agent-team <你的请求>` 即可组建智能体团队。
+启动后在会话里输入 `/topo <你的请求>` 即可组建智能体团队。
 
 ## 内容
 
@@ -72,6 +72,6 @@ npm run smoke            # 零 token 全量冒烟（无需 key）
 bash test/run-smoke.sh 5 # phase5 需 key
 ```
 
-LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_ZH.md)；
-配置方式见 [../docs/CONFIGURATION.md](../docs/CONFIGURATION_ZH.md)
+LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_CN.md)；
+配置方式见 [../docs/CONFIGURATION.md](../docs/CONFIGURATION_CN.md)
 （`sandbox/config.toml` 的 `[stepcodeAgentTeam]` 表）。

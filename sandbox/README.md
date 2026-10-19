@@ -1,6 +1,6 @@
 # Sandbox
 
-> [简体中文 →](./README_ZH.md)
+> [简体中文 →](./README_CN.md)
 
 Isolated dev/test environment that ships with the repo. All development
 happens here, fully isolated from your real `~/.stepcode` — **runtime state is
@@ -14,7 +14,7 @@ export STEP_API_KEY=<your own key>   # only needed when a model call is involved
 ./sandbox/run.sh                     # launch step in sandbox/project (this extension already loaded)
 ```
 
-After startup, type `/agent-team <your request>` in the session to form an
+After startup, type `/topo <your request>` in the session to form an
 agent team.
 
 ## Contents

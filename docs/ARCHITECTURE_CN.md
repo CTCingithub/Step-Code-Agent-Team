@@ -2,7 +2,7 @@
 > [English →](./ARCHITECTURE.md)
 
 > 本文档描述 Step-Code-Agent-Team 的组件构成、数据流与目录布局，以 `extensions/` 当前实现为准。
-> 协议细节（RPC / socket / registry schema / 工具契约）见 [PROTOCOL.md](PROTOCOL_ZH.md)；测试方法见 [TESTING.md](TESTING_ZH.md)。
+> 协议细节（RPC / socket / registry schema / 工具契约）见 [PROTOCOL.md](PROTOCOL_CN.md)；测试方法见 [TESTING.md](TESTING_CN.md)。
 
 ## 1. 组件总览
 
@@ -11,7 +11,7 @@
 │
 ├── extensions/index.ts      入口：加载配置 → 深度门 → 注册 6 个工具 →
 │                            setUnavailableTools 关门（默认关闭）；
-│                            激活触发：/agent-team 命令、input 钩子、before_agent_start 钩子、
+│                            激活触发：/topo 命令（deprecated 别名 /agent-team）、input 钩子、before_agent_start 钩子、
 │                            STEPCODE_TEAM_AUTOACTIVATE（子队长授予）
 ├── extensions/config.ts     配置：统一配置 config.toml 的 [stepcodeAgentTeam] 表（默认值 < 全局 < 项目级 < 环境变量覆盖）；校验、缓存与首次激活种子化
 ├── extensions/activation.ts 激活门：关键词/命令检测、工具释放
@@ -97,7 +97,7 @@ shim 经 shell 调用：成员工具白名单不含 `bash` 时（如 scout/plann
 
 ## 6. 相关文档
 
-- [PROTOCOL.md](PROTOCOL_ZH.md)：RPC 命令/事件、socket 协议、registry schema、工具契约
-- [CONFIGURATION.md](CONFIGURATION_ZH.md)：配置参考
-- [TESTING.md](TESTING_ZH.md)：四层测试方法
-- [../README.md](../README_ZH.md)：使用说明
+- [PROTOCOL.md](PROTOCOL_CN.md)：RPC 命令/事件、socket 协议、registry schema、工具契约
+- [CONFIGURATION.md](CONFIGURATION_CN.md)：配置参考
+- [TESTING.md](TESTING_CN.md)：四层测试方法
+- [../README.md](../README_CN.md)：使用说明

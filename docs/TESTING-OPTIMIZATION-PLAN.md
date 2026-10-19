@@ -1,6 +1,6 @@
 # Testing and Optimization Plan
 
-> [简体中文 →](./TESTING-OPTIMIZATION-PLAN_ZH.md)
+> [简体中文 →](./TESTING-OPTIMIZATION-PLAN_CN.md)
 >
 > Source: a 2026-10-17 walkthrough of the entire Step-Code-Agent-Team codebase
 > (10 `extensions/` modules + the `bin` shim + presets + docs).

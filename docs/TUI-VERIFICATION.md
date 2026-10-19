@@ -1,6 +1,6 @@
 # TUI Manual Verification Checklist
 
-> [简体中文 →](./TUI-VERIFICATION_ZH.md)
+> [简体中文 →](./TUI-VERIFICATION_CN.md)
 >
 > The **rendered content** of `render.ts` (renderCall / renderResult) is already
 > asserted headless by the phase15 probe (the six tools' call/result strings,
@@ -10,7 +10,7 @@
 > `~/.stepcode`; it involves model calls, so export the test key first (passed
 > only through the environment).
 >
-> **Verification record (2026-10-18)**: the `/agent-team <request>` full chain
+> **Verification record (2026-10-18)**: the `/topo <request>` full chain
 > has been manually verified in a real TUI — activation, the team board, argument
 > forwarding, a real 7-member two-topology (pipeline + star) team run, and
 > T1→T4 task board transitions all work (see the manual test records in
@@ -43,13 +43,13 @@ pasting the next one. Step 6 is a key press, not a prompt.
 
 | # | Copy-paste | Expected render | Result |
 |---|---|---|---|
-| 1 | `I'd like to use the agent team feature to get familiar with this sandbox project` | Activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
-| 2 | `/agent-team` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/thinking) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
+| 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | Activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
+| 2 | `/topo` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/thinking) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
 | 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … thinking=high` | ☐ |
 | 4 | `Create another member with the worker role, named worker1` | Same as step 3: `+worker1 (worker)` / `✓ worker1 (worker) [idle]` (provides the second member for step 7's pipeline topology) | ☐ |
-| 5 | `Ask scout1 to introduce himself in one sentence` | renderCall: `team →scout1` + message preview (≤70 chars); during a long run onUpdate streams updates (first "(member is working...)", then interim text); renderResult: usage row (`1 turn, $x.xxxx`) + the reply body (collapsed to 3 lines by default, with "(ctrl+o to expand)") | ☐ |
+| 5 | `Ask scout1 to introduce himself in one sentence` | renderCall: `team → scout1` + message preview (≤70 chars); during a long run onUpdate streams updates (first "(member is working...)", then interim text); renderResult: usage row (`1 turn, $x.xxxx`) + the reply body (collapsed to 3 lines by default, with "(ctrl+o to expand)") | ☐ |
 | 6 | *(key press, not a prompt)* Press `ctrl+o` on step 5's result | The full body expands; press again to collapse it | ☐ |
-| 7 | `Set the messaging topology to pipeline, then have scout1 say hi to worker1` | renderCall: `team topology pipeline` (a named shape passes no edges, so there is no edge count; if the model explicitly passes edges, ` N edge(s)` is appended); renderResult header: `pipeline · 1 edge(s)` (scout1→worker1); then `team →scout1` dispatches successfully (allowed in the pipeline direction) | ☐ |
+| 7 | `Set the messaging topology to pipeline, then have scout1 say hi to worker1` | renderCall: `team topology pipeline` (a named shape passes no edges, so there is no edge count; if the model explicitly passes edges, ` N edge(s)` is appended); renderResult header: `pipeline · 1 edge(s)` (scout1→worker1); then `team → scout1` dispatches successfully (allowed in the pipeline direction) | ☐ |
 | 8 | `Create a task: count the source files in this project, assign it to scout1, then start it` | renderCall: `team task create T1 count the source files in this project` → `team task start T1`; renderResult: `T1 [done] @scout1 count the source files in this project` + the reply body | ☐ |
 | 9 | `Report the team's current status` | One line per member (icon + name + role + usage), tasks line by line (id [status] title, 50-char preview) | ☐ |
 | 10 | `Disband worker1` | renderCall: `team −worker1`; renderResult: `worker1` | ☐ |

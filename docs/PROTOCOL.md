@@ -1,6 +1,6 @@
 # Protocol reference
 
-> [简体中文 →](./PROTOCOL_ZH.md)
+> [简体中文 →](./PROTOCOL_CN.md)
 > This document codifies all of Step-Code-Agent-Team's wire protocols and tool contracts, based on the current `extensions/` and `bin/` implementation.
 > Changing a protocol requires synchronously updating this document and the affected smoke probes.
 

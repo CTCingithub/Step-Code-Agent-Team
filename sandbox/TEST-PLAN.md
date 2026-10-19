@@ -1,6 +1,6 @@
 # Comprehensive Sandbox Test Plan (plan-43)
 
-> [简体中文 →](./TEST-PLAN_ZH.md)
+> [简体中文 →](./TEST-PLAN_CN.md)
 > Goal: a systematic live test of the already-shipped features inside the sandbox, to expose and fix issues.
 > Principles: zero-token probes first; LLM probes make only minimal calls with a test key; on failure, record first, then fix, then re-run.
 >

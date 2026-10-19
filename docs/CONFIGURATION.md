@@ -1,6 +1,6 @@
 # Configuration Reference
 
-> [简体中文 →](./CONFIGURATION_ZH.md)
+> [简体中文 →](./CONFIGURATION_CN.md)
 
 All behavior is controlled by the `stepcodeAgentTeam` table in Step Code's unified config file. No configuration is required — built-in defaults apply. On first activation the plugin appends a commented defaults block to your global config so the options are discoverable.
 
@@ -21,8 +21,11 @@ Global (`<stepRoot>/config.toml`) or project (`<cwd>/.stepcode/config.toml`). TO
 ```toml
 [stepcodeAgentTeam.activation]
 enabled = true                       # master switch; false disables both triggers
-keywords = ["agent team", "智能体团队"]   # natural-language activation keywords; [] disables keyword activation
+keywords = ["智能体小队", "多智能体小队", "组小队", "stepcode 小队", "topo team", "topo-agent", "stepcode topo", "topology team", "agent squad", "stepcode-agent-team", "step code agent team", "team_create_member", "team_send", "team_task"]   # plugin-specific keywords; [] disables keyword activation
 notifyOnActivate = true              # notify on activation
+guardEnabled = true                  # L1: ignore negation / meta-discussion / code-reference mentions
+confirmBeforeActivate = true         # L2: TUI asks before a keyword hit activates (headless ignores it)
+headlessAutoActivate = true          # L3: headless/RPC activates on keyword hits without a dialog
 
 [stepcodeAgentTeam.models]
 available = ["step-5-preview"]       # member model pool
@@ -59,6 +62,10 @@ default = "star"                     # star/pipeline/mesh/ring/custom
 requireDeclaration = false           # true = no dispatch before the topology is declared
 maxLoopCount = 2                     # ring message-chain bound (0 = unlimited, 0–64)
 
+[stepcodeAgentTeam.plan]
+enabled = false                      # team-plan picker: economy/fast/balanced/performance + custom on activation
+defaultTier = "balanced"             # tier applied when the picker times out or runs headless
+
 [stepcodeAgentTeam]
 debug = false                        # debug logging
 ```
@@ -67,8 +74,8 @@ debug = false                        # debug logging
 
 | Section | Controls |
 |---|---|
-| `activation` | Default-off gate: the `/agent-team` command or a keyword mention (case-insensitive) activates the plugin; sticky for the session. With `enabled: false` neither trigger works and `/agent-team` reports the config disable |
-| `models` | Member model pool. `autonomousSelection` off (default) pins every member to the conversation model (preset/explicit `model` ignored); on, resolution is explicit `model` → preset → conversation model (unknown explicit model errors with the available list; unknown preset model falls back to `available[0]`). `autonomousThinking` off defaults members to `high` thinking; on lets the leader choose per member |
+| `activation` | Default-off gate: the `/topo` command (deprecated alias `/agent-team` until 0.3.0; `/topo off` deactivates and re-hides the tools) or a keyword mention (case-insensitive) activates the plugin; sticky for the session. With `enabled: false` neither trigger works and the command reports the config disable. `guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` layer the false-trigger guard — slash commands bypass it |
+| `models` | Member model pool. `autonomousSelection` off (default) pins every member to the conversation model (preset/explicit `model` ignored); on, resolution is explicit `model` → preset → conversation model (unknown explicit model errors with the available list; unknown preset model falls back to `available[0]`). `autonomousThinking` off lets members use their preset's thinking default (`scout`=low, `planner`/`worker`=medium, `reviewer`=high; `high` without a preset); on lets the leader choose per member |
 | `members` | `max` counts **live** members only (dead records stay resumable without occupying a slot). `maxRecursionDepth`: 1 = members cannot spawn sub-teams (fully inert in their sessions); 2+ grants sub-leaders their own independent team (registry + socket), bounded at 4 |
 | `dispatch` | `maxConcurrent` gates **before process start** (queue-before-start); oneshot dispatches share the budget; nested member-to-member relays bypass the global gate to avoid chain deadlock |
 | `oneshot` | Timeout for stateless `mode: "oneshot"` dispatches |
@@ -76,6 +83,7 @@ debug = false                        # debug logging
 | `idle` | Idle members are reaped (sessions stay resumable); running members are never reaped |
 | `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams` |
 | `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender reports to the leader — which also prevents ring-circulation deadlocks |
+| `plan` | Team-plan picker (default off): on activation the leader offers economy/fast/balanced/performance tiers plus a custom flow (size → topology → thinking); `defaultTier` covers picker timeouts and headless/RPC runs. Tiers fix role mix, thinking levels, member names and topology — dispatch limits stay global |
 | `debug` | Diagnostic logging to stderr |
 
 Topology shapes (declared with `team_set_topology` after creating members, before dispatching):

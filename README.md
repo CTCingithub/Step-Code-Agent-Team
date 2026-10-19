@@ -1,14 +1,16 @@
 # Step-Code-Agent-Team
 
-[简体中文说明 →](./README_ZH.md)
+[简体中文说明 →](./README_CN.md)
 
 Agent team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly.
 
 > **Reference:** This project references the **agent teams feature of DeepSeek Harness** — the leader/member model, the dependency-aware task board, and member-to-member messaging follow its design. It is an independent implementation for Step Code and is not affiliated with DeepSeek.
 
 > **⚠️ Cost warning:** every team member is a full agent process with its own
-> context window, running on the conversation's current model (default thinking:
-> `high`). N members working in parallel cost roughly N× a single conversation
+> context window, running on the conversation's current model (thinking per
+> role preset: `scout`=low, `planner`/`worker`=medium, `reviewer`=high; `high`
+> when no preset applies). N members working in parallel cost roughly N× a
+> single conversation
 > turn, and long member runs accumulate quickly. The plugin tracks cumulative
 > team spend and warns at `cost.warnThreshold` (default $1, 0 disables) — watch
 > `team_status`, and disband idle members when the work is done.
@@ -76,20 +78,83 @@ step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.2 # or pin a v
 step install npm:step-code-agent-team                               # once published to npm
 ```
 
-Then start a session and ask: *"Use the agent team to review this repo in parallel."* — or run `/agent-team` first; the plugin stays dormant until then.
+Then start a session and ask: *"Use an agent squad to review this repo in parallel."* — or run `/topo` first; the plugin stays dormant until then.
 
 ## Activation (default off)
 
 The plugin is **inactive when a session starts**: the team tools are hidden from
 the model, and no server, timer, or member process exists. It activates when:
 
-1. You invoke the **`/agent-team`** command (activates and shows the team board), or
-2. Your prompt explicitly mentions the plugin (keywords like "agent team" /
-   "智能体团队", configurable).
+1. You invoke the **`/topo`** command (activates and shows the team board), or
+2. Your prompt explicitly mentions the plugin (keyword list below, configurable).
 
-Once activated it stays on for the session. See
-[docs/CONFIGURATION.md](docs/CONFIGURATION.md) to disable activation entirely or
-tune the keywords.
+Once activated it stays on for the session. **`/topo off`** turns it off again
+and re-hides the team tools — the escape hatch for a misfired activation
+(member sessions stay resumable). **Migration:** `/agent-team` is a deprecated
+alias kept until 0.3.0 — same behavior, plus a deprecation notice.
+
+### Activation keywords (0.2.0 defaults)
+
+Only plugin-specific keywords activate the plugin. The bare "agent team" /
+"智能体团队" / "组队" style words were deliberately dropped in 0.2.0 so a
+future official agent-teams feature cannot collide with this plugin:
+
+```text
+智能体小队 · 多智能体小队 · 组小队 · stepcode 小队 · topo team · topo-agent ·
+stepcode topo · topology team · agent squad · stepcode-agent-team ·
+step code agent team · team_create_member · team_send · team_task
+```
+
+(14 terms; tune via `activation.keywords` — see
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).)
+
+### False-trigger guard (default on)
+
+Keyword activation passes through three guard layers — slash commands bypass
+them all, since an explicit command is always honored:
+
+- **L1 — heuristic veto** (`activation.guardEnabled`): a hit reading as
+  negation ("don't use an agent squad"), meta-discussion ("what is
+  `team_task`"), or a code reference (backticks, imports, calls) does not
+  activate.
+- **L2 — TUI confirmation** (`activation.confirmBeforeActivate`): the
+  interactive TUI asks before a keyword hit activates.
+- **L3 — headless/RPC auto-activation** (`activation.headlessAutoActivate`):
+  scripted runs activate directly on a keyword hit — nobody can answer a
+  dialog there.
+
+All three default to `true`.
+
+## Team plans (default off)
+
+Opt-in preset teams. With `plan.enabled = true`, activating via `/topo` first
+shows a picker:
+
+```toml
+# ~/.stepcode/config.toml (or <project>/.stepcode/config.toml)
+[stepcodeAgentTeam.plan]
+enabled = false
+defaultTier = "balanced"
+```
+
+| Tier | Members (role × count · thinking) | Topology | Size | ≈ Cost | Best for |
+|---|---|---|---|---|---|
+| Economy | scout×1 (low) + worker×1 (medium) | pipeline | 2 | ~0.3× | Read-only research, small edits |
+| Fast | worker×2 (low) | star | 2 | ~0.5× | Formatting, batch small edits |
+| Balanced *(default)* | scout×1 (low) + planner×1 (medium) + worker×2 (medium) + reviewer×1 (medium) | star | 5 | ~1.0× | Regular development |
+| Performance | scout×1 (medium) + planner×1 (high) + worker×3 (high) + reviewer×2 (xhigh) | custom (diamond) | 7 | ~2.2× | Large refactors, deep review |
+
+The picker's fifth entry — **custom requirements** — runs a short guided flow
+(team size → topology → thinking level) and carries your free-text
+requirements along with the request. A tier is applied by the leader through
+the regular team tools: it fixes the role mix, thinking levels, member names
+(`scout1`, `planner1`, `worker1`, …) and topology; dispatch limits stay
+global.
+
+Picker behavior: a 30s timeout falls back to `defaultTier`; headless/RPC
+activations skip the picker and apply `defaultTier` directly; `/topo <tier>`
+(e.g. `/topo performance`) applies a tier without the picker. Cost multipliers
+are estimates relative to a single session turn.
 
 ## Tools
 
@@ -101,7 +166,7 @@ tune the keywords.
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
 | `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
-| `/agent-team` | Command: activate the plugin and show the team board; text after the command is forwarded to the agent as a team request |
+| `/topo` | Command: activate the plugin and show the team board. `/topo off` deactivates and re-hides the team tools; `/topo <tier>` (economy/fast/balanced/performance/custom) applies a team plan (see Team plans); text after the command is forwarded to the agent **verbatim** — the "use the team" instruction is injected request-locally through a context event and never written to the session file. Deprecated alias `/agent-team` (same behavior, removed in 0.3.0) |
 
 ## Member communication topology
 
@@ -173,6 +238,10 @@ Enforcement lives in the team server: every message carries its sender (injected
 | `worker` | full | Executes plans, runs checks |
 | `reviewer` | read-only | Adversarial review (correctness / style / security) |
 
+Preset thinking defaults: `scout`=low, `planner`=medium, `worker`=medium,
+`reviewer`=high. An explicit `thinking` argument to `team_create_member` still
+wins; a member created without a preset falls back to `high`.
+
 Also included: `prompts/team-review.md` (parallel multi-reviewer chain) and
 `skills/team-orchestration/SKILL.md` (when and how to form a team).
 
@@ -203,7 +272,8 @@ The LLM-layer probes (`sandbox/smoke-phase4/10/11/12.ts`) are included too; see
 ```
 extensions/    index.ts (wiring) · config.ts · activation.ts · rpc-client.ts ·
                members.ts · tasks.ts · registry.ts · team-server.ts ·
-               topology.ts · presets.ts · tools.ts · render.ts
+               topology.ts · presets.ts · plan.ts · forward.ts · tools.ts ·
+               render.ts
 bin/           stepcode-team.mjs (member-side CLI shim)
 agents/        role presets (scout · planner · worker · reviewer)
 prompts/       team-review.md
@@ -241,7 +311,9 @@ Full reference (all sections, semantics, and topology shapes): [docs/CONFIGURATI
 
 Key points: with `autonomousSelection` off (default) every member runs on the
 conversation's current model; with `autonomousThinking` off (default) members
-default to `high` thinking. `members.maxRecursionDepth` (default 1) bounds the
+use their preset's thinking default (`scout`=low, `planner`/`worker`=medium,
+`reviewer`=high), falling back to `high` without a preset.
+`members.maxRecursionDepth` (default 1) bounds the
 team tree — members cannot spawn sub-teams until you raise it; and
 `dispatch.maxConcurrent` (default 5) caps simultaneously running members:
 dispatches beyond the limit queue, and a member process is not started until a
@@ -262,7 +334,7 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17)
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21)
                         # hermetic: throwaway agent dir; phase 5 is skipped
                         # unless STEP_API_KEY is set (it makes one real call)
 ```
