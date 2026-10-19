@@ -168,6 +168,65 @@ function unifiedConfigFileName(): string {
 }
 
 /**
+ * Seeds the global unified config with a commented defaults block on first
+ * activation, so a fresh install has discoverable configuration. Additive
+ * only: the existing file is preserved verbatim (appended to, never
+ * rewritten — a rewrite through step's own writer would drop the user's
+ * comments), the block is entirely comments so defaults keep applying, and
+ * the write is idempotent (skipped once the section name appears). Returns
+ * true when the block was appended.
+ */
+export function seedGlobalConfigExample(agentDirPath: string): boolean {
+	const file = unifiedConfigFilePath(agentDirPath);
+	try {
+		if (fs.existsSync(file)) {
+			if (fs.readFileSync(file, "utf8").includes(CONFIG_SECTION)) return false;
+			fs.appendFileSync(file, seedBlock(), { encoding: "utf8", mode: 0o600 });
+			return true;
+		}
+		// No config file yet: create it with step's own header, then seed.
+		const ensure = (stepCore as Record<string, unknown>).ensureStepConfigFile as ((path: string) => string) | undefined;
+		if (typeof ensure !== "function") return false;
+		ensure(file);
+		fs.appendFileSync(file, seedBlock(), { encoding: "utf8", mode: 0o600 });
+		return true;
+	} catch (err) {
+		configNote(`cannot seed ${file}: ${err instanceof Error ? err.message : String(err)}`);
+		return false;
+	}
+}
+
+function seedBlock(): string {
+	return [
+		"",
+		"# ---- stepcode-agent-team (defaults shown; uncomment to override) ----",
+		"# Full reference: docs/CONFIGURATION.md · delete this block to restore defaults",
+		"#",
+		"# [stepcodeAgentTeam.activation]",
+		'# enabled = true                       # master switch; false disables both triggers',
+		'# keywords = ["agent team", "智能体团队"]  # natural-language activation keywords',
+		"# notifyOnActivate = true              # notify on activation",
+		"#",
+		"# [stepcodeAgentTeam.members]",
+		"# max = 8                              # live-member cap",
+		'# defaultRole = "worker"               # default role for new members',
+		"# maxRecursionDepth = 1                # team-tree depth bound",
+		"#",
+		"# [stepcodeAgentTeam.dispatch]",
+		"# maxConcurrent = 5                    # parallel member cap",
+		"# timeoutMs = 180000                   # per-dispatch timeout (ms)",
+		"#",
+		"# [stepcodeAgentTeam.topology]",
+		'# default = "star"                     # star/pipeline/mesh/ring/custom',
+		"# maxLoopCount = 2                     # ring message-chain bound (0 = unlimited)",
+		"#",
+		"# [stepcodeAgentTeam.cost]",
+		"# warnThreshold = 1                    # cumulative spend warning (USD; 0 = off)",
+		"",
+	].join("\n");
+}
+
+/**
  * Reads our section out of a unified config.toml; null when the file is
  * absent/unreadable, the section is missing or malformed, or the running step
  * version does not export the reader.

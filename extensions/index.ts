@@ -16,8 +16,7 @@ import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent"
 import { currentDepth, TeamManager } from "./members.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
-import { getConfig } from "./config.ts";
-import { applyProjectConfig } from "./config.ts";
+import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample } from "./config.ts";
 import { activate, detectKeyword, initActivation, isActive, TEAM_TOOL_NAMES } from "./activation.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -96,6 +95,10 @@ export default function (pi: ExtensionAPI) {
 	const tryActivate = (ctx: ExtensionContext, reason: string): boolean => {
 		currentCtx = ctx;
 		applyProjectConfigFromCtx(ctx);
+		// First activation: seed the global config with a commented defaults
+		// block so a fresh install has discoverable configuration (idempotent,
+		// additive — comments only, defaults keep applying).
+		seedGlobalConfigExample(agentDir());
 		return activate(reason); // the initActivation callback runs startBackend
 	};
 
