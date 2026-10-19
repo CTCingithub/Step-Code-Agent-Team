@@ -50,7 +50,7 @@ export default function (pi: ExtensionAPI) {
 				{ member: "scout1", message: "please review the repo carefully", taskId: "T2", mode: "oneshot" },
 				theme,
 			);
-			has("call: send member + taskId", send, "team →scout1");
+			has("call: send member + taskId", send, "team → scout1");
 			has("call: send task badge", send, "[T2]");
 			has("call: send oneshot badge", send, "(oneshot)");
 			has("call: send message preview", send, "please review the repo");

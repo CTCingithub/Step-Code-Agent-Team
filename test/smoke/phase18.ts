@@ -80,9 +80,10 @@ export default function (pi: ExtensionAPI) {
 			await manager.disband();
 			const { member: s1, created: s1Created } = await manager.createMember({ name: "s1", role: "scout" });
 			check("scout preset: created with read-only tools", s1Created && (s1.tools ?? []).includes("read") && !(s1.tools ?? []).includes("bash"), `tools=${(s1.tools ?? []).join(",")}`);
+			check("scout preset: thinking default low", s1.thinking === "low", `got ${s1.thinking}`);
 
 			const resumeDiff = resumeIgnoredParams(
-				{ name: "s1", role: "worker", tools: ["read", "bash"], model: "other-model", thinking: "low", systemPrompt: "x" },
+				{ name: "s1", role: "worker", tools: ["read", "bash"], model: "other-model", thinking: "high", systemPrompt: "x" },
 				s1,
 			);
 			check(

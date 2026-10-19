@@ -101,13 +101,14 @@ fi
 
 # ---- live wiring checks (zero-token, hermetic temp cwd) ----
 # index.ts applies the trusted project tier to its own config instance and the
-# /agent-team command surfaces the result. In-probe observation is impossible
-# (each -e extension gets its own config module instance), so verify it here.
+# /topo command (deprecated alias /agent-team) surfaces the result. In-probe
+# observation is impossible (each -e extension gets its own config module
+# instance), so verify it here.
 live_check() {
-  local name="$1" dir="$2" expect="$3"
+  local name="$1" dir="$2" expect="$3" cmd="${4:-agent-team}"
   mkdir -p "$dir/sessions"
   local out
-  out="$(cd "$dir" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+  out="$(cd "$dir" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/%s"}\n' "$cmd" \
     | STEP_CODING_AGENT_DIR="$dir/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
       --mode rpc --session-id "live-$name" --session-dir "$dir/sessions" -a 2>&1)" || true
   if echo "$out" | grep -q "$expect"; then
@@ -127,6 +128,9 @@ live_check "project-config" "$LIVE1" "disabled by configuration"
 
 LIVE2="$(mktemp -d)"
 live_check "command-activate" "$LIVE2" "Agent team plugin activated (/agent-team command)"
+
+LIVE2B="$(mktemp -d)"
+live_check "topo" "$LIVE2B" "Agent team plugin activated (/topo command)" "topo"
 
 # Package install path: a `packages` entry in the step config (the unified
 # config.toml beside the agent dir — the form `step install <local path>`
@@ -151,8 +155,11 @@ rm -rf "$PKGDIR"
 # (a slash command otherwise consumes the whole input and drops the request),
 # the command must still ACTIVATE the plugin (2026-10-19 TUI report: activation
 # happened but its toast was coalesced away, and the verbatim request was then
-# completed solo — zero team tool calls), and the forwarded request must be
-# wrapped with an explicit team-usage instruction so the leader forms a team.
+# completed solo — zero team tool calls), and since 0.2.0 the request is
+# forwarded VERBATIM as a real user message — what lands in the transcript is
+# exactly what the user typed (asserted on the delivered user-message event);
+# the team-usage instruction is injected request-locally through the context
+# event and never appears in the transcript.
 LIVE3="$(mktemp -d)"
 mkdir -p "$LIVE3/sessions"
 fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team ping-forward-check"}\n' \
@@ -166,8 +173,8 @@ elif ! echo "$fwd_out" | grep -q 'forwarding your request to the agent'; then
   echo "live-args-forward: FAILED (no forwarding announcement on the team board)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
-elif ! echo "$fwd_out" | grep -q 'team tools to accomplish' && ! grep -rq 'team tools to accomplish' "$LIVE3"/sessions/ 2>/dev/null; then
-  echo "live-args-forward: FAILED (request was not wrapped as a team request)"
+elif ! echo "$fwd_out" | grep -q '"text":"ping-forward-check"'; then
+  echo "live-args-forward: FAILED (request was not forwarded verbatim as a user message)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
 else

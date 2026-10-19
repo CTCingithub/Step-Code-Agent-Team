@@ -47,7 +47,8 @@ export default function (pi: ExtensionAPI) {
 			);
 			check("default-off: socket absent", !fs.existsSync(manager.socketPath));
 			const commands = pi.getCommands().map((c) => c.name);
-			check("command registered: agent-team", commands.includes("agent-team"));
+			check("command registered: topo", commands.includes("topo"));
+			check("command registered: agent-team (deprecated alias)", commands.includes("agent-team"));
 
 			// 2. pure config tests (synthetic dirs)
 			const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "scat-cfg-"));
@@ -127,15 +128,25 @@ export default function (pi: ExtensionAPI) {
 			fs.rmSync(tmp, { recursive: true, force: true });
 
 			// 3. detection
-			check("detectKeyword: zh positive", detectKeyword("请用智能体团队并行审查这个仓库"));
-			check("detectKeyword: en positive", detectKeyword("let's spin up an agent team"));
+			check("detectKeyword: zh positive", detectKeyword("请用智能体小队并行审查这个仓库"));
+			check("detectKeyword: en positive", detectKeyword("let's spin up a topo team"));
 			check("detectKeyword: negative", !detectKeyword("hello world, please fix the typo"));
 			check(
 				"detectSlashCommand",
-				detectSlashCommand("/agent-team") &&
+				detectSlashCommand("/topo") &&
+					detectSlashCommand("  /topo economy") &&
+					detectSlashCommand("/agent-team") &&
 					detectSlashCommand("  /agent-team status") &&
 					!detectSlashCommand("/model x"),
 			);
+			// 3b. L1 false-positive guard (0.2.0): negation / meta-discussion /
+			// code references must not activate; real requests still do.
+			check("guard: negation suppressed", !detectKeyword("不用组小队，先跑单智能体"));
+			check("guard: meta-discussion suppressed", !detectKeyword("什么是智能体小队？"));
+			check("guard: code reference suppressed", !detectKeyword("把 `智能体小队` 加进 keywords"));
+			check("guard: bare topo is not a keyword", !detectKeyword("topo"));
+			check("guard: topology does not match topo team", !detectKeyword("阅读 topology.ts 的设计"));
+			check("guard: real request still activates", detectKeyword("请用智能体小队并行审查这个仓库"));
 
 			// 4. activation logic
 			if (cfg.activation.enabled) {
@@ -146,7 +157,7 @@ export default function (pi: ExtensionAPI) {
 				if (!cfg.models.autonomousSelection) {
 					const r1 = await manager.createMember({ name: "res1", role: "worker", model: "some-other-model" }, LEADER_MODEL);
 					check("resolution: off → conversation model", r1.member.model === LEADER_MODEL, `got ${r1.member.model}`);
-					check("resolution: thinking default high", r1.member.thinking === "high", `got ${r1.member.thinking}`);
+					check("resolution: thinking from preset (worker=medium)", r1.member.thinking === "medium", `got ${r1.member.thinking}`);
 					await manager.disband("res1");
 					const r2 = await manager.createMember({ name: "res2", role: "worker", thinking: "low" }, LEADER_MODEL);
 					check("resolution: explicit thinking honored", r2.member.thinking === "low", `got ${r2.member.thinking}`);
@@ -167,7 +178,7 @@ export default function (pi: ExtensionAPI) {
 					await manager.disband("res3");
 					const r4 = await manager.createMember({ name: "res4", role: "worker" }, LEADER_MODEL);
 					check("resolution: on + no model → conversation model", r4.member.model === LEADER_MODEL, `got ${r4.member.model}`);
-					check("resolution: on + no thinking → high", r4.member.thinking === "high", `got ${r4.member.thinking}`);
+					check("resolution: on + no thinking → preset medium", r4.member.thinking === "medium", `got ${r4.member.thinking}`);
 					await manager.disband("res4");
 				}
 			} else {

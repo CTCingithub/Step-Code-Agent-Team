@@ -10,7 +10,7 @@
  * The live wiring (index.ts applying the project tier to its own config
  * instance from session_start) cannot be observed from inside a probe — each
  * `-e` extension gets its own config module instance — and is instead covered
- * by the live checks in test/run-smoke.sh (temp cwd + `-a` + `/agent-team`).
+ * by the live checks in test/run-smoke.sh (temp cwd + `-a` + `/topo`).
  *
  * Regression: run via `bash test/run-smoke.sh` (zero token).
  */
