@@ -23,28 +23,28 @@ flowchart TD
     Registry[("TeamRegistry registry.json")]
     A["Member A (step --mode rpc)"]
     B["Member B (step --mode rpc)"]
-    Shim["stepcode-team.mjs CLI shim"]
+    MsgTool["team_msg tool (member-side extension)"]
     Server["Team server (in leader process)"]
 
     Leader -->|"team_create_member / team_send / team_task"| Registry
     Registry --- A
     Registry --- B
-    A -->|"bash"| Shim
-    B -->|"bash"| Shim
-    Shim -->|"JSONL over Unix socket"| Server
+    A -->|"team_msg"| MsgTool
+    B -->|"team_msg"| MsgTool
+    MsgTool -->|"JSONL over Unix socket"| Server
     Server -->|"topology-enforced dispatch"| A
     Server -->|"topology-enforced dispatch"| B
 ```
 
 - **Members are real `step` processes** with their own context window, model, and tool allowlist, spoken to over the RPC protocol. A member's context lives in its session file, so respawning it with the same session id resumes the conversation.
 - **The task board is a DAG**: a task is `ready` when every task in its `blockedBy` is `done`; cycles are rejected.
-- **Messaging**: members reach teammates through the `stepcode-team` CLI shim, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader. The shim runs through a shell, so a member needs `bash` in its tool allowlist to message teammates — the read-only presets (`scout`/`planner`/`reviewer`) cannot, and the leader relays for them.
+- **Messaging**: members reach teammates through the built-in `team_msg` tool, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader. The tool needs no shell — read-only presets (`scout`/`planner`/`reviewer`) keep their posture and their topology edges stay usable. The `stepcode-team` CLI shim remains for manual/external use.
 - **Guardrails**: max 8 live members (disbanded or reaped members no longer count against the limit), max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), all children killed on leader shutdown.
 
 ## Requirements
 
 - The `step` CLI on your PATH.
-- Node (for the `stepcode-team` shim, invoked as `node bin/stepcode-team.mjs`).
+- Node (the `step` runtime; the optional `stepcode-team` shim is invoked as `node bin/stepcode-team.mjs`).
 - No third-party npm dependencies.
 
 ## Install
@@ -180,11 +180,7 @@ per invocation.
 
 Direct member-to-member messaging is **denied unless the topology allows it**. The leader designs the topology that fits the task with `team_set_topology` after creating members and before dispatching work; the default is a star, where everything routes through the leader.
 
-> **Read-only roles and topology edges:** the read-only presets
-> (scout/planner/reviewer, and any custom role without `bash`) cannot run the
-> messaging shim, so topology edges touching them are **unusable and degrade
-> to leader relay**. Express dependencies with the task board's `blockedBy`
-> instead; edges among bash-capable members (e.g. workers) work as declared.
+> **Read-only roles and topology edges:** every member — including the read-only presets (scout/planner/reviewer) and custom roles without `bash` — messages teammates through the built-in `team_msg` tool, so topology edges are usable for every role. Express dependencies with the task board's `blockedBy`; the `stepcode-team` CLI shim remains available for manual use.
 
 | Shape | Edges | Fits |
 |---|---|---|
@@ -241,7 +237,7 @@ flowchart LR
     C2["m2"] --> C3
 ```
 
-Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors, which members can query with `stepcode-team status`. In a ring, each forwarded message extends the sender's chain by one hop; a hop that would exceed `topology.maxLoopCount` (default 2, 0 = unlimited) is rejected and the sender is told to report to the leader instead — which also prevents ring-circulation deadlocks. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors (a `team_msg` rejection lists them; `stepcode-team status` reports the same). In a ring, each forwarded message extends the sender's chain by one hop; a hop that would exceed `topology.maxLoopCount` (default 2, 0 = unlimited) is rejected and the sender is told to report to the leader instead — which also prevents ring-circulation deadlocks. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ## Role presets (`agents/` + custom roles)
 
@@ -295,8 +291,8 @@ The LLM-layer probes (`sandbox/smoke-phase4/10/11/12.ts`) are included too; see
 extensions/    index.ts (wiring) · config.ts · activation.ts · rpc-client.ts ·
                members.ts · tasks.ts · registry.ts · team-server.ts ·
                topology.ts · presets.ts · plan.ts · forward.ts · tools.ts ·
-               render.ts
-bin/           stepcode-team.mjs (member-side CLI shim)
+               member-messaging.ts · render.ts
+bin/           stepcode-team.mjs (member-side CLI shim; manual/external path)
 agents/        role presets (scout · planner · worker · reviewer)
 docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · ROLES · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING references

@@ -88,7 +88,7 @@ debug = false                        # debug logging
 | `cost` | Team-level cumulative spend warning; 0 disables |
 | `idle` | Idle members are reaped (sessions stay resumable); running members are never reaped |
 | `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams` |
-| `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender reports to the leader — which also prevents ring-circulation deadlocks. Edges touching read-only roles (no `bash`) are **unusable and degrade to leader relay** — express dependencies via the task board's `blockedBy` |
+| `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender reports to the leader — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
 | `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). A tier is a strategy prompt with a non-binding example — the model decides members, roles, topology, and effort. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths); `/topo <tier>` overrides per invocation. Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |
 | `presets.effort` | Per-role effort overrides (built-in role names shown; custom roles set `effort` in their own frontmatter). Resolution: explicit `thinking` param → this config → preset frontmatter → `high`. Inert while `models.autonomousThinking` is on. Custom roles load from `<agentDir>/agents/` and `<project>/.stepcode/agents/` — see [docs/ROLES.md](docs/ROLES.md) |
 | `debug` | Diagnostic logging to stderr |
@@ -103,7 +103,7 @@ Topology shapes (declared with `team_set_topology` after creating members, befor
 | `ring` | mi→mi+1 (wraps to first) | Round-robin review |
 | `custom` | explicit `[{from, to}]` list | Precise control |
 
-Members learn their notifiable neighbors dynamically via `stepcode-team status` (the server returns the `mayMessage` list for the sender's identity).
+Members learn their notifiable neighbors dynamically: a `team_msg` rejection lists the allowed teammates (the server returns the `mayMessage` list for the sender's identity), and `stepcode-team status` reports the same from a shell.
 
 ## Environment Overrides
 

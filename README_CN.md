@@ -20,28 +20,28 @@ flowchart TD
     Registry[("TeamRegistry registry.json")]
     A["成员 A（step --mode rpc）"]
     B["成员 B（step --mode rpc）"]
-    Shim["stepcode-team.mjs CLI shim"]
+    MsgTool["team_msg 工具（成员侧扩展）"]
     Server["团队服务（队长进程内）"]
 
     Leader -->|"team_create_member / team_send / team_task"| Registry
     Registry --- A
     Registry --- B
-    A -->|"bash"| Shim
-    B -->|"bash"| Shim
-    Shim -->|"Unix socket JSONL"| Server
+    A -->|"team_msg"| MsgTool
+    B -->|"team_msg"| MsgTool
+    MsgTool -->|"Unix socket JSONL"| Server
     Server -->|"按拓扑强制派发"| A
     Server -->|"按拓扑强制派发"| B
 ```
 
 - **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
 - **任务板是 DAG**：`blockedBy` 全部完成的任务才 `ready`；成环的依赖在创建时即被拒绝。
-- **成员间消息**：成员通过 `stepcode-team` CLI shim 连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。shim 经 shell 调用，成员需要 `bash` 工具才能发消息——只读预设（`scout`/`planner`/`reviewer`）无法直达，由队长中转。
+- **成员间消息**：成员通过内置 `team_msg` 工具连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。该工具不需要 shell——只读预设（`scout`/`planner`/`reviewer`）保持原状，其拓扑边始终可用。`stepcode-team` CLI shim 保留作手动/外部路径。
 - **护栏**：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
 
 ## 环境要求
 
 - PATH 中可用的 `step` CLI。
-- Node（shim 以 `node bin/stepcode-team.mjs` 方式调用）。
+- Node（`step` 运行时本身；可选的 `stepcode-team` shim 以 `node bin/stepcode-team.mjs` 方式调用）。
 - 无第三方 npm 依赖。
 
 ## 安装
@@ -146,7 +146,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 
 除非拓扑允许，成员之间的直达消息会被**拒绝**。队长在创建成员后、派活前，用 `team_set_topology` 按任务结构设计拓扑；默认为星型——全部经由队长中转。
 
-> **只读角色与拓扑边：** 只读预设（scout/planner/reviewer，以及任何不含 `bash` 的自定义角色）无法运行消息 shim，指向它们的拓扑边**不可用，退化为队长中转**。依赖关系请用任务板的 `blockedBy` 表达；具备 bash 的成员（如 worker）之间的边按声明生效。
+> **只读角色与拓扑边：** 所有成员——包括只读预设（scout/planner/reviewer）与不含 `bash` 的自定义角色——均经内置 `team_msg` 工具直达通信，拓扑边对所有角色可用。依赖关系请用任务板的 `blockedBy` 表达；`stepcode-team` CLI shim 保留作手动使用。
 
 | 形状 | 边 | 适用 |
 |---|---|---|
@@ -203,7 +203,7 @@ flowchart LR
     C2["m2"] --> C3
 ```
 
-强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。
+强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居（`team_msg` 被拒时会列出；`stepcode-team status` 亦可查询）。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。
 
 ## 角色预设（`agents/` + 自定义角色）
 
@@ -253,8 +253,8 @@ LLM 层探针（`sandbox/smoke-phase4/10/11/12.ts`）同样随仓库分发，跑
 extensions/    index.ts（接线）· config.ts · activation.ts · rpc-client.ts ·
                members.ts · tasks.ts · registry.ts · team-server.ts ·
                topology.ts · presets.ts · plan.ts · forward.ts · tools.ts ·
-               render.ts
-bin/           stepcode-team.mjs（成员侧 CLI shim）
+               member-messaging.ts · render.ts
+bin/           stepcode-team.mjs（成员侧 CLI shim；手动/外部路径）
 agents/        角色预设（scout · planner · worker · reviewer）
 docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · ROLES · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING 参考文档

@@ -23,14 +23,15 @@
 ├── extensions/topology.ts   五形状拓扑构造/校验/解析
 ├── extensions/registry.ts   团队状态持久化（原子写、storage.dir、旧版兼容）
 ├── extensions/presets.ts    预设加载（内置 + 用户/项目 agents/ 目录）、扩展入口路径、shim 路径
+├── extensions/member-messaging.ts 成员侧 team_msg 工具（直连 socket，无需 bash）
 ├── extensions/render.ts     TUI 渲染（renderCall / renderResult）
 │
-├── bin/stepcode-team.mjs    成员侧 CLI shim（msg / status，携带发送方身份）
+├── bin/stepcode-team.mjs    成员侧 CLI shim（msg / status；手动/外部路径——成员通常用 team_msg 工具）
 └── agents/                  内置角色预设（scout · planner · worker · reviewer；自定义角色：<agentDir>/agents/、<project>/.stepcode/agents/）
 ```
 
 成员是独立的 `step --mode rpc` 子进程，不加载本扩展（除非被授予子团队，见 §4），
-只能经 shim 到达队长进程内的 socket——这是拓扑强制的天然收口点。
+只能经 team_msg 工具（或 CLI shim）到达队长进程内的 socket——这是拓扑强制的天然收口点。
 
 ## 2. 数据流
 
@@ -49,10 +50,10 @@
 `start`（仅 `ready` 可派，assignee 必填，`dispatch.retries` 次重试）→
 成功即 `completeTask`（解锁下游），耗尽重试则 `failTask`。
 
-成员间消息：成员 bash → `node bin/stepcode-team.mjs msg --to B --message ...` →
-socket → server 校验拓扑边 A→B → `manager.sendMessage(B, msg, {nested:true})` → 回复经同一连接返回。
-shim 经 shell 调用：成员工具白名单不含 `bash` 时（如 scout/planner/reviewer 预设）无法发消息，
-`team_set_topology` 与 `team_create_member` 的结果会就此警告，由队长中转兜底。
+成员间消息：成员 `team_msg` 工具 → socket → server 校验拓扑边 A→B →
+`manager.sendMessage(B, msg, {nested:true})` → 回复经同一连接返回。该工具由成员侧消息扩展
+（extensions/member-messaging.ts）注册，与 `stepcode-team` CLI shim 说同一套 JSONL 协议——
+但不需要 shell，因此只读预设保持原状、其拓扑边始终可用。shim 保留作手动/外部路径。
 
 ## 3. 持久化布局
 

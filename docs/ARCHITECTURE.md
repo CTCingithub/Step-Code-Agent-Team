@@ -23,14 +23,15 @@ Leader session (step, loads this extension)
 ├── extensions/topology.ts   five-shape topology construction/validation/parsing
 ├── extensions/registry.ts   team state persistence (atomic write, storage.dir, legacy compatibility)
 ├── extensions/presets.ts    preset loading (bundled + user/project agents/ dirs), extension entry path, shim path
+├── extensions/member-messaging.ts member-side team_msg tool (direct socket, no bash)
 ├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │
-├── bin/stepcode-team.mjs    member-side CLI shim (msg / status, carries sender identity)
+├── bin/stepcode-team.mjs    member-side CLI shim (msg / status; manual/external path — members normally use the team_msg tool)
 └── agents/                  bundled role presets (scout · planner · worker · reviewer; custom roles: <agentDir>/agents/, <project>/.stepcode/agents/)
 ```
 
 Members are independent `step --mode rpc` subprocesses that do not load this extension (unless granted a sub-team, see §4),
-and can only reach the socket inside the leader process via the shim — this is the natural chokepoint for topology enforcement.
+and can only reach the socket inside the leader process via the team_msg tool (or the CLI shim) — this is the natural chokepoint for topology enforcement.
 
 ## 2. Data flow
 
@@ -49,10 +50,11 @@ Task board: `team_task create` (validateGraph rejects cycles/unknown dependencie
 `start` (only `ready` can be dispatched, assignee required, retries `dispatch.retries` times) →
 on success `completeTask` (unlocks downstream), and on exhausted retries `failTask`.
 
-Member-to-member messaging: member bash → `node bin/stepcode-team.mjs msg --to B --message ...` →
-socket → server checks topology edge A→B → `manager.sendMessage(B, msg, {nested:true})` → the reply returns over the same connection.
-The shim is invoked through a shell: when a member's tool allowlist lacks `bash` (e.g. the scout/planner/reviewer presets) it cannot send messages,
-and `team_set_topology` and `team_create_member` results warn about this; the leader relays as a fallback.
+Member-to-member messaging: member `team_msg` tool → socket → server checks topology edge A→B →
+`manager.sendMessage(B, msg, {nested:true})` → the reply returns over the same connection. The tool is
+registered by the member-side messaging extension (extensions/member-messaging.ts) and speaks the same
+JSONL protocol as the `stepcode-team` CLI shim — without a shell, so read-only presets keep their
+posture and their topology edges stay usable. The shim remains for manual/external use.
 
 ## 3. Persistence layout
 
