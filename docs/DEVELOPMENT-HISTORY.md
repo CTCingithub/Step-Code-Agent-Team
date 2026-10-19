@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-62，/agent-team 带参转发包裹修复（v0.1.3）；此前为 plan-61）。
+> 最近更新：2026-10-19（plan-63，种子配置块补全为完整默认值清单（v0.1.4）；此前为 plan-62）。
 
 ## 总览
 
@@ -34,6 +34,7 @@
 | 25 | 插件配置迁移至统一 config.toml | plan-60 | 用户另一台机器装 v0.1.0 后「找不到配置文件」——安装实际成功（packages 条目在 config.toml），但插件配置只读已退役的 `<agentDir>/settings.json`；扩展无 settings API（官方示例亦为自行读盘），`@step-harness/coding-agent` 导出 readStepConfig/CONFIG_DIR_NAME/STEP_CONFIG_FILE_NAME 且 0.1.5 实测具备；config.ts 新增统一配置层（全局 `<stepRoot>/config.toml` + 项目级 `<cwd>/.stepcode/config.toml` trust 门控，防御式查找旧版无导出则跳过）；优先级：默认 < 旧版专用文件 < settings.json < config.toml < env；phase19 探针 8 组断言先红 7 项后绿；CONFIGURATION/README/ARCHITECTURE/TESTING/HANDOFF 中英同步；全量回归 14 phase + 10 检查全绿 | 无 |
 | 26 | @latest 安装 + 配置种子化 + 文档清理整合（v0.1.2） | plan-61 | 新机器装 v0.1.1 后 config.toml 无默认配置信息；① 种子化：config.ts 新增 seedGlobalConfigExample——首次激活时全局 config.toml 无 stepcodeAgentTeam 表则追加注释默认值块（保序追加不重写——step 的 updateGlobalStepConfig 会整体 stringify 丢失用户注释；全注释默认值照常生效；幂等）；phase20 探针 10 项断言先红后绿；② @latest：step 的 splitRef 将 @latest 当普通 git ref，建随发布移动的 latest 分支（`git push origin <tag>:latest`）并纳入发布流程；README 中英安装示例改 @latest 优先；③ 文档清理整合：CONFIGURATION 中英重写（删去全部 settings.json/专用文件旧版表述，位置/优先级/TOML 示例/速览表/拓扑表/种子化说明），README 中英配置节大压缩（长示例+速览表→导语+精简片段+指针），ARCHITECTURE/TESTING/MANUAL-TESTING/SKILL/sandbox README/HANDOFF 同步 | 无 |
 | 27 | /agent-team 带参转发包裹修复（v0.1.3） | plan-62 | 用户报告「/agent-team <请求> 不启动团队、斜杠命令消失只剩文本」；三层复现定位：RPC 证明激活/团队板/转发全正常（live-args-forward 原只断言转发、漏激活）；PTY 驱动真实 TUI 复现（首次运行主题选择器会吃输入，需先回车越过）——激活 toast 被 TUI 帧合并且未写入终端（装饰性），团队板 toast 正常；会话文件检查：模型对转发请求【零工具调用】——根因是请求原样转发、不含「使用团队」指示，模型对简单任务独自完成（自然语言路径生效是因用户原文含「使用智能体团队功能」）；修复：extensions/forward.ts wrapTeamRequest（CJK 检测选中文/英文指令行+原请求保真），index.ts 转发前包裹；phase21 单测 6 项；live-args-forward 强化为三级硬断言（激活+团队板+包裹文本）；README 中英命令表同步 | 无 |
+| 28 | 种子配置块补全为完整默认值清单（v0.1.4） | plan-63 | 用户发现首次激活种子化的注释配置块与 docs/CONFIGURATION.md 可选项不符；逐节核实为**缩略非缺失**（未列键均保持内置默认），但 keywords 示例值（2 个）远少于内置默认（15 个）、取消注释会收窄激活触发面；修复：seedBlock 改为从 defaultConfig() 生成、覆盖全部 10 节/所有键；phase20 补「全节齐全」与「keywords 完整列表」断言；v0.1.4 发布 | 无 |
 
 ## 明细
 
@@ -287,3 +288,15 @@
 **工作**：① `extensions/forward.ts`（新增）：`wrapTeamRequest(request)`——CJK 检测选择中文/英文指令行，原请求逐字保留（`请使用智能体团队工具完成以下请求：\n<request>` / `Use the agent team tools to accomplish the following request:\n<request>`）。② `extensions/index.ts`：命令处理器转发前包裹（注释记录根因）；命令描述同步为 "forwarded to the agent as a team request"。③ `test/smoke/phase21.ts`（新增，零 token 纯函数级）：6 项断言——CJK→中文指令、ASCII→英文指令、混合文本、多行保真、结构恰为「一行指令+请求」；runner 默认列表加 21。④ `test/run-smoke.sh` live-args-forward 强化为**三级硬断言**：激活 notify（必需，修既往漏检）+ 团队板转发行（必需）+ 包裹文本入流或入会话文件（必需）；原 send_user_message/会话文件积分证据被更强断言覆盖。⑤ README 中英命令表同步。
 
 **验证**：RPC 复现（修复后）激活 1 次、包裹指令入流 2 次；phase21 绿；全量 `npm run smoke` 17 phase + 10 检查全绿；发布 v0.1.3 并移动 latest 分支后，PTY 端到端复测用户原命令——会话文件出现 `team_create_member` ×3（scout/worker/reviewer）、`team_set_topology`、`team_send` ×2（成员均回复），模型真正组建团队并派活（修复前同一场景为零工具调用、独自作答）。
+
+### 28. 种子配置块补全为完整默认值清单（plan-63）
+
+**用户 prompt**：「我在之前那台电脑上的 ~/.stepcode/config.toml 中看到的是（我只做了取消注释）…这和 @docs/CONFIGURATION.md 中的可配置选项不同，请问这只是缩略了，还是说确实有功能缺失了」（附其取消注释后的种子块全文）
+
+**思路**：疑问指向 plan-61 首次激活种子化写入的注释配置块与文档可选项的范围差异。逐节对比 `defaultConfig()` 与 `seedBlock()` 的键位，区分「设计缩略」与「功能缺失」，并检查取消注释的语义影响。
+
+**核实结果**：种子块列 5 节 12 键（activation：enabled/keywords/notifyOnActivate；members：max/defaultRole/maxRecursionDepth；dispatch：maxConcurrent/timeoutMs；topology：default/maxLoopCount；cost：warnThreshold）；`defaultConfig()` 实为 10 节——种子块**缺 models、oneshot、idle、storage、debug 整节**及 `members.defaultTools`、`dispatch.handshakeTimeoutMs`、`dispatch.retries`、`topology.requireDeclaration` 四键。**结论：缩略（plan-61「约 20 行覆盖常用项」的设计），非功能缺失——未列出的键全部保持内置默认，配置加载器完整读取。但发现一个真实陷阱：keywords 行只列 2 个示例值，内置默认实为 15 个关键词，取消注释会把激活触发面收窄到 2 个。**
+
+**工作**：① `extensions/config.ts`：`seedBlock()` 改为从 `defaultConfig()` 生成（值不再硬写，杜绝与默认值漂移），覆盖全部 10 节/所有键；keywords 行用完整默认列表；null 默认键（`members.defaultTools`、`storage.dir`）以示例值 + "omit for null" 注释呈现。② `test/smoke/phase20.ts`：补「全节齐全」与「keywords 完整列表」断言（先红后绿）。③ 历史同步 + 全量回归 + 发布 v0.1.4（main + 附注标签 + latest 分支）。
+
+**验证**：键位差异经源码逐节核实（defaultConfig 10 节 vs 种子块 5 节 12 键）；keywords 内置默认 15 个经 config.ts 确认。修复、回归与发布结果见本轮后续提交。
