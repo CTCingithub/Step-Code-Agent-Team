@@ -19,7 +19,7 @@ export STEP_API_KEY=<你自己的 key>   # 仅涉及模型调用时才需要；�
 |---|---|
 | `run.sh` | 沙箱启动器：隔离 agentDir/session/plan，cwd 指向 `project/` |
 | `probe.sh` | 零 token 协议探针（期望输出 `PROBE OK`） |
-| `restore-project.sh` | 将 `project/` 还原为初始种子态（含 off-by-one 种子 bug） |
+| `restore-project.sh` | 还原沙箱测试环境：`project/` 复位为初始种子态（含 off-by-one 种子 bug），清除运行时数据与会话日志（`session-log-*.md`） |
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |

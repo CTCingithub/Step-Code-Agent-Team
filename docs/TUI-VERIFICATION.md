@@ -44,9 +44,15 @@ export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' local/test-api-key.md | cut -d=
 | 10 | `解散 worker1` | renderCall：`team −worker1`；renderResult：`worker1` | ☐ |
 | 11 | *（退出）* `Ctrl+C` 两次或 `/quit` 退出沙箱会话 | 无孤儿成员进程：`pgrep -f 'team-.*-scout1'` 为空 | ☐ |
 
-## 3. 测试后还原沙箱
+## 3. 收尾：会话日志（可选）与沙箱还原
 
-演示/验证会改动 `sandbox/project/`（成员可能修复种子 bug）并产生会话、团队注册表等
+想留下本次验证的过程记录时，先粘贴下面这条 prompt 让队长生成日志：
+
+```text
+请在仓库的 sandbox/ 目录（不是 sandbox/project）中创建日志文件 session-log-<今天日期>.md，记录本 session 的用户 prompt、你的工作记录与各成员的回复内容
+```
+
+随后还原沙箱。演示/验证会改动 `sandbox/project/`（成员可能修复种子 bug）并产生会话、团队注册表等
 运行时状态。按需选择：
 
 **快速还原（每轮验证后必做）**——还原演示项目到种子 bug 状态、清除运行时数据：

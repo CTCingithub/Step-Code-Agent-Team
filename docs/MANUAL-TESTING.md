@@ -21,6 +21,7 @@
 |---|---|---|
 | 演示项目 | `sandbox/project/`（含种子 bug 的演示态） | `bash sandbox/restore-project.sh` |
 | 运行时数据 | `sandbox/agent/{sessions,teams,plans,live-context}`、`sandbox/project/data/`（全部 gitignored） | 可选彻底清场，见下 |
+| 会话日志 | `sandbox/session-log-*.md`（按需生成，prompt 见 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) §3） | `restore-project.sh` 自动删除 |
 
 **快速还原（每轮测试后必做）**：
 

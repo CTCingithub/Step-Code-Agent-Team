@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-54，测试流程文档可执行化；此前为 plan-42）。
+> 最近更新：2026-10-19（plan-55，手动验证日志问题修复 + 测试流程增强 + 沙箱清理；此前为 plan-54）。
 
 ## 总览
 
@@ -26,6 +26,7 @@
 | 17 | 沙箱引入 Step-Code submodule + 全面文档检查 | plan-38 | sandbox/step submodule 钉住 b5dbed9（上游无 tag）；step-bin.sh 解析器 + build-step.sh 可选构建；live-args-forward 分层断言（陈旧 key 不误判）；README 中英/TESTING/HANDOFF/TEST-PLAN 同步 | 用户轮换 key 后环境仍持旧 key，曾致 live-args-forward 误报，已修 |
 | 18 | 罗列剩余人工测试项 + 文档收尾 | plan-42 | 答复人工测试清单（6 项不可约项：TUI 观感/真实安装/信任弹窗 UX/LLM 行为遵循度/演示剧本/性能主观）；DEVELOPMENT-HISTORY 与 HANDOFF 刷新供新 session 接手 | — |
 | 19 | 测试流程文档可执行化（复制粘贴 prompt + 沙箱还原命令） | plan-54 | TUI-VERIFICATION 重写为 11 步可复制粘贴清单（预期与 render.ts 实际渲染对齐）；MANUAL-TESTING 每项补可执行步骤 + 新增 §0 沙箱还原通用节；TESTING §0 补沙箱运行时状态与清场命令 | 修正 `team_set_topology` 命名形状的 renderCall 不含边数、`step remove` 须用安装源两处文档与实现不符 |
+| 20 | 修复手动验证日志发现的三个问题 + 测试流程增强 + 沙箱清理 | plan-55 | `members.max` 改计存活成员（解散释放名额）；create_member 恢复列明被忽略参数；set_topology/create_member 对无 bash 成员警告；phase18 探针先红后绿；restore-project.sh 增删 session-log；沙箱运行时状态清理对齐远端；README/PROTOCOL/ARCHITECTURE/SKILL 等同步 | phase18 探针流程一度在 cap 检查后建 scout 被旧语义拦截（修探针：先整队解散） |
 
 ## 明细
 
@@ -193,3 +194,13 @@
 **工作**：① `docs/TUI-VERIFICATION.md` 重写：环境准备复制粘贴块、11 步「每步一整行 prompt」清单（激活 → 团队板 → 建 scout1/worker1 → 派活 → ctrl+o → pipeline 拓扑 → 任务板 → status → disband → 退出孤儿检查）、收尾还原节。预期字符串逐一核对 `extensions/render.ts` 实际输出；顺带修正两处文档与实现不符——命名形状（pipeline 等）不传 `edges` 时 renderCall 只有 `team topology pipeline`（边数只在 renderResult 头 `pipeline · 1 edge(s)` 出现），旧文档写在 renderCall 上是错的；`step remove` 须用与安装相同的来源（`step remove /tmp/scat-pkg`，语法经 `sandbox/step` 的 packages.md/usage.md 核实）。② `docs/MANUAL-TESTING.md`：6 项不可约人工项全部补可执行步骤——§3 信任 UX 给了创建 `.stepcode/settings.json` 的完整命令块与还原命令；§4 LLM 遵循度给了 ring 三成员实测 prompt 与通过标准；§5 三幕演示剧本各给一整行 `/agent-team` prompt 与幕间还原；新增 §0「沙箱环境与还原」通用节（快速还原 vs 彻底清场，列出全部 gitignored 运行时状态位置）。③ `docs/TESTING.md` §0 补「沙箱运行时状态与还原」表 + 命令块，并交叉引用两份清单文档。
 
 **验证**：`npm run smoke` 全量回归通过（13 phase + 6 live 检查，phase5 无 key SKIP——本轮纯文档改动，冒烟集为防回归的确认性运行）；文档中所有命令核验存在性（run.sh / restore-project.sh / 探针路径）；`step remove`、`/quit` 语法经 sandbox/step 文档核实。
+
+### 20. 手动验证日志问题修复 + 测试流程增强 + 沙箱清理（plan-55）
+
+**用户 prompt**：「我已经手动测试过tui verification，日志文件在 @sandbox/session-log-2026-10-19.md。在渲染方面没有发现问题，请检查日志排查是否有其他问题」→「请创建合理的计划后做：1.请开始修改，并删除日志文件，恢复sandbox测试环境；2.请修改测试文档，把生成日志文件命令也写进去，然后修改 restore-project.sh 使其能够恢复sandbox的时候删除日志文件；3.目前sandbox/路径中还是较乱，而且和github上的不同（比如远端就没有agent/目录），请修改相关内容。」
+
+**思路**：日志排查出三个问题——只读预设（scout/planner/reviewer）无 bash 无法调用消息 shim 导致非星型拓扑边不可用、`team_create_member` 幂等恢复静默忽略传入参数、解散单个成员不释放 `members.max` 名额（代码核实均属实）。按项目约定先写 phase18 零 token 探针（先红）再修复；测试文档补会话日志生成 prompt 与还原命令；沙箱清理 gitignored 运行时状态对齐远端。
+
+**工作**：① 修复（`extensions/members.ts`）：`members.max` 改计**存活**成员（dead 记录可恢复但不占名额，错误文案同步改 "live members"）；导出 `memberCanMessage` / `resumeIgnoredParams` / `messagingWarnings` 三个 helper。② 修复（`extensions/tools.ts`）：`team_create_member` 恢复分支追加「参数已忽略，需解散重建」提示，无 bash 成员追加消息通道不可用提示；`team_set_topology` 对 bash-less 边端点追加警告；两个工具描述同步。③ `test/smoke/phase18.ts`（零 token，hermetic 临时 agentDir 暂存 `members.max=2`，13 项断言：名额释放/恢复参数列明/消息能力/拓扑警告）——先红（cap 两项 + helper 未实现）后绿；runner 默认列表加 18。④ `sandbox/restore-project.sh` 增删 `session-log-*.md`（头注释与回显同步）；`.gitignore` 增补该模式；`docs/TUI-VERIFICATION.md` §3 改为「收尾：会话日志（可选）与沙箱还原」并给复制粘贴 prompt；MANUAL-TESTING §0 / TESTING §0 状态表增日志行；sandbox/README 内容表同步。⑤ 沙箱清理：删会话日志、restore 复位演示项目（种子 bug 复位 7/8 实测）、清除 gitignored 运行时状态（`sandbox/agent/` 12M、config.toml、models-store.json、各 `cfg-*/sessions|teams|live-context`；保留 auth.json 凭证）——本地 sandbox/ 结构与远端一致。⑥ 文档同步：README 中英（消息 bash 前提/护栏存活成员/配置表）、ARCHITECTURE（数据流注 + 护栏表两行）、PROTOCOL（两工具契约）、CONFIGURATION（max 注释）、TESTING（phase18 行）、SKILL（msg bash 澄清）、HANDOFF（members.ts 两处）。
+
+**验证**：phase18 先红（cap 两项按预期失败 + helper 未实现）后绿；修复后全量 `npm run smoke` 14 phase + 6 live 检查全绿（phase5 无 key SKIP）；`restore-project.sh` `bash -n` + 实跑复位验证（种子 bug 7/8）；git status 仅剩本会话预期改动；子模块钉在 b5dbed9 干净。
