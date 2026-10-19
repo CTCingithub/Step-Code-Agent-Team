@@ -1,6 +1,6 @@
 {
   "name": "step-code-agent-team",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Agent team plugin for Step Code: leader session spawns resumable member agents, decomposes goals into dependency-aware tasks, and coordinates members via direct messaging.",
   "keywords": [
     "pi-package"
