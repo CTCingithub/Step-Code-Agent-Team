@@ -18,6 +18,7 @@ import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
 import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample } from "./config.ts";
 import { activate, detectKeyword, initActivation, isActive, TEAM_TOOL_NAMES } from "./activation.ts";
+import { wrapTeamRequest } from "./forward.ts";
 
 export default function (pi: ExtensionAPI) {
 	// Config first: tool descriptions and gating depend on it.
@@ -108,7 +109,7 @@ export default function (pi: ExtensionAPI) {
 	pi.setUnavailableTools([...TEAM_TOOL_NAMES]);
 
 	pi.registerCommand("agent-team", {
-		description: "Activate the agent team plugin and show the team board; text after the command is forwarded to the agent",
+		description: "Activate the agent team plugin and show the team board; text after the command is forwarded to the agent as a team request",
 		handler: async (args, ctx) => {
 			currentCtx = ctx;
 			if (!config.activation.enabled) {
@@ -143,10 +144,16 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.notify(lines.join("\n"), "info");
 			if (request) {
 				try {
-					// sendUserMessage throws while streaming unless a delivery
+					// Wrap the request so the model knows the team is active and the
+					// request is meant to be executed with it: forwarded verbatim, an
+					// ordinary request ("read the project and summarize") is completed
+					// solo — the tools are available but nothing says to use them
+					// (observed in the 2026-10-19 TUI report: zero team tool calls).
+					// sendUserMessage also throws while streaming unless a delivery
 					// mode is given; queue behind the current turn in that case.
-					if (ctx.isIdle()) pi.sendUserMessage(request);
-					else pi.sendUserMessage(request, { deliverAs: "followUp" });
+					const wrapped = wrapTeamRequest(request);
+					if (ctx.isIdle()) pi.sendUserMessage(wrapped);
+					else pi.sendUserMessage(wrapped, { deliverAs: "followUp" });
 				} catch (err) {
 					ctx.ui.notify(
 						`Could not forward your request to the agent: ${err instanceof Error ? err.message : String(err)}`,

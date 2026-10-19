@@ -27,7 +27,7 @@ trap 'rm -rf "$AGENT_DIR"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-PHASES="${*:-1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20}"
+PHASES="${*:-1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21}"
 # Pure-logic probes (render/tools helpers) run standalone — without
 # extensions/index.ts. Importing them transitively pulls @step-harness/pi-tui,
 # which makes step stage the repo package into the agent dir and load a second
@@ -148,29 +148,30 @@ fi
 rm -rf "$PKGDIR"
 
 # Args after the command must be forwarded to the agent as a real user message
-# (a slash command otherwise consumes the whole input and drops the request).
-# Tiered evidence: the board announces the forwarding and the harness receives
-# a send_user_message for the args (works without a key); when a working key is
-# present the message is also recorded in the session (strongest proof).
+# (a slash command otherwise consumes the whole input and drops the request),
+# the command must still ACTIVATE the plugin (2026-10-19 TUI report: activation
+# happened but its toast was coalesced away, and the verbatim request was then
+# completed solo — zero team tool calls), and the forwarded request must be
+# wrapped with an explicit team-usage instruction so the leader forms a team.
 LIVE3="$(mktemp -d)"
 mkdir -p "$LIVE3/sessions"
 fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team ping-forward-check"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE3/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-fwd --session-dir "$LIVE3/sessions" -a 2>&1)" || true
-fwd_ok=0
-echo "$fwd_out" | grep -q 'forwarding your request to the agent' && fwd_ok=1
-echo "$fwd_out" | grep -q '"event":"send_user_message"' && fwd_ok=1
-# Bonus evidence: the message is recorded — needs a working key, and a stale
-# or absent key must not zero out the evidence above.
-if echo "$fwd_out" | grep -q '"text":"ping-forward-check"' || grep -rq '"text":"ping-forward-check"' "$LIVE3"/sessions/ 2>/dev/null; then
-	fwd_ok=1
-fi
-if [ "$fwd_ok" -eq 1 ]; then
-  echo "live-args-forward: OK"
-else
-  echo "live-args-forward: FAILED (request after /agent-team was not forwarded)"
+if ! echo "$fwd_out" | grep -q 'Agent team plugin activated'; then
+  echo "live-args-forward: FAILED (command with args did not activate the plugin)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
+elif ! echo "$fwd_out" | grep -q 'forwarding your request to the agent'; then
+  echo "live-args-forward: FAILED (no forwarding announcement on the team board)"
+  echo "$fwd_out" | tail -5
+  FAILED+=("live-args-forward")
+elif ! echo "$fwd_out" | grep -q 'team tools to accomplish' && ! grep -rq 'team tools to accomplish' "$LIVE3"/sessions/ 2>/dev/null; then
+  echo "live-args-forward: FAILED (request was not wrapped as a team request)"
+  echo "$fwd_out" | tail -5
+  FAILED+=("live-args-forward")
+else
+  echo "live-args-forward: OK"
 fi
 rm -rf "$LIVE3"
 
