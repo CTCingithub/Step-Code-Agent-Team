@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-59，v0.1.0 发布：peer 依赖安装修复 + 标签 + git 安装全链路实测；此前为 plan-58）。
+> 最近更新：2026-10-19（plan-60，插件配置迁移至统一 config.toml（settings.json 回退）+ phase19 探针 + 双语文档；此前为 plan-59）。
 
 ## 总览
 
@@ -31,6 +31,7 @@
 | 22 | 文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查 | plan-57 | 10 对中英双语文档（README + 7 docs + sandbox README/TEST-PLAN，5 个并行 subagent 翻译，术语对齐 README）；HANDOFF.md 取消跟踪 + .gitignore（本地保留）；DEVELOPMENT-HISTORY 迁入 docs/（仍仅中文）；全面检查（链接 73/73、配对 10/10、导出物无 HANDOFF、smoke 全绿）；MANUAL-TESTING 两语言新增状态总览 | 无 |
 | 23 | 安装方式重构（检索 step/pi 打包安装文档） | plan-58 | 检索 packages.md/extensions.md + package-manager.ts 源码 + pi 上游（earendil-works/pi）：本地路径安装实为引用式零拷贝（README 原述「整目录拷贝」有误，git-archive 变通多余）；修复真 bug——pi manifest 缺 skills/prompts 声明，按「有 manifest 时仅加载声明资源类型」规则装包后静默不加载；README 中英/MANUAL-TESTING/TESTING-OPTIMIZATION-PLAN/HANDOFF 改引用式安装 + git/npm 分发；runner 新增 manifest-check 与 live-package-install 两个零 token 检查 | 无 |
 | 24 | 发布 v0.1.0（peer 依赖安装修复 + 标签 + git 安装全链路实测） | plan-59 | 用户按 README 的 git 标签方式在另一台机器安装失败（无 v0.1.0 标签）；发布前排查出隐藏阻塞——step git 安装流 clone→checkout 后跑裸 `npm install --omit=dev`，而 peerDependencies 的三个 `@step-harness/*` 未发布至公共 registry（E404），npm 自动装 peer 会失败；修复：`peerDependenciesMeta` 四 peer 标 optional + 新增 `.npmrc`（legacy-peer-deps，与 step 自身托管安装的 `--legacy-peer-deps` 一致）；附注标签 v0.1.0（cf9be95）推送；hermetic 实测全链路通过 | 无 |
+| 25 | 插件配置迁移至统一 config.toml | plan-60 | 用户另一台机器装 v0.1.0 后「找不到配置文件」——安装实际成功（packages 条目在 config.toml），但插件配置只读已退役的 `<agentDir>/settings.json`；扩展无 settings API（官方示例亦为自行读盘），`@step-harness/coding-agent` 导出 readStepConfig/CONFIG_DIR_NAME/STEP_CONFIG_FILE_NAME 且 0.1.5 实测具备；config.ts 新增统一配置层（全局 `<stepRoot>/config.toml` + 项目级 `<cwd>/.stepcode/config.toml` trust 门控，防御式查找旧版无导出则跳过）；优先级：默认 < 旧版专用文件 < settings.json < config.toml < env；phase19 探针 8 组断言先红 7 项后绿；CONFIGURATION/README/ARCHITECTURE/TESTING/HANDOFF 中英同步；全量回归 14 phase + 10 检查全绿 | 无 |
 
 ## 明细
 
@@ -254,3 +255,13 @@
 **工作**：① `package.json`：`peerDependenciesMeta` 将四个 peer 标 `optional`（host-provided，不自动安装、缺失不报错）。② 新增 `.npmrc`（`legacy-peer-deps=true`）——随 git clone 到达安装目录，覆盖 step git 安装流的裸 `npm install`，语义与 step 托管安装的 `--legacy-peer-deps` 一致；npm 发布时 `.npmrc` 本就不入 tarball，npm 流由 step 的显式 flag 覆盖。双修复均经干净副本实证（`npm install --omit=dev` 成功、零安装）。③ 附注标签 `v0.1.0` 指向修复提交 `cf9be95`，推送 main + 标签（远程 `refs/tags/v0.1.0` 核验）。④ hermetic 实测（隔离临时 agentDir）复现用户命令：clone → checkout v0.1.0 → `npm install --omit=dev` 成功（0 安装 0 漏洞）→ `step list` 注册成功 → RPC `/agent-team` **激活成功** → clone 内 skills/prompts/extensions 三资源齐全 → `step remove` + 删临时目录清理。
 
 **验证**：打标签前全量 `npm run smoke` 14 phase + 8 检查全绿；干净副本 `npm install --omit=dev` 成功；git 安装全链路（用户的原始命令）实测通过；标签与 main 均已在远程且本地/远程一致；`git status` 干净。
+
+### 25. 插件配置迁移至统一 config.toml（plan-60）
+
+**用户 prompt**：「我在另一台电脑上再次运行了安装命令，但是没有找到配置文件」+ 终端输出：`~/.stepcode/config.toml` 含 `packages = [ "git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.0" ]`（安装实际成功），目录中只有 config.toml、无插件配置文件。
+
+**思路**：安装本身成功（v0.1.0 的 git 安装流已修）；用户找不到的是**插件自己的配置文件**——step 0.1.5 已把设置迁移至统一 `config.toml`（`agent/settings.json` 退役，上一轮发布时已发现但仅记录了版本差异），而插件彼时只读 `<agentDir>/settings.json`。先调查再动手：① ExtensionAPI/ctx 不暴露 settings（全文件仅无关字段），扩展按官方示例自行读盘；② `@step-harness/coding-agent` 公共导出含 `readStepConfig` / `resolveStepConfigPath` / `CONFIG_DIR_NAME` / `STEP_CONFIG_FILE_NAME`——用一次性探针在 **step 0.1.5（用户所装版本）实测全部为 function**，可零成本复用（无需自写 TOML 解析）；③ `readStepConfig(path)` 读任意路径 TOML，缺失/非法会抛（需 try/catch）；④ 全局配置根 = `dirname(agentDir)`（与 settings-manager.ts 的算法一致），项目级 = `<cwd>/.stepcode/config.toml`（`ctx.isProjectTrusted()` 门控，index.ts 已有接线）。
+
+**工作**：① `extensions/config.ts`：新增统一配置层——经 `stepCore.readStepConfig` 读 `<stepRoot>/config.toml` 与（信任时）`<cwd>/.stepcode/config.toml` 的 `stepcodeAgentTeam` 表；`readStepConfig`/`CONFIG_DIR_NAME`/`STEP_CONFIG_FILE_NAME` 均防御式查找（旧版 step 无导出则该层静默跳过）；文件缺失/非法 TOML 静默回退（非 ENOENT 错误 debug 留痕）；接入 `applyGlobalTier` 与 `applyProjectConfig`（settings.json 之后、env 之前）。优先级（每层内）：**默认 < 旧版专用文件 < settings.json 节 < config.toml 表 < env 覆盖**——统一配置覆盖旧 settings、项目级覆盖全局、env 最高。② `test/smoke/phase19.ts`（零 token，纯函数级驱动 `loadConfig`，hermetic 临时目录）：8 组断言——全局层布尔/数字/枚举+零界应用、config.toml 覆盖 settings.json、旧 settings.json 单独仍生效、项目层信任门控（信任应用/不信任忽略）、项目统一表覆盖项目 settings.json、非法 TOML 容忍、env 仍胜出、缺失 config.toml 回退默认——先红 7 项后绿；runner 默认列表加 19。③ 文档：CONFIGURATION 中英重写位置/优先级（TOML 为主示例、settings.json 为旧版回退、TOML 无 null 的省略约定）；README 中英配置节同步（含清理替换残留）；ARCHITECTURE 中英 config.ts 行、TESTING 中英 phase19 行、HANDOFF §1 同步。
+
+**验证**：phase19 先红（7 项：未实现的新层级）后绿；修复后全量 `npm run smoke` 14 phase + 10 检查全绿（config.ts 新增 `@step-harness/coding-agent` 命名空间导入未影响 standalone 探针 15/16/17——与 tools.ts 既有的 providers 值导入先例一致）；文档安装/配置语义与 step 0.1.5 行为一致。

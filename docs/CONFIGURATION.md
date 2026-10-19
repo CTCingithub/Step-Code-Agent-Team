@@ -2,27 +2,29 @@
 
 > [简体中文 →](./CONFIGURATION_ZH.md)
 
-Step-Code-Agent-Team controls all behavior parameters through the `stepcodeAgentTeam` config section in `settings.json` (following Step Code's settings conventions).
+Step-Code-Agent-Team controls all behavior parameters through the `stepcodeAgentTeam` config section. Step Code first kept settings in `settings.json` and later moved them to the unified `config.toml` (`agent/settings.json` is retired there); both locations are honored, and the unified config is the current convention.
 
 ## Location and Precedence
 
 ```
-Global:  the "stepcodeAgentTeam" section of <agentDir>/settings.json
-        (agentDir follows STEP_CODING_AGENT_DIR, default ~/.stepcode/agent;
-         in the dev sandbox it automatically points at sandbox/agent, so the two never interfere)
-Project: the "stepcodeAgentTeam" section of <cwd>/.stepcode/settings.json
+Global:  the [stepcodeAgentTeam] table of <stepRoot>/config.toml
+        (stepRoot sits beside the agent dir: dirname(STEP_CODING_AGENT_DIR),
+         default ~/.stepcode — where step's own settings live)
+        Legacy fallback: the "stepcodeAgentTeam" section of <agentDir>/settings.json
+Project: the [stepcodeAgentTeam] table of <cwd>/.stepcode/config.toml
         (loaded only when the project is trusted; trust info is only available
          inside event handlers, so it is merged in place into the loaded config at session_start)
+        Legacy fallback: the "stepcodeAgentTeam" section of <cwd>/.stepcode/settings.json
 ```
 
-Precedence (the same within each of the global and project tiers): **built-in defaults < legacy dedicated files < settings.json section < environment overrides**.
+Precedence (the same within each of the global and project tiers): **built-in defaults < legacy dedicated files < settings.json section < config.toml table < environment overrides** — the unified config overrides the legacy settings section, the project tier overrides the global tier, and env overrides win over everything.
 
-- Files are standard JSON (no comments supported); the plugin only **reads** its own section and never writes to `settings.json` (step's own commands preserve unknown keys).
+- The unified config is TOML (comments with `#` are supported); the legacy locations are standard JSON. The plugin only **reads** its own section and never writes any config file (step's own commands preserve unknown keys, so the `stepcodeAgentTeam` table survives them).
 - Unknown keys are ignored (a note is printed to stderr when `debug: true`).
 - Invalid values fall back to defaults with a warning in the debug log.
 - Config is read once and cached at extension load; project-level config is merged in place as soon as the first event context is available (takes effect within the same session); other changes take effect in a new session (`/reload` re-reads it, but the plugin also returns to its default-off state).
 - Known compromise: tool description strings fixed at registration (e.g. the model list) and this process's depth gate (`maxRecursionDepth`) are not refreshed by a project-level override — the effective depth bound is propagated to sub-members via `STEPCODE_TEAM_MAXDEPTH`, and description changes take effect next session.
-- **Legacy compatibility**: the previous dedicated files `<agentDir>/stepcode-agent-team.json` and `<cwd>/.stepcode/stepcode-agent-team.json` are still honored (applied before the settings section at the same tier, with a migration hint in debug mode); migrate them into the `stepcodeAgentTeam` section of `settings.json` as early as possible.
+- **Legacy compatibility**: the dedicated files `<agentDir>/stepcode-agent-team.json` / `<cwd>/.stepcode/stepcode-agent-team.json` and the `settings.json` sections are still honored (applied before the unified table at the same tier, with a migration hint in debug mode); migrate them into the `stepcodeAgentTeam` table of `config.toml` as early as possible.
 
 ## Environment Overrides
 
@@ -35,51 +37,61 @@ Precedence (the same within each of the global and project tiers): **built-in de
 
 ## Full Configuration
 
-Put the following in the `stepcodeAgentTeam` section of `<agentDir>/settings.json` (global) or `<cwd>/.stepcode/settings.json` (project):
+Put the following in the `[stepcodeAgentTeam]` table of `<stepRoot>/config.toml` (global) or `<cwd>/.stepcode/config.toml` (project). TOML has no null: keys whose default is null (`members.defaultTools`, `storage.dir`) are simply omitted:
+
+```toml
+[stepcodeAgentTeam.activation]
+enabled = true                       # master switch: no trigger activates when false
+keywords = ["agent team", "智能体团队"]   # natural-language trigger keywords; [] disables keyword activation
+notifyOnActivate = true              # whether to notify on activation
+
+[stepcodeAgentTeam.models]
+available = ["step-5-preview"]       # model list available to members
+autonomousSelection = false          # conversation model autonomously picks models for sub-agents
+autonomousThinking = false           # conversation model autonomously picks thinking effort for sub-agents
+
+[stepcodeAgentTeam.members]
+max = 8                              # live-member cap (1–64; dead members can be resumed but don't occupy a slot)
+defaultRole = "worker"               # default role when role is unspecified (matches the same-named preset)
+# defaultTools: omit for null (= use the preset or all tools)
+maxRecursionDepth = 1                # max team-tree depth (1–4): leader=0, its members=1
+
+[stepcodeAgentTeam.dispatch]
+maxConcurrent = 5                    # cap on simultaneously running members (1–16); dispatches beyond it queue and start when their turn comes
+timeoutMs = 180000                   # single dispatch/promptAndSettle timeout
+handshakeTimeoutMs = 15000           # member spawn handshake timeout
+retries = 1                          # task failure retry count (0–5)
+
+[stepcodeAgentTeam.oneshot]
+timeoutMs = 180000                   # oneshot process timeout
+
+[stepcodeAgentTeam.cost]
+warnThreshold = 1                    # cumulative spend warning threshold (USD); 0 = disabled
+
+[stepcodeAgentTeam.idle]
+reapAfterMs = 1800000                # idle member reaping threshold (30 minutes)
+reapIntervalMs = 300000              # reaping check interval (5 minutes)
+
+[stepcodeAgentTeam.storage]
+# dir: omit for null (= <agentDir>/teams)
+
+[stepcodeAgentTeam.topology]
+default = "star"                     # default topology shape for new teams (star/pipeline/mesh/ring/custom)
+requireDeclaration = false           # when true, dispatch is forbidden before the topology is explicitly declared
+maxLoopCount = 2                     # max hops in a ring message chain (0 = unlimited, range 0–64)
+
+[stepcodeAgentTeam]
+debug = false                        # debug logging (model decisions, config warnings, socket errors)
+```
+
+The legacy `settings.json` locations accept the same keys as JSON (omit null-valued keys there too):
 
 ```jsonc
 {
-  "activation": {
-    "enabled": true,                  // master switch: no trigger activates when false
-    "keywords": ["agent team", "智能体团队", "..."],   // natural-language trigger keywords; [] disables keyword activation
-    "notifyOnActivate": true          // whether to notify on activation
-  },
-  "models": {
-    "available": ["step-5-preview"],  // model list available to members
-    "autonomousSelection": false,     // conversation model autonomously picks models for sub-agents
-    "autonomousThinking": false       // conversation model autonomously picks thinking effort for sub-agents
-  },
-  "members": {
-    "max": 8,                         // live-member cap (1–64; dead members can be resumed but don't occupy a slot)
-    "defaultRole": "worker",          // default role when role is unspecified (matches the same-named preset)
-    "defaultTools": null,             // member default tool allowlist; null = use the preset or all tools
-    "maxRecursionDepth": 1            // max team-tree depth (1–4): leader=0, its members=1
-  },
-  "dispatch": {
-    "maxConcurrent": 5,               // cap on simultaneously running members (1–16); dispatches beyond it queue and start when their turn comes
-    "timeoutMs": 180000,              // single dispatch/promptAndSettle timeout
-    "handshakeTimeoutMs": 15000,      // member spawn handshake timeout
-    "retries": 1                      // task failure retry count (0–5)
-  },
-  "oneshot": {
-    "timeoutMs": 180000               // oneshot process timeout
-  },
-  "cost": {
-    "warnThreshold": 1                // cumulative spend warning threshold (USD); 0 = disabled
-  },
-  "idle": {
-    "reapAfterMs": 1800000,           // idle member reaping threshold (30 minutes)
-    "reapIntervalMs": 300000          // reaping check interval (5 minutes)
-  },
-  "storage": {
-    "dir": null                       // team data root directory; null = <agentDir>/teams
-  },
-  "topology": {
-    "default": "star",                // default topology shape for new teams (star/pipeline/mesh/ring/custom)
-    "requireDeclaration": false,      // when true, dispatch is forbidden before the topology is explicitly declared
-    "maxLoopCount": 2                 // max hops in a ring message chain (0 = unlimited, range 0–64)
-  },
-  "debug": false                      // debug logging (model decisions, config warnings, socket errors)
+  "stepcodeAgentTeam": {
+    "members": { "max": 8 },
+    "debug": false
+  }
 }
 ```
 

@@ -217,41 +217,73 @@ sandbox/       isolated dev environment (ships with the repo; runtime state giti
 
 ## Configuration
 
-All behavior lives in Step Code's `settings.json`, in the plugin's `stepcodeAgentTeam`
-section — globally at `<agentDir>/settings.json` (the sandbox points `agentDir` at
-`sandbox/agent`) and, applied only when the project is trusted, at
-`<cwd>/.stepcode/settings.json`. Precedence: defaults < legacy files < settings.json
-sections < environment overrides.
+All behavior lives in the plugin's `stepcodeAgentTeam` config section. Step Code
+first kept settings in `settings.json` and later moved them to the unified
+`config.toml` (`agent/settings.json` is retired there); both locations are
+honored, and the unified config is the current convention. Precedence:
+defaults < legacy files < settings.json sections < config.toml tables <
+environment overrides.
 
 | Tier | Path | Notes |
 |---|---|---|
-| Global | `<agentDir>/settings.json` → `stepcodeAgentTeam` section | `agentDir` = `STEP_CODING_AGENT_DIR` or `~/.stepcode/agent` |
-| Project | `<cwd>/.stepcode/settings.json` → `stepcodeAgentTeam` section | Loaded only when the project is trusted |
+| Global | `[stepcodeAgentTeam]` table in `<stepRoot>/config.toml` (beside the agent dir, default `~/.stepcode`) | Legacy fallback: `stepcodeAgentTeam` section of `<agentDir>/settings.json` |
+| Project | `[stepcodeAgentTeam]` table in `<cwd>/.stepcode/config.toml` | Loaded only when the project is trusted; legacy fallback: `<cwd>/.stepcode/settings.json` |
 | Environment | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | One-off overrides; highest precedence |
 
-**How to apply changes:** edit the `stepcodeAgentTeam` section of `settings.json`
+**How to apply changes:** add a `[stepcodeAgentTeam]` table to `config.toml`
 (unknown keys are ignored; invalid values fall back to defaults with a debug
 warning; the plugin only reads its section and never writes the file) and start
 a new session — config is read once at load. `/reload` re-reads it but also
 returns the plugin to its default-off state. Environment overrides apply to a
 single run. Legacy dedicated files (`<agentDir>/stepcode-agent-team.json`,
-`<cwd>/.stepcode/stepcode-agent-team.json`) are still honored as a fallback.
+`<cwd>/.stepcode/stepcode-agent-team.json`) and the `settings.json` sections are
+still honored as a fallback. Full reference:
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-```jsonc
-{
-  "stepcodeAgentTeam": {
-    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
-    "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
-    "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
-    "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
-    "oneshot": { "timeoutMs": 180000 },
-    "cost": { "warnThreshold": 1 },
-    "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
-    "storage": { "dir": null },
-    "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
-    "debug": false
-  }
-}
+```toml
+# Global: <stepRoot>/config.toml · Project: <cwd>/.stepcode/config.toml
+[stepcodeAgentTeam.activation]
+enabled = true
+keywords = ["agent team", "智能体团队"]
+notifyOnActivate = true
+
+[stepcodeAgentTeam.models]
+available = ["step-5-preview"]
+autonomousSelection = false
+autonomousThinking = false
+
+[stepcodeAgentTeam.members]
+max = 8
+defaultRole = "worker"
+# defaultTools omitted (TOML has no null) = use the preset or all tools
+maxRecursionDepth = 1
+
+[stepcodeAgentTeam.dispatch]
+maxConcurrent = 5
+timeoutMs = 180000
+handshakeTimeoutMs = 15000
+retries = 1
+
+[stepcodeAgentTeam.oneshot]
+timeoutMs = 180000
+
+[stepcodeAgentTeam.cost]
+warnThreshold = 1
+
+[stepcodeAgentTeam.idle]
+reapAfterMs = 1800000
+reapIntervalMs = 300000
+
+[stepcodeAgentTeam.storage]
+# dir omitted = <agentDir>/teams
+
+[stepcodeAgentTeam.topology]
+default = "star"
+requireDeclaration = false
+maxLoopCount = 2
+
+[stepcodeAgentTeam]
+debug = false
 ```
 
 ### Options at a glance

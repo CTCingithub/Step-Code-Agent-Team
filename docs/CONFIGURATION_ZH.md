@@ -1,27 +1,29 @@
 # 配置参考
 > [English →](./CONFIGURATION.md)
 
-Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节控制全部行为参数（沿用 Step Code 的 settings 约定）。
+Step-Code-Agent-Team 通过 `stepcodeAgentTeam` 配置节控制全部行为参数。Step Code 先将设置置于 settings.json，后迁移至统一配置 config.toml（该版本中 agent/settings.json 已退役）；两个位置都受支持，统一配置为当前惯例。
 
 ## 位置与优先级
 
 ```
-全局：  <agentDir>/settings.json 的 "stepcodeAgentTeam" 节
-       （agentDir 遵循 STEP_CODING_AGENT_DIR，默认 ~/.stepcode/agent；
-         开发沙箱中自动指向 sandbox/agent，互不干扰）
-项目级：<cwd>/.stepcode/settings.json 的 "stepcodeAgentTeam" 节
+全局：  <stepRoot>/config.toml 的 [stepcodeAgentTeam] 表
+       （stepRoot 位于 agentDir 旁边：dirname(STEP_CODING_AGENT_DIR)，
+         默认 ~/.stepcode——step 自身设置所在处）
+       旧版回退：<agentDir>/settings.json 的 "stepcodeAgentTeam" 节
+项目级：<cwd>/.stepcode/config.toml 的 [stepcodeAgentTeam] 表
        （仅当项目被信任时加载；信任信息只在事件处理器中可用，
          故在 session_start 时就地合并进已加载的配置）
+       旧版回退：<cwd>/.stepcode/settings.json 的 "stepcodeAgentTeam" 节
 ```
 
-优先级（全局与项目级两个层级各自如此）：**内置默认 < 旧版专用文件 < settings.json 节 < 环境变量覆盖**。
+优先级（全局与项目级两个层级各自如此）：**内置默认 < 旧版专用文件 < settings.json 节 < config.toml 表 < 环境变量覆盖**——统一配置覆盖旧版 settings 节，项目级覆盖全局，环境变量覆盖一切。
 
-- 文件为标准 JSON（不支持注释）；插件**只读取**自己的节，绝不写入 settings.json（step 自身命令会保留未知键）。
+- 统一配置为 TOML（支持 `#` 注释）；旧版位置为标准 JSON。插件**只读取**自己的节，绝不写入任何配置文件（step 自身命令会保留未知键，`stepcodeAgentTeam` 表因此可幸存）。
 - 未知键会被忽略（`debug: true` 时在 stderr 打印提示）。
 - 非法值回退为默认值并在 debug 日志中警告。
 - 配置在扩展加载时读取一次并缓存；项目级配置在首个事件上下文可用时就地合并（同一次会话内生效）；其余修改需新会话生效（`/reload` 会重新读取，但插件也会随之回到默认关闭状态）。
 - 已知妥协：注册时固化的工具描述串（如模型列表）与本进程的深度门（`maxRecursionDepth`）不随项目级配置刷新——生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
-- **旧版兼容**：此前的专用文件 `<agentDir>/stepcode-agent-team.json` 与 `<cwd>/.stepcode/stepcode-agent-team.json` 仍然有效（在同层级的 settings 节之前应用，debug 模式提示迁移）；建议尽早搬入 settings.json 的 `stepcodeAgentTeam` 节。
+- **旧版兼容**：专用文件 `<agentDir>/stepcode-agent-team.json` / `<cwd>/.stepcode/stepcode-agent-team.json` 与 settings.json 节仍然有效（在同层级的统一表之前应用，debug 模式提示迁移）；建议尽早搬入 config.toml 的 `stepcodeAgentTeam` 表。
 
 ## 环境变量覆盖
 
@@ -34,51 +36,61 @@ Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节�
 
 ## 完整配置项
 
-以下内容放入 `<agentDir>/settings.json`（全局）或 `<cwd>/.stepcode/settings.json`（项目级）的 `stepcodeAgentTeam` 节内：
+以下内容放入 `<stepRoot>/config.toml`（全局）或 `<cwd>/.stepcode/config.toml`（项目级）的 `[stepcodeAgentTeam]` 表内。TOML 没有 null：默认值为 null 的键（`members.defaultTools`、`storage.dir`）直接省略即可：
+
+```toml
+[stepcodeAgentTeam.activation]
+enabled = true                       # 总开关：false 时任何触发都不激活
+keywords = ["agent team", "智能体团队"]   # 自然语言触发词；[] = 禁用关键词激活
+notifyOnActivate = true              # 激活时是否 notify 提示
+
+[stepcodeAgentTeam.models]
+available = ["step-5-preview"]       # 成员可用模型列表
+autonomousSelection = false          # 对话模型自主为子代理选模型
+autonomousThinking = false           # 对话模型自主为子代理选思考强度
+
+[stepcodeAgentTeam.members]
+max = 8                              # 存活成员上限（1–64；dead 成员可恢复但不占名额）
+defaultRole = "worker"               # 未指定 role 时的默认角色（命中同名预设）
+# defaultTools：省略即为 null（= 用预设或全量）
+maxRecursionDepth = 1                # 团队树最大深度（1–4）：队长=0，其成员=1
+
+[stepcodeAgentTeam.dispatch]
+maxConcurrent = 5                    # 同时运行的成员上限（1–16）；超出的派活排队，轮到才启动
+timeoutMs = 180000                   # 单次 dispatch/promptAndSettle 超时
+handshakeTimeoutMs = 15000           # 成员 spawn 握手超时
+retries = 1                          # 任务失败重试次数（0–5）
+
+[stepcodeAgentTeam.oneshot]
+timeoutMs = 180000                   # oneshot 进程超时
+
+[stepcodeAgentTeam.cost]
+warnThreshold = 1                    # 累计花费告警阈值（美元）；0 = 禁用
+
+[stepcodeAgentTeam.idle]
+reapAfterMs = 1800000                # 空闲成员回收阈值（30 分钟）
+reapIntervalMs = 300000              # 回收检查间隔（5 分钟）
+
+[stepcodeAgentTeam.storage]
+# dir：省略即为 null（= <agentDir>/teams）
+
+[stepcodeAgentTeam.topology]
+default = "star"                     # 新团队默认拓扑形状（star/pipeline/mesh/ring/custom）
+requireDeclaration = false           # true 时未显式声明拓扑前禁止派活
+maxLoopCount = 2                     # 环形消息链最大跳数（0 = 无上限，范围 0–64）
+
+[stepcodeAgentTeam]
+debug = false                        # 调试日志（模型裁决、配置警告、socket 错误）
+```
+
+旧版 `settings.json` 位置接受同样的键（JSON 语法，null 值的键同样省略）：
 
 ```jsonc
 {
-  "activation": {
-    "enabled": true,                  // 总开关：false 时任何触发都不激活
-    "keywords": ["agent team", "智能体团队", "..."],   // 自然语言触发词；[] = 禁用关键词激活
-    "notifyOnActivate": true          // 激活时是否 notify 提示
-  },
-  "models": {
-    "available": ["step-5-preview"],  // 成员可用模型列表
-    "autonomousSelection": false,     // 对话模型自主为子代理选模型
-    "autonomousThinking": false       // 对话模型自主为子代理选思考强度
-  },
-  "members": {
-    "max": 8,                         // 存活成员上限（1–64；dead 成员可恢复但不占名额）
-    "defaultRole": "worker",          // 未指定 role 时的默认角色（命中同名预设）
-    "defaultTools": null,             // 成员默认工具白名单；null = 用预设或全量
-    "maxRecursionDepth": 1            // 团队树最大深度（1–4）：队长=0，其成员=1
-  },
-  "dispatch": {
-    "maxConcurrent": 5,               // 同时运行的成员上限（1–16）；超出的派活排队，轮到才启动
-    "timeoutMs": 180000,              // 单次 dispatch/promptAndSettle 超时
-    "handshakeTimeoutMs": 15000,      // 成员 spawn 握手超时
-    "retries": 1                      // 任务失败重试次数（0–5）
-  },
-  "oneshot": {
-    "timeoutMs": 180000               // oneshot 进程超时
-  },
-  "cost": {
-    "warnThreshold": 1                // 累计花费告警阈值（美元）；0 = 禁用
-  },
-  "idle": {
-    "reapAfterMs": 1800000,           // 空闲成员回收阈值（30 分钟）
-    "reapIntervalMs": 300000          // 回收检查间隔（5 分钟）
-  },
-  "storage": {
-    "dir": null                       // 团队数据根目录；null = <agentDir>/teams
-  },
-  "topology": {
-    "default": "star",                // 新团队默认拓扑形状（star/pipeline/mesh/ring/custom）
-    "requireDeclaration": false,      // true 时未显式声明拓扑前禁止派活
-    "maxLoopCount": 2                 // 环形消息链最大跳数（0 = 无上限，范围 0–64）
-  },
-  "debug": false                      // 调试日志（模型裁决、配置警告、socket 错误）
+  "stepcodeAgentTeam": {
+    "members": { "max": 8 },
+    "debug": false
+  }
 }
 ```
 

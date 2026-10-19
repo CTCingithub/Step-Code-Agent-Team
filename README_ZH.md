@@ -209,38 +209,68 @@ sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitigno
 
 ## 配置
 
-全部行为参数集中于 Step Code 的 `settings.json`——插件配置位于其中的 `stepcodeAgentTeam`
-节：全局在 `<agentDir>/settings.json`（沙箱中 agentDir 指向 `sandbox/agent`），
-项目级在 `<cwd>/.stepcode/settings.json`（仅项目被信任时加载）。
-优先级：内置默认 < 旧版专用文件 < settings.json 节 < 环境变量覆盖。
+全部行为参数集中于插件的 `stepcodeAgentTeam` 配置节。Step Code 先将设置置于
+`settings.json`，后迁移至统一配置 `config.toml`（该版本中 `agent/settings.json`
+已退役）；两个位置都受支持，统一配置为当前惯例。优先级：内置默认 < 旧版专用文件
+< settings.json 节 < config.toml 表 < 环境变量覆盖。
 
 | 层级 | 路径 | 说明 |
 |---|---|---|
-| 全局 | `<agentDir>/settings.json` 的 `stepcodeAgentTeam` 节 | agentDir = `STEP_CODING_AGENT_DIR` 或 `~/.stepcode/agent` |
-| 项目级 | `<cwd>/.stepcode/settings.json` 的 `stepcodeAgentTeam` 节 | 仅项目被信任时加载 |
+| 全局 | `<stepRoot>/config.toml` 的 `[stepcodeAgentTeam]` 表（位于 agentDir 旁边，默认 `~/.stepcode`） | 旧版回退：`<agentDir>/settings.json` 的 `stepcodeAgentTeam` 节 |
+| 项目级 | `<cwd>/.stepcode/config.toml` 的 `[stepcodeAgentTeam]` 表 | 仅项目被信任时加载；旧版回退：`<cwd>/.stepcode/settings.json` |
 | 环境变量 | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | 一次性覆盖，优先级最高 |
 
-**如何修改生效**：编辑 `settings.json` 的 `stepcodeAgentTeam` 节（未知键忽略；非法值
-回退默认并在 debug 日志警告；插件只读取该节，绝不写入文件），然后**开启新会话**——
+**如何修改生效**：在 `config.toml` 中添加 `[stepcodeAgentTeam]` 表（未知键忽略；
+非法值回退默认并在 debug 日志警告；插件只读取该节，绝不写入文件），然后**开启新会话**——
 配置在加载时只读一次。`/reload` 会重新读取，但插件也会随之回到默认关闭状态。环境变量
 覆盖仅对当次运行生效。旧版专用文件（`<agentDir>/stepcode-agent-team.json`、
-`<cwd>/.stepcode/stepcode-agent-team.json`）作为回退仍然有效。
+`<cwd>/.stepcode/stepcode-agent-team.json`）与 settings.json 节作为回退仍然有效。
+完整参考见 [docs/CONFIGURATION_ZH.md](docs/CONFIGURATION_ZH.md)。
 
-```jsonc
-{
-  "stepcodeAgentTeam": {
-    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true },
-    "models": { "available": ["step-5-preview"], "autonomousSelection": false, "autonomousThinking": false },
-    "members": { "max": 8, "defaultRole": "worker", "defaultTools": null, "maxRecursionDepth": 1 },
-    "dispatch": { "maxConcurrent": 5, "timeoutMs": 180000, "handshakeTimeoutMs": 15000, "retries": 1 },
-    "oneshot": { "timeoutMs": 180000 },
-    "cost": { "warnThreshold": 1 },
-    "idle": { "reapAfterMs": 1800000, "reapIntervalMs": 300000 },
-    "storage": { "dir": null },
-    "topology": { "default": "star", "requireDeclaration": false, "maxLoopCount": 2 },
-    "debug": false
-  }
-}
+```toml
+# 全局：<stepRoot>/config.toml · 项目级：<cwd>/.stepcode/config.toml
+[stepcodeAgentTeam.activation]
+enabled = true
+keywords = ["agent team", "智能体团队"]
+notifyOnActivate = true
+
+[stepcodeAgentTeam.models]
+available = ["step-5-preview"]
+autonomousSelection = false
+autonomousThinking = false
+
+[stepcodeAgentTeam.members]
+max = 8
+defaultRole = "worker"
+# defaultTools 省略（TOML 无 null）= 用预设或全量
+maxRecursionDepth = 1
+
+[stepcodeAgentTeam.dispatch]
+maxConcurrent = 5
+timeoutMs = 180000
+handshakeTimeoutMs = 15000
+retries = 1
+
+[stepcodeAgentTeam.oneshot]
+timeoutMs = 180000
+
+[stepcodeAgentTeam.cost]
+warnThreshold = 1
+
+[stepcodeAgentTeam.idle]
+reapAfterMs = 1800000
+reapIntervalMs = 300000
+
+[stepcodeAgentTeam.storage]
+# dir 省略 = <agentDir>/teams
+
+[stepcodeAgentTeam.topology]
+default = "star"
+requireDeclaration = false
+maxLoopCount = 2
+
+[stepcodeAgentTeam]
+debug = false
 ```
 
 ### 可配置项速览
