@@ -130,7 +130,7 @@
 14. 将架构与协议从本地 session plan 提升为仓库文档：`docs/ARCHITECTURE.md`（组件图、数据流、目录布局）、`docs/PROTOCOL.md`（RPC 命令/事件、socket 协议、registry schema、工具契约）
 15. 新增 `docs/TESTING.md`（本文档测试计划的操作化版本：如何跑各层测试）
 16. README 中英增加文档链接与"已知限制"小节
-17. `step install ./` 端到端验证（用户侧执行，会改真实 settings）
+17. `step install <仓库绝对路径>` 端到端验证（用户侧执行，会改真实 settings；本地路径安装为引用式，直接安装检出副本即可）
 
 ---
 

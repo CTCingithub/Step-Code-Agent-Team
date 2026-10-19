@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-57，文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查；此前为 plan-56）。
+> 最近更新：2026-10-19（plan-58，安装方式重构：引用式安装文档化 + manifest 补声明 + 包安装路径检查；此前为 plan-57）。
 
 ## 总览
 
@@ -29,6 +29,7 @@
 | 20 | 修复手动验证日志发现的三个问题 + 测试流程增强 + 沙箱清理 | plan-55 | `members.max` 改计存活成员（解散释放名额）；create_member 恢复列明被忽略参数；set_topology/create_member 对无 bash 成员警告；phase18 探针先红后绿；restore-project.sh 增删 session-log；沙箱运行时状态清理对齐远端；README/PROTOCOL/ARCHITECTURE/SKILL 等同步 | phase18 探针流程一度在 cap 检查后建 scout 被旧语义拦截（修探针：先整队解散） |
 | 21 | 第二轮手动验证日志处理：嵌套链超时提示 + 演示项目修复 + 实测记录 + 沙箱收尾 | plan-56 | members.ts 新增 augmentDispatchError（mid-run 失败提示接力在途+成员名册，phase18 加 6 项断言先红后绿）；演示项目 M1（CLI 干净 exit 2）/M2（load 形状校验）修复并同步 pristine；MANUAL-TESTING/PROTOCOL/TESTING/TEST-PLAN 记录 ring 实测与嵌套链超时指引；沙箱 restore+清理 | 无产品缺陷回归；演示项目其余发现按 fixture 设计有意不修（TEST-PLAN 八） |
 | 22 | 文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查 | plan-57 | 10 对中英双语文档（README + 7 docs + sandbox README/TEST-PLAN，5 个并行 subagent 翻译，术语对齐 README）；HANDOFF.md 取消跟踪 + .gitignore（本地保留）；DEVELOPMENT-HISTORY 迁入 docs/（仍仅中文）；全面检查（链接 73/73、配对 10/10、导出物无 HANDOFF、smoke 全绿）；MANUAL-TESTING 两语言新增状态总览 | 无 |
+| 23 | 安装方式重构（检索 step/pi 打包安装文档） | plan-58 | 检索 packages.md/extensions.md + package-manager.ts 源码 + pi 上游（earendil-works/pi）：本地路径安装实为引用式零拷贝（README 原述「整目录拷贝」有误，git-archive 变通多余）；修复真 bug——pi manifest 缺 skills/prompts 声明，按「有 manifest 时仅加载声明资源类型」规则装包后静默不加载；README 中英/MANUAL-TESTING/TESTING-OPTIMIZATION-PLAN/HANDOFF 改引用式安装 + git/npm 分发；runner 新增 manifest-check 与 live-package-install 两个零 token 检查 | 无 |
 
 ## 明细
 
@@ -226,3 +227,19 @@
 **工作**：① 结构变更：`git rm --cached HANDOFF.md` + `.gitignore` 增补（本地保留供 session 接手，不再随仓库与 git archive 导出物发布）；`DEVELOPMENT-HISTORY.md` → `docs/DEVELOPMENT-HISTORY.md`（仍仅中文，内部历程）；9 个文档 `git mv` 为 `_ZH` 中文版。② 双语化：5 个并行 subagent 翻译 9 个英文版主文件（术语表对齐 README.md 既有译法；markdown 结构/表格/代码块/UI 字符串保留；复制粘贴 prompt 译英文——插件对英文关键词 "agent team" 同样激活；文首加「简体中文 →」切换链接）；中文版补「English →」切换头 + 内部链接改写为 _ZH 目标（含 sandbox 文档的 `../docs/` 与 README_ZH 链接表）；HANDOFF 本地件 13 处路径引用同步修正。③ 全面复查：链接审计 73/73 可解析；EN/ZH 配对 10/10；`git archive HEAD` 导出物无 HANDOFF.md、含 docs/DEVELOPMENT-HISTORY.md 与全部双语文档；phase 清单/工具名/README 链接表与代码一致；package.json files 清单无需改动；ARCHITECTURE 两语言护栏表补「派发失败上下文」行（plan-56 的 augmentDispatchError 此前未入表）；全量 `npm run smoke` 14 phase + 6 live 检查全绿。④ 人工测试状态：MANUAL-TESTING 两语言新增「状态总览」表——TUI 观感、ring LLM 遵循度、三幕演示剧本 ✅ 2026-10-19 实测通过；真实安装、信任弹窗 UX、英文译文审阅 ⬜ 待用户；性能主观项 ➖ 可选；TUI-VERIFICATION 两语言记录用户走查渲染无问题。
 
 **验证**：链接审计 73/73、配对 10/10、导出物核验通过、全量 smoke 全绿（phase5 无 key SKIP）；提交后本地/远程 HEAD 一致；`git status` 干净（HANDOFF.md 本地保留、不被跟踪）。
+
+### 23. 安装方式重构（plan-58）
+
+**用户 prompt**：「我对安装插件的方式不满意，请检索step code（和step code的来源pi agent）的文档，找到打包与安装插件的合适方法」
+
+**调研**（Step Code 官方文档 + 源码 + pi 上游三路交叉）：① `packages.md`/`extensions.md`（沙箱钉住版与装机版逐字一致）+ `packages/coding-agent/src/core/package-manager.ts`、`pi-manifest.ts` 源码；② pi 上游（earendil-works/pi，Step Code 即其改名分支——`PiManifest` 类型、`pi` manifest 键、`pi-package` 关键字一脉相承）， packaging 范式完全一致。结论：
+1. 安装源三种：`npm:` / `git:`（含协议 URL）/ 本地路径。**本地路径安装是引用式的**——`install()` 对 local 源只做存在性校验，随后把路径写入 step 配置即告完成，零拷贝、不触发 npm install；相对路径相对配置文件所在目录解析，故用户级安装必须用绝对路径；移动/删除检出副本会使设置失效。**版本差异（实测）**：step 0.1.5 已启用统一配置——step 自身设置（含 packages）存于 agentDir 上级目录的 `config.toml`（TOML 格式），`agent/settings.json` 已退役不再读取；本插件自己的 `stepcodeAgentTeam` 配置节仍由扩展代码自行读取 `<agentDir>/settings.json`，两套机制互不影响（探针全绿证实）。
+2. `step -e <包>` 免安装试运行（临时目录、仅当次）；`-l` 项目级安装（写 `.stepcode/settings.json`，团队共享，项目信任后启动自动装）。
+3. **资源发现规则**：package.json 有 `pi` manifest 时，只加载 manifest 声明的资源类型；约定目录（extensions/skills/prompts/themes）仅在**没有** manifest 时生效。
+4. `files` 白名单只对 `npm pack`/publish 生效，与本地/git 安装无关；核心包（@step-harness/*、typebox）以 peerDependencies `"*"` 声明即可（本包已合规）。
+
+**发现的两个问题**：① README「本地路径安装整目录拷贝、会把 `local/` 与 `sandbox/` 扫入发布物」的警告与实现不符（零拷贝），据此设计的 `git archive` 变通方案纯属多余；② **真 bug**：本包 `pi` manifest 只声明 `extensions`，按规则 3，`skills/`（team-orchestration 技能）与 `prompts/`（team-review 提示模板）在按包安装后**静默不加载**——这正是「安装方式不满意」的体感来源。
+
+**工作**：① `package.json`：`pi` manifest 补声明 `skills`/`prompts`。② README 中英 Install 节重写：开发期 `-e` 直载、`-e <包>` 免安装试运行、`install <绝对路径>` 引用式安装（绝对路径与移动失效两个注意点）、`-l` 项目级、git/npm 分发（`step install git:github.com/CTCingithub/Step-Code-Agent-Team[@ref]`；发布后 `npm:step-code-agent-team`）；删除 git-archive 变通与错误警告。③ MANUAL-TESTING 中英 §2 改引用式安装说明（预期含 skills/prompts 随包可用）、自动化覆盖块补 live-package-install；TESTING-OPTIMIZATION-PLAN 中英执行项 17、HANDOFF §5 同步。④ `test/run-smoke.sh` 新增两个零 token 检查：`manifest-check`（manifest 必须声明 extensions/skills/prompts 且路径存在，防回归）与 `live-package-install`（step 配置 `packages` 条目（统一 `config.toml`）指向仓库 → 扩展经包机制加载并激活，即 `step install <本地路径>` 的记录形态；首版误写 `agent/settings.json` 被该检查当场抓获，反证配置已迁移至 config.toml）。
+
+**验证**：`bash -n` + manifest 手动预验 + `-e <包>` / `config.toml` 条目两种加载形态实测通过；全量 `npm run smoke`（含两个新检查）全绿；文档安装语义与 package-manager.ts / config-toml.ts 行为一致。

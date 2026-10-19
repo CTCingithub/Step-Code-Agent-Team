@@ -48,20 +48,33 @@ flowchart TD
 ## Install
 
 ```bash
-# from a local checkout (adds the package to your step settings)
-step install /path/to/Step-Code-Agent-Team
-
-# dev loop: load the extension directly, no install
+# Dev loop: load the extension straight from a checkout, no install
 step -e ./extensions/index.ts
+
+# Try the full package (extension + skill + prompt) without installing
+step -e /absolute/path/to/Step-Code-Agent-Team
+
+# Install from a checkout — records the path in your step settings
+step install /absolute/path/to/Step-Code-Agent-Team
+step remove /absolute/path/to/Step-Code-Agent-Team  # uninstall (same path)
 ```
 
-> **Install from a clean export, not the working tree.** Installing a local path
-> copies the whole package folder (`.gitignore` is not honored), which would sweep
-> in `local/` (credentials) and `sandbox/` (dev state). From a checkout:
->
-> ```bash
-> git archive HEAD | tar -x -C /tmp/step-code-agent-team && step install /tmp/step-code-agent-team
-> ```
+Local-path installs are **reference-only**: step records the path in your step
+configuration and loads the package's declared resources (the `pi` manifest
+in `package.json`: `extensions/`, `skills/`, `prompts/`) from it — nothing is
+copied, so `local/` (credentials) and `sandbox/` (dev state) are never involved.
+Use an absolute path (relative paths resolve against the step config file's
+directory, not your shell's cwd), and note the entry breaks if the checkout
+moves. Add `-l` to install project-locally instead (the project's `.stepcode/`
+config, shared with your team, auto-installed once the project is trusted).
+
+From git or npm — no packaging step needed, it is a standard step package:
+
+```bash
+step install git:github.com/CTCingithub/Step-Code-Agent-Team        # tracks the default branch
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.0 # or pin a tag
+step install npm:step-code-agent-team                               # once published to npm
+```
 
 Then start a session and ask: *"Use the agent team to review this repo in parallel."* — or run `/agent-team` first; the plugin stays dormant until then.
 

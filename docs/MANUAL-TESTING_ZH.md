@@ -7,7 +7,9 @@
 > `live-untrusted-config`）、live 接线（`/agent-team` 命令、参数转发）、**TUI 渲染内容层**
 > （phase15 对 render.ts 各工具 call/result 字符串、折叠/展开、用量行、图标的断言）、
 > **成本护栏与输出截断逻辑**（phase16）、**孤儿进程**（orphan-check：成员不得比队长
-> 长寿）、**干净导出物可加载性**（live-clean-export：git archive 出的包能激活）。
+> 长寿）、**干净导出物可加载性**（live-clean-export：git archive 出的包能激活）、
+> **包安装路径**（live-package-install：settings 的 `packages` 条目指向仓库即可加载
+> 扩展并激活）。
 >
 > 以下仅剩**不可约**的人工项——按优先级排列。每项都给了**可直接复制粘贴的命令 /
 > prompt**；TUI 渲染的细化清单见 [TUI-VERIFICATION.md](TUI-VERIFICATION_ZH.md)（内容层已被
@@ -65,17 +67,16 @@ bash sandbox/restore-project.sh
 
 ## 2. 真实安装写入 settings（一次性，需你执行）
 
-`step install` 会写你的真实 settings，因此由你执行；冒烟集已用导出物验证
-「打包内容完整可加载」（live-clean-export），剩下的只是装入你的环境：
+`step install` 会写你的真实 settings，因此由你执行。本地路径安装是**引用式**的
+（不拷贝、只记录路径，按 manifest 声明加载资源），直接安装检出副本即可：
 
 ```bash
-git archive HEAD | tar -x -C /tmp/scat-pkg
-step install /tmp/scat-pkg
+step install <仓库绝对路径>
 ```
 
-**预期**：安装后新会话可激活、成员可 spawn、可 `step remove` 卸载。
-**切勿**直接 `step install ./`——本地路径安装整目录拷贝、不尊重 .gitignore，
-会把 `local/`（测试密钥）与 `sandbox/` 扫入发布物。
+**预期**：安装后新会话可激活、成员可 spawn；包内 `skills/`（team-orchestration
+技能）与 `prompts/`（team-review 提示模板）随包可用（manifest 已声明）；
+`step remove <同一路径>` 可卸载。
 
 **验证安装生效**（安装后开一个普通会话，粘贴）：
 
@@ -83,7 +84,7 @@ step install /tmp/scat-pkg
 用智能体团队功能介绍一下你自己
 ```
 
-**卸载验证**：`step remove /tmp/scat-pkg`（与安装时相同的来源），再开会话确认团队工具不再出现。
+**卸载验证**：`step remove <仓库绝对路径>`，再开会话确认团队工具不再出现。
 
 ## 3. 信任提示的交互 UX
 

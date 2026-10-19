@@ -142,8 +142,9 @@ uses a test key (sandbox-isolated).
 15. Add `docs/TESTING.md` (the operationalized version of this document's testing
     plan: how to run each layer of tests)
 16. Add doc links and a "Known limitations" section to the English and Chinese READMEs
-17. `step install ./` end-to-end verification (executed on the user side; changes real
-    settings)
+17. `step install <absolute repo path>` end-to-end verification (executed on the user
+    side; changes real settings — local-path installs are reference-only, so installing
+    the checkout directly is fine)
 
 ---
 

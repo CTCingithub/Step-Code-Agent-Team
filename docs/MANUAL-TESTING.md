@@ -11,8 +11,10 @@
 > forwarding), the **TUI rendering content layer** (phase15 asserts render.ts tool
 > call/result strings, collapse/expand, usage rows, icons), the **cost guardrail and
 > output truncation logic** (phase16), **orphan processes** (orphan-check: members must
-> not outlive the leader), and **clean-export loadability** (live-clean-export: a
-> package exported via git archive can activate).
+> not outlive the leader), **clean-export loadability** (live-clean-export: a
+> package exported via git archive can activate), and the **package install path**
+> (live-package-install: a settings `packages` entry pointing at the repo loads the
+> extension and activates it).
 >
 > What remains is only the **irreducible** manual items — ordered by priority. Each one
 > comes with a **directly copy-pasteable command / prompt**; the detailed TUI rendering
@@ -76,19 +78,18 @@ needs a re-run when `render.ts` changes.
 
 ## 2. Real install writes settings (one-time, you run it)
 
-`step install` writes your real settings, so you run it; the smoke suite has already
-verified "the packaged content is complete and loadable" via an export
-(live-clean-export), so all that remains is loading it into your environment:
+`step install` writes your real settings, so you run it. Local-path installs are
+**reference-only** (no copy — the path is recorded and resources load per the
+manifest), so installing the checkout directly is fine:
 
 ```bash
-git archive HEAD | tar -x -C /tmp/scat-pkg
-step install /tmp/scat-pkg
+step install <absolute path to the repo>
 ```
 
-**Expected**: after install, a new session can activate, members can spawn, and it can
-be uninstalled with `step remove`. **Never** run `step install ./` directly — a
-local-path install copies the whole directory and does not honor .gitignore, which
-would sweep `local/` (test credentials) and `sandbox/` into the published package.
+**Expected**: after install, a new session can activate, members can spawn, and
+the package's `skills/` (team-orchestration) and `prompts/` (team-review)
+resources are available (declared in the manifest); `step remove <same path>`
+uninstalls.
 
 **Verify the install works** (open a normal session after installing, paste):
 
@@ -96,8 +97,8 @@ would sweep `local/` (test credentials) and `sandbox/` into the published packag
 Use the agent team feature to introduce yourself
 ```
 
-**Uninstall verification**: `step remove /tmp/scat-pkg` (the same source used at
-install time), then start a session and confirm the team tools no longer appear.
+**Uninstall verification**: `step remove <absolute path to the repo>`, then start
+a session and confirm the team tools no longer appear.
 
 ## 3. Trust prompt interactive UX
 

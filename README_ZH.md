@@ -47,20 +47,31 @@ flowchart TD
 ## 安装
 
 ```bash
-# 本地目录安装（写入 step 设置）
-step install /path/to/Step-Code-Agent-Team
-
-# 开发期：直接加载，无需安装
+# 开发期：从检出副本直接加载扩展，无需安装
 step -e ./extensions/index.ts
+
+# 免安装试运行整个包（扩展 + 技能 + 提示模板）
+step -e /absolute/path/to/Step-Code-Agent-Team
+
+# 从检出副本安装——仅把路径写进 step 设置
+step install /absolute/path/to/Step-Code-Agent-Team
+step remove /absolute/path/to/Step-Code-Agent-Team  # 卸载（同一路径）
 ```
 
-> **请从干净导出物安装，不要直接安装工作目录。** 本地路径安装会拷贝整个包目录
-> （不尊重 `.gitignore`），会把 `local/`（凭证）与 `sandbox/`（开发状态）一并卷入。
-> 在检出副本中：
->
-> ```bash
-> git archive HEAD | tar -x -C /tmp/step-code-agent-team && step install /tmp/step-code-agent-team
-> ```
+本地路径安装是**引用式**的：step 只把路径记入你的 step 配置，并按包
+`package.json` 中 `pi` manifest 声明的资源（`extensions/`、`skills/`、
+`prompts/`）从该路径加载——不发生任何拷贝，`local/`（凭证）与 `sandbox/`
+（开发状态）不会被卷入。请使用**绝对路径**（相对路径相对 step 配置文件所在目
+录解析，不是 shell 的 cwd）；移动或删除检出副本会使该设置失效。加 `-l` 改为
+项目级安装（项目 `.stepcode/` 配置，可随团队共享，项目信任后自动安装）。
+
+从 git 或 npm 安装——无需任何打包步骤，它就是标准 step 包：
+
+```bash
+step install git:github.com/CTCingithub/Step-Code-Agent-Team        # 跟踪默认分支
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.0 # 或钉住标签
+step install npm:step-code-agent-team                               # 发布到 npm 后
+```
 
 然后在会话里下达目标，例如："用智能体团队并行审查这个仓库"（或先运行 `/agent-team`——插件在此之前保持静默）。
 
