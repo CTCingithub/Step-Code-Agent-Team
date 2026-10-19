@@ -14,14 +14,28 @@ const { TaskStore } = require("./tasks.js");
 const [, , command, ...args] = process.argv;
 const store = new TaskStore();
 
+/**
+ * Store calls throw business errors (empty title, task not found, ...).
+ * Surface them as clean exit-2 messages instead of an uncaught stack
+ * trace, matching the argument-validation path below.
+ */
+function run(fn) {
+	try {
+		return fn();
+	} catch (err) {
+		console.error(err.message);
+		process.exit(2);
+	}
+}
+
 switch (command) {
 	case "add": {
-		const task = store.add(args.join(" "));
+		const task = run(() => store.add(args.join(" ")));
 		console.log(`added #${task.id}: ${task.title}`);
 		break;
 	}
 	case "list": {
-		const tasks = store.list();
+		const tasks = run(() => store.list());
 		if (tasks.length === 0) {
 			console.log("(no tasks)");
 			break;
@@ -37,7 +51,7 @@ switch (command) {
 			console.error("done requires a numeric task id");
 			process.exit(2);
 		}
-		const task = store.complete(id);
+		const task = run(() => store.complete(id));
 		console.log(`done #${task.id}: ${task.title}`);
 		break;
 	}
@@ -47,7 +61,7 @@ switch (command) {
 			console.error("remove requires a numeric task id");
 			process.exit(2);
 		}
-		store.remove(id);
+		run(() => store.remove(id));
 		console.log(`removed #${id}`);
 		break;
 	}

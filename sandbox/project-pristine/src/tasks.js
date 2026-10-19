@@ -15,7 +15,20 @@ const DATA_FILE = path.join(__dirname, "..", "data", "tasks.json");
 
 function load() {
 	try {
-		return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+		const state = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+		// Valid JSON of the wrong shape ({} / [] / {"tasks":[]}) must not leak
+		// into the store: it would crash later or silently corrupt ids. Fall
+		// back to the default state, same as an unreadable file.
+		if (
+			state &&
+			typeof state === "object" &&
+			Array.isArray(state.tasks) &&
+			Number.isInteger(state.nextId) &&
+			state.nextId > 0
+		) {
+			return state;
+		}
+		return { nextId: 1, tasks: [] };
 	} catch {
 		// Missing or unreadable file: start empty.
 		return { nextId: 1, tasks: [] };
