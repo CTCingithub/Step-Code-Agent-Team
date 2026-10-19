@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-58，安装方式重构：引用式安装文档化 + manifest 补声明 + 包安装路径检查；此前为 plan-57）。
+> 最近更新：2026-10-19（plan-59，v0.1.0 发布：peer 依赖安装修复 + 标签 + git 安装全链路实测；此前为 plan-58）。
 
 ## 总览
 
@@ -30,6 +30,7 @@
 | 21 | 第二轮手动验证日志处理：嵌套链超时提示 + 演示项目修复 + 实测记录 + 沙箱收尾 | plan-56 | members.ts 新增 augmentDispatchError（mid-run 失败提示接力在途+成员名册，phase18 加 6 项断言先红后绿）；演示项目 M1（CLI 干净 exit 2）/M2（load 形状校验）修复并同步 pristine；MANUAL-TESTING/PROTOCOL/TESTING/TEST-PLAN 记录 ring 实测与嵌套链超时指引；沙箱 restore+清理 | 无产品缺陷回归；演示项目其余发现按 fixture 设计有意不修（TEST-PLAN 八） |
 | 22 | 文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查 | plan-57 | 10 对中英双语文档（README + 7 docs + sandbox README/TEST-PLAN，5 个并行 subagent 翻译，术语对齐 README）；HANDOFF.md 取消跟踪 + .gitignore（本地保留）；DEVELOPMENT-HISTORY 迁入 docs/（仍仅中文）；全面检查（链接 73/73、配对 10/10、导出物无 HANDOFF、smoke 全绿）；MANUAL-TESTING 两语言新增状态总览 | 无 |
 | 23 | 安装方式重构（检索 step/pi 打包安装文档） | plan-58 | 检索 packages.md/extensions.md + package-manager.ts 源码 + pi 上游（earendil-works/pi）：本地路径安装实为引用式零拷贝（README 原述「整目录拷贝」有误，git-archive 变通多余）；修复真 bug——pi manifest 缺 skills/prompts 声明，按「有 manifest 时仅加载声明资源类型」规则装包后静默不加载；README 中英/MANUAL-TESTING/TESTING-OPTIMIZATION-PLAN/HANDOFF 改引用式安装 + git/npm 分发；runner 新增 manifest-check 与 live-package-install 两个零 token 检查 | 无 |
+| 24 | 发布 v0.1.0（peer 依赖安装修复 + 标签 + git 安装全链路实测） | plan-59 | 用户按 README 的 git 标签方式在另一台机器安装失败（无 v0.1.0 标签）；发布前排查出隐藏阻塞——step git 安装流 clone→checkout 后跑裸 `npm install --omit=dev`，而 peerDependencies 的三个 `@step-harness/*` 未发布至公共 registry（E404），npm 自动装 peer 会失败；修复：`peerDependenciesMeta` 四 peer 标 optional + 新增 `.npmrc`（legacy-peer-deps，与 step 自身托管安装的 `--legacy-peer-deps` 一致）；附注标签 v0.1.0（cf9be95）推送；hermetic 实测全链路通过 | 无 |
 
 ## 明细
 
@@ -243,3 +244,13 @@
 **工作**：① `package.json`：`pi` manifest 补声明 `skills`/`prompts`。② README 中英 Install 节重写：开发期 `-e` 直载、`-e <包>` 免安装试运行、`install <绝对路径>` 引用式安装（绝对路径与移动失效两个注意点）、`-l` 项目级、git/npm 分发（`step install git:github.com/CTCingithub/Step-Code-Agent-Team[@ref]`；发布后 `npm:step-code-agent-team`）；删除 git-archive 变通与错误警告。③ MANUAL-TESTING 中英 §2 改引用式安装说明（预期含 skills/prompts 随包可用）、自动化覆盖块补 live-package-install；TESTING-OPTIMIZATION-PLAN 中英执行项 17、HANDOFF §5 同步。④ `test/run-smoke.sh` 新增两个零 token 检查：`manifest-check`（manifest 必须声明 extensions/skills/prompts 且路径存在，防回归）与 `live-package-install`（step 配置 `packages` 条目（统一 `config.toml`）指向仓库 → 扩展经包机制加载并激活，即 `step install <本地路径>` 的记录形态；首版误写 `agent/settings.json` 被该检查当场抓获，反证配置已迁移至 config.toml）。
 
 **验证**：`bash -n` + manifest 手动预验 + `-e <包>` / `config.toml` 条目两种加载形态实测通过；全量 `npm run smoke`（含两个新检查）全绿；文档安装语义与 package-manager.ts / config-toml.ts 行为一致。
+
+### 24. 发布 v0.1.0（plan-59）
+
+**用户 prompt**：「我在另一台电脑上安装失败，请发布v0.1.0版本」+ 终端输出：`step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.0` → clone 成功但 `error: pathspec 'v0.1.0' did not match any file(s) known to git`。
+
+**思路**：直接原因是仓库没有 v0.1.0 标签。但打标签前先排查「标签之后还会不会失败」——读 `package-manager.ts` 的 `installGit`：clone → `git checkout <ref>` → 若存在 package.json 则跑 `npm install --omit=dev`（git 路径**不**做 peer 特殊处理，而 step 自己的 npm 安装路径显式传 `--legacy-peer-deps` 并注释说明 host-provided 的 `@step-harness/*` 不应被安装）。实证：三个 `@step-harness/*` 包在公共 registry 全部 E404（typebox 已发布），npm 11 自动安装 peer 依赖 → 即使用户有了标签也会死在 npm install 这一步。
+
+**工作**：① `package.json`：`peerDependenciesMeta` 将四个 peer 标 `optional`（host-provided，不自动安装、缺失不报错）。② 新增 `.npmrc`（`legacy-peer-deps=true`）——随 git clone 到达安装目录，覆盖 step git 安装流的裸 `npm install`，语义与 step 托管安装的 `--legacy-peer-deps` 一致；npm 发布时 `.npmrc` 本就不入 tarball，npm 流由 step 的显式 flag 覆盖。双修复均经干净副本实证（`npm install --omit=dev` 成功、零安装）。③ 附注标签 `v0.1.0` 指向修复提交 `cf9be95`，推送 main + 标签（远程 `refs/tags/v0.1.0` 核验）。④ hermetic 实测（隔离临时 agentDir）复现用户命令：clone → checkout v0.1.0 → `npm install --omit=dev` 成功（0 安装 0 漏洞）→ `step list` 注册成功 → RPC `/agent-team` **激活成功** → clone 内 skills/prompts/extensions 三资源齐全 → `step remove` + 删临时目录清理。
+
+**验证**：打标签前全量 `npm run smoke` 14 phase + 8 检查全绿；干净副本 `npm install --omit=dev` 成功；git 安装全链路（用户的原始命令）实测通过；标签与 main 均已在远程且本地/远程一致；`git status` 干净。
