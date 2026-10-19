@@ -1,23 +1,30 @@
 /**
- * Team-request instruction probe (plan-62, reworked for 0.2.0). Zero-token,
- * pure-function level.
+ * Team-request instruction + plan-tier probe (plan-62, reworked for the
+ * 0.2.0 revision). Zero-token, pure-function level.
  *
  * The /topo command forwards its argument as a real user message — verbatim,
- * so the session log matches what the user typed (0.2.0 log fidelity). The
- * "use the team" signal the wrapper used to prepend is now injected
- * request-locally through the context event; this probe locks the
- * instruction builders' language selection and the plan-tier data.
+ * so the session log matches what the user typed (log fidelity). The "use the
+ * team" signal is injected request-locally through the context event; this
+ * probe locks the instruction builders' language selection and the plan-tier
+ * data: strategy prompts with non-binding examples, localized labels, and no
+ * cost multipliers.
  */
 
 import type { ExtensionAPI } from "@step-harness/coding-agent";
-import { hasCjk, teamActivationInstruction, tierInstruction } from "../../extensions/forward.ts";
+import {
+	customTierInstruction,
+	detectLang,
+	teamActivationInstruction,
+	tierInstruction,
+} from "../../extensions/forward.ts";
 import {
 	allTiers,
-	customTier,
 	getTier,
+	matchTierToken,
 	PLAN_TIER_IDS,
-	tierMemberCount,
-	tierMemberNames,
+	PLAN_TIER_MODES,
+	tierLabel,
+	tierPickerOptions,
 } from "../../extensions/plan.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -31,51 +38,62 @@ export default function (pi: ExtensionAPI) {
 
 		try {
 			// 1. language selection follows the request's own script
-			check("hasCjk: zh", hasCjk("请审查这个仓库"));
-			check("hasCjk: en", !hasCjk("review this repo"));
+			check("detectLang: zh", detectLang("请审查这个仓库") === "zh");
+			check("detectLang: en", detectLang("review this repo") === "en");
 
 			// 2. generic activation instruction (no tier chosen)
-			const zh = teamActivationInstruction("请深入阅读本项目");
-			check("instruction: CJK request → Chinese", zh.includes("智能体团队已启用") && zh.includes("team_create_member"));
-			const en = teamActivationInstruction("review this repo");
-			check("instruction: ASCII request → English", en.includes("Agent team active") && en.includes("team_create_member"));
+			const zh = teamActivationInstruction("zh");
+			check("instruction: zh mentions the team tools", zh.includes("智能体团队已启用") && zh.includes("team_create_member"));
+			const en = teamActivationInstruction("en");
+			check("instruction: en mentions the team tools", en.includes("[Agent team active]") && en.includes("team_create_member"));
 
-			// 3. a tier instruction carries the full plan
+			// 3. a tier instruction is a strategy prompt, not a fixed roster
 			const balanced = getTier("balanced");
-			const zhTier = tierInstruction(balanced, "请审查这个仓库");
-			check("tier: label + multiplier", zhTier.includes("团队方案 · 均衡") && zhTier.includes("~1×"));
-			check(
-				"tier: member steps carry thinking",
-				zhTier.includes('team_create_member(name="scout1", role="scout", thinking="low")') &&
-					zhTier.includes('team_create_member(name="reviewer1", role="reviewer", thinking="medium")'),
-			);
-			check("tier: topology declaration", zhTier.includes('team_set_topology(shape="star")'));
-			const enTier = tierInstruction(getTier("economy"), "review this repo");
-			check("tier: economy → English + pipeline", enTier.includes("[Team plan") && enTier.includes("pipeline"));
+			const zhTier = tierInstruction(balanced, "zh");
+			check("tier: zh label + guidance + example", zhTier.includes("[团队方案 · 均衡]") && zhTier.includes("成本与质量") && zhTier.includes("示例（仅供参考"));
+			check("tier: model decides (not a fixed roster)", zhTier.includes("不要照搬"));
+			check("tier: no cost multipliers", !zhTier.includes("×") && !zhTier.includes("~"));
+			const enTier = tierInstruction(getTier("performance"), "en");
+			check("tier: en label + degradation note", enTier.includes("[Team plan · Performance]") && enTier.includes("leader relay"));
+			check("tier: en non-binding example", enTier.includes("a suggestion, not a fixed plan"));
 
-			// 4. tier data
-			check("plan: four tiers", PLAN_TIER_IDS.length === 4 && allTiers().length === 4);
+			// 4. picker options: localized, multiplier-free
+			const zhOptions = tierPickerOptions("zh");
+			check(
+				"picker: zh options",
+				zhOptions.includes("经济") && zhOptions.includes("快速") && zhOptions.includes("均衡（默认）") && zhOptions.includes("性能") && zhOptions.includes("自定义需求…"),
+				zhOptions.join(" | "),
+			);
+			check("picker: zh has no multipliers", !zhOptions.some((o) => o.includes("×")));
+			const enOptions = tierPickerOptions("en");
+			check(
+				"picker: en options",
+				enOptions.includes("Economic") && enOptions.includes("Fast") && enOptions.includes("Balanced (default)") && enOptions.includes("Performance") && enOptions.includes("Custom requirements…"),
+				enOptions.join(" | "),
+			);
+
+			// 5. tier token matching accepts ids and localized labels
+			check("token: economic", matchTierToken("economic") === "economic" && matchTierToken("经济") === "economic" && matchTierToken("Economic") === "economic");
+			check("token: fast/balanced/performance", matchTierToken("fast") === "fast" && matchTierToken("快速") === "fast" && matchTierToken("balanced") === "balanced" && matchTierToken("均衡") === "balanced" && matchTierToken("performance") === "performance" && matchTierToken("性能") === "performance");
+			check("token: unknown → null", matchTierToken("nope") === null && matchTierToken("") === null);
+
+			// 6. tier data invariants
+			check("plan: four tiers, five modes", PLAN_TIER_IDS.length === 4 && PLAN_TIER_MODES.length === 5 && PLAN_TIER_MODES.includes("always ask"));
 			check("plan: unknown id falls back to balanced", getTier("nope").id === "balanced" && getTier(undefined).id === "balanced");
-			check("plan: performance has 7 members", tierMemberCount(getTier("performance")) === 7);
-			check(
-				"plan: performance member names",
-				tierMemberNames(getTier("performance"))
-					.map((m) => m.name)
-					.join(",") === "scout1,planner1,worker1,worker2,worker3,reviewer1,reviewer2",
-			);
-			check(
-				"plan: balanced member names",
-				tierMemberNames(balanced)
-					.map((m) => m.name)
-					.join(",") === "scout1,planner1,worker1,worker2,reviewer1",
-			);
+			check("plan: labels are bilingual", tierLabel(balanced, "zh") === "均衡" && tierLabel(balanced, "en") === "Balanced" && allTiers().length === 4);
 
-			// 5. custom tier from the guided flow
-			const custom = customTier({ size: 3, shape: "star", thinking: "high" });
+			// 7. custom-requirements instruction carries the user's needs + picks
+			const custom = customTierInstruction("重构 src/ 三个模块", { size: 5, shape: "star", effort: "high" }, "zh");
 			check(
-				"plan: custom size 3 → 3 members with uniform thinking",
-				tierMemberCount(custom) === 3 && custom.members.every((m) => m.thinking === "high"),
+				"custom: requirements + reference picks + non-binding",
+				custom.includes("用户需求：重构 src/ 三个模块") &&
+					custom.includes("参考规模 5 人") &&
+					custom.includes("参考拓扑 star") &&
+					custom.includes("参考 effort high") &&
+					custom.includes("非固定方案"),
 			);
+			const customEn = customTierInstruction("", {}, "en");
+			check("custom: en without requirements", customEn.includes("No extra requirements provided"));
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE21 DONE (all passed)" : `SMOKE21 DONE (${failed}/${results.length} failed)`);

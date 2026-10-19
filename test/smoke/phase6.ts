@@ -15,7 +15,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { TeamManager } from "../../extensions/members.ts";
-import { defaultConfig, getConfig, loadConfig } from "../../extensions/config.ts";
+import { consumeKeywordMigration, defaultConfig, getConfig, loadConfig, resetConfigCache } from "../../extensions/config.ts";
+import { loadPreset } from "../../extensions/presets.ts";
 import { TEAM_TOOL_NAMES, activate, detectKeyword, detectSlashCommand, initActivation } from "../../extensions/activation.ts";
 
 const LEADER_MODEL = "step-5-preview";
@@ -48,7 +49,7 @@ export default function (pi: ExtensionAPI) {
 			check("default-off: socket absent", !fs.existsSync(manager.socketPath));
 			const commands = pi.getCommands().map((c) => c.name);
 			check("command registered: topo", commands.includes("topo"));
-			check("command registered: agent-team (deprecated alias)", commands.includes("agent-team"));
+			check("command removed: agent-team (0.2.0 hard cut)", !commands.includes("agent-team"));
 
 			// 2. pure config tests (synthetic dirs)
 			const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "scat-cfg-"));
@@ -125,6 +126,25 @@ export default function (pi: ExtensionAPI) {
 			const cBoth = loadConfig({ agentDir: tmp });
 			check("legacy file: settings section overrides", cBoth.members.max === 6, `got ${cBoth.members.max}`);
 			check("legacy file: unoverridden keys survive", cBoth.cost.warnThreshold === 7, `got ${cBoth.cost.warnThreshold}`);
+
+			// 2b. forced keyword migration (0.2.0): deprecated terms are stripped
+			// from the effective list (the user's file is never rewritten).
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { activation: { keywords: ["智能体团队", "组小队", "agent team"] } } }),
+			);
+			const cMig = loadConfig({ agentDir: tmp });
+			check(
+				"migration: deprecated keywords stripped",
+				JSON.stringify(cMig.activation.keywords) === '["组小队"]',
+				`got ${JSON.stringify(cMig.activation.keywords)}`,
+			);
+			const migratedTerms = consumeKeywordMigration();
+			check(
+				"migration: stripped terms reported",
+				migratedTerms.length === 2 && migratedTerms.includes("智能体团队") && migratedTerms.includes("agent team"),
+				`got ${migratedTerms.join(",")}`,
+			);
 			fs.rmSync(tmp, { recursive: true, force: true });
 
 			// 3. detection
@@ -135,8 +155,7 @@ export default function (pi: ExtensionAPI) {
 				"detectSlashCommand",
 				detectSlashCommand("/topo") &&
 					detectSlashCommand("  /topo economy") &&
-					detectSlashCommand("/agent-team") &&
-					detectSlashCommand("  /agent-team status") &&
+					!detectSlashCommand("/agent-team") &&
 					!detectSlashCommand("/model x"),
 			);
 			// 3b. L1 false-positive guard (0.2.0): negation / meta-discussion /
@@ -147,6 +166,33 @@ export default function (pi: ExtensionAPI) {
 			check("guard: bare topo is not a keyword", !detectKeyword("topo"));
 			check("guard: topology does not match topo team", !detectKeyword("阅读 topology.ts 的设计"));
 			check("guard: real request still activates", detectKeyword("请用智能体小队并行审查这个仓库"));
+
+			// 3c. custom roles (0.2.0): user-level <agentDir>/agents/ presets load
+			// like built-in ones (same frontmatter format, effort included).
+			const agentDir = process.env.STEP_CODING_AGENT_DIR;
+			if (agentDir) {
+				const userAgentsDir = path.join(agentDir, "agents");
+				fs.mkdirSync(userAgentsDir, { recursive: true });
+				fs.writeFileSync(
+					path.join(userAgentsDir, "tester.md"),
+					[
+						"---",
+						"name: tester",
+						"description: Custom role probe fixture",
+						"tools: read, grep",
+						"effort: xhigh",
+						"---",
+						"",
+						"You are a test role fixture.",
+					].join("\n"),
+				);
+				const custom = loadPreset("tester", ctx.cwd);
+				check(
+					"custom role: loaded from <agentDir>/agents/ with effort",
+					custom?.name === "tester" && custom.effort === "xhigh",
+					`got ${custom?.name}/${custom?.effort}`,
+				);
+			}
 
 			// 4. activation logic
 			if (cfg.activation.enabled) {
@@ -185,6 +231,22 @@ export default function (pi: ExtensionAPI) {
 				check("disabled config: activate refused", activate("probe") === false);
 				const toolsAfter = pi.getAllTools().map((t) => t.name);
 				check("disabled config: tools still hidden", !TEAM_TOOL_NAMES.some((n) => toolsAfter.includes(n)));
+			}
+
+			// 6. presets.effort config override (0.2.0): the config value beats the
+			// preset frontmatter; explicit params still beat both.
+			const agentDir6 = process.env.STEP_CODING_AGENT_DIR;
+			if (agentDir6) {
+				fs.writeFileSync(
+					path.join(agentDir6, "settings.json"),
+					JSON.stringify({ stepcodeAgentTeam: { presets: { effort: { worker: "xhigh" } } } }),
+				);
+				resetConfigCache();
+				const r5 = await manager.createMember({ name: "res5", role: "worker" }, LEADER_MODEL);
+				check("presets.effort: config overrides preset effort", r5.member.thinking === "xhigh", `got ${r5.member.thinking}`);
+				await manager.disband("res5");
+				fs.rmSync(path.join(agentDir6, "settings.json"));
+				resetConfigCache();
 			}
 
 			const failed = results.filter((r) => !r.ok).length;

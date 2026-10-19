@@ -35,7 +35,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as stepCore from "@step-harness/coding-agent";
 import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
-import { PLAN_TIER_IDS } from "./plan.ts";
+import { DEFAULT_TIER_MODE, PLAN_TIER_MODES } from "./plan.ts";
 
 export const CONFIG_FILE_NAME = "stepcode-agent-team.json";
 /** Legacy settings file name (Step Code's pre-config.toml convention). */
@@ -46,6 +46,35 @@ export const CONFIG_SECTION = "stepcodeAgentTeam";
 /** Thinking levels accepted by `step --thinking`. */
 export const VALID_THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingLevel = (typeof VALID_THINKING)[number];
+
+/**
+ * Keywords retired in 0.2.0. They named the plugin in generic "agent team"
+ * terms that a future official agent-teams feature would claim; keeping them
+ * would let this plugin shadow the official feature. Stripped from the
+ * effective keyword list on load (the user's config file is not rewritten).
+ */
+export const DEPRECATED_KEYWORDS = [
+	"agent team",
+	"agent teams",
+	"team of agents",
+	"multi-agent team",
+	"team plugin",
+	"智能体团队",
+	"团队插件",
+	"多智能体",
+	"多智能体协作",
+	"组队",
+] as const;
+
+/** Deprecated keywords stripped by the most recent load (consumed on read). */
+let lastKeywordMigration: string[] = [];
+
+/** Returns — and clears — the deprecated keywords removed by the last load. */
+export function consumeKeywordMigration(): string[] {
+	const out = lastKeywordMigration;
+	lastKeywordMigration = [];
+	return out;
+}
 
 /** Member thinking level when the caller does not specify one. */
 export const DEFAULT_MEMBER_THINKING: ThinkingLevel = "high";
@@ -72,12 +101,22 @@ export interface ActivationConfig {
 	headlessAutoActivate: boolean;
 }
 
-/** Team-plan picker (default off): choose a preset team tier on activation. */
+/** Team-plan picker (default off): choose a team strategy on activation. */
 export interface PlanConfig {
 	/** Master switch; false keeps the pre-0.2.0 behavior (model self-organizes). */
 	enabled: boolean;
-	/** Tier applied when the picker times out or runs headless. */
-	defaultTier: string;
+	/**
+	 * Standing tier choice: "always ask" (default) shows the picker on every
+	 * /topo activation; a pinned tier (economic/fast/balanced/performance)
+	 * applies directly without asking — on the command path and on keyword
+	 * activations alike.
+	 */
+	tier: string;
+}
+
+/** Per-role effort overrides (keys are role names; built-in roles shown as defaults). */
+export interface PresetsConfig {
+	effort: Record<string, string>;
 }
 
 export interface ModelsConfig {
@@ -146,6 +185,7 @@ export interface PluginConfig {
 	storage: StorageConfig;
 	topology: TopologyConfig;
 	plan: PlanConfig;
+	presets: PresetsConfig;
 	debug: boolean;
 }
 
@@ -279,8 +319,14 @@ function seedBlock(): string {
 		line(`maxLoopCount = ${d.topology.maxLoopCount}`, "ring message-chain bound (0 = unlimited, 0-64)"),
 		"#",
 		"# [stepcodeAgentTeam.plan]",
-		line(`enabled = ${d.plan.enabled}`, "team-plan picker: economy/fast/balanced/performance + custom on activation"),
-		line(`defaultTier = "${d.plan.defaultTier}"`, "tier applied when the picker times out or runs headless"),
+		line(`enabled = ${d.plan.enabled}`, "team-plan picker: economic/fast/balanced/performance + custom on activation"),
+		line(`tier = "${d.plan.tier}"`, "always ask = picker every time; a pinned tier applies directly"),
+		"#",
+		"# [stepcodeAgentTeam.presets.effort]",
+		'# scout = "low"       # per-role effort overrides (custom roles: set effort in their own frontmatter)',
+		'# planner = "medium"  # ignored while models.autonomousThinking is on (the leader picks)',
+		'# worker = "medium"',
+		'# reviewer = "high"',
 		"#",
 		"# [stepcodeAgentTeam]",
 		line(`debug = ${d.debug}`, "diagnostic logging to stderr"),
@@ -352,7 +398,8 @@ export function defaultConfig(): PluginConfig {
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
 		topology: { default: "star", requireDeclaration: false, maxLoopCount: 2 },
-		plan: { enabled: false, defaultTier: "balanced" },
+		plan: { enabled: false, tier: DEFAULT_TIER_MODE },
+		presets: { effort: { scout: "low", planner: "medium", worker: "medium", reviewer: "high" } },
 		debug: false,
 	};
 }
@@ -576,6 +623,19 @@ function validate(config: PluginConfig): string[] {
 	if (!isStringArray(config.activation.keywords)) {
 		config.activation.keywords = d.activation.keywords;
 		warnings.push("activation.keywords");
+	} else {
+		// Forced migration (0.2.0): deprecated keywords are stripped from the
+		// effective list so a future official agent-teams feature cannot be
+		// shadowed by this plugin. The user's file is never rewritten; the
+		// stripped terms are reported via consumeKeywordMigration().
+		const kept = config.activation.keywords.filter(
+			(k) => !(DEPRECATED_KEYWORDS as readonly string[]).includes(k.trim().toLowerCase()),
+		);
+		if (kept.length !== config.activation.keywords.length) {
+			lastKeywordMigration = config.activation.keywords.filter((k) => !kept.includes(k));
+			config.activation.keywords = kept.length > 0 ? kept : d.activation.keywords;
+			warnings.push("activation.keywords (deprecated terms removed)");
+		}
 	}
 
 	if (!isStringArray(config.models.available)) {
@@ -623,9 +683,20 @@ function validate(config: PluginConfig): string[] {
 	expectBoolean(asRecord(config.topology), "requireDeclaration", d.topology.requireDeclaration, warnings);
 	expectIntRange(asRecord(config.topology), "maxLoopCount", d.topology.maxLoopCount, 0, 64, warnings);
 	expectBoolean(asRecord(config.plan), "enabled", d.plan.enabled, warnings);
-	if (typeof config.plan.defaultTier !== "string" || !(PLAN_TIER_IDS as readonly string[]).includes(config.plan.defaultTier)) {
-		config.plan.defaultTier = d.plan.defaultTier;
-		warnings.push("plan.defaultTier");
+	if (typeof config.plan.tier !== "string" || !(PLAN_TIER_MODES as readonly string[]).includes(config.plan.tier)) {
+		config.plan.tier = d.plan.tier;
+		warnings.push("plan.tier");
+	}
+	if (typeof config.presets.effort !== "object" || config.presets.effort === null || Array.isArray(config.presets.effort)) {
+		config.presets.effort = { ...d.presets.effort };
+		warnings.push("presets.effort");
+	} else {
+		for (const [role, level] of Object.entries(config.presets.effort)) {
+			if (typeof level !== "string" || !(VALID_THINKING as readonly string[]).includes(level)) {
+				delete config.presets.effort[role];
+				warnings.push(`presets.effort.${role}`);
+			}
+		}
 	}
 	expectBoolean(asRecord(config), "debug", d.debug, warnings);
 

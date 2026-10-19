@@ -101,11 +101,11 @@ fi
 
 # ---- live wiring checks (zero-token, hermetic temp cwd) ----
 # index.ts applies the trusted project tier to its own config instance and the
-# /topo command (deprecated alias /agent-team) surfaces the result. In-probe
+# /topo command (deprecated alias /topo) surfaces the result. In-probe
 # observation is impossible (each -e extension gets its own config module
 # instance), so verify it here.
 live_check() {
-  local name="$1" dir="$2" expect="$3" cmd="${4:-agent-team}"
+  local name="$1" dir="$2" expect="$3" cmd="${4:-topo}"
   mkdir -p "$dir/sessions"
   local out
   out="$(cd "$dir" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/%s"}\n' "$cmd" \
@@ -127,10 +127,7 @@ echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE1/.stepcod
 live_check "project-config" "$LIVE1" "disabled by configuration"
 
 LIVE2="$(mktemp -d)"
-live_check "command-activate" "$LIVE2" "Agent team plugin activated (/agent-team command)"
-
-LIVE2B="$(mktemp -d)"
-live_check "topo" "$LIVE2B" "Agent team plugin activated (/topo command)" "topo"
+live_check "command-activate" "$LIVE2" "Agent team plugin activated (/topo command)"
 
 # Package install path: a `packages` entry in the step config (the unified
 # config.toml beside the agent dir — the form `step install <local path>`
@@ -139,10 +136,10 @@ live_check "topo" "$LIVE2B" "Agent team plugin activated (/topo command)" "topo"
 PKGDIR="$(mktemp -d)"
 mkdir -p "$PKGDIR/agent/sessions"
 printf 'packages = ["%s"]\n' "$ROOT" > "$PKGDIR/config.toml"
-pkg_out="$(cd "$PKGDIR" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+pkg_out="$(cd "$PKGDIR" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
   | STEP_CODING_AGENT_DIR="$PKGDIR/agent" timeout 45 "$STEP_BIN" \
     --mode rpc --session-id live-pkg --session-dir "$PKGDIR/agent/sessions" -a 2>&1)" || true
-if echo "$pkg_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
+if echo "$pkg_out" | grep -q 'Agent team plugin activated (/topo command)'; then
 	echo "live-package-install: OK"
 else
 	echo "live-package-install: FAILED (extension from the step config packages entry did not activate)"
@@ -162,7 +159,7 @@ rm -rf "$PKGDIR"
 # event and never appears in the transcript.
 LIVE3="$(mktemp -d)"
 mkdir -p "$LIVE3/sessions"
-fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team ping-forward-check"}\n' \
+fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo ping-forward-check"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE3/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-fwd --session-dir "$LIVE3/sessions" -a 2>&1)" || true
 if ! echo "$fwd_out" | grep -q 'Agent team plugin activated'; then
@@ -183,14 +180,14 @@ fi
 rm -rf "$LIVE3"
 
 # Untrusted project config must NOT apply: staged activation.enabled=false with
-# --no-approve → /agent-team still activates.
+# --no-approve → /topo still activates.
 LIVE4="$(mktemp -d)"
 mkdir -p "$LIVE4/.stepcode" "$LIVE4/sessions"
 echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE4/.stepcode/settings.json"
-na_out="$(cd "$LIVE4" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+na_out="$(cd "$LIVE4" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE4/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-untrusted --session-dir "$LIVE4/sessions" -na 2>&1)" || true
-if echo "$na_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
+if echo "$na_out" | grep -q 'Agent team plugin activated (/topo command)'; then
   echo "live-untrusted-config: OK"
 else
   echo "live-untrusted-config: FAILED (staged project config applied despite --no-approve)"
@@ -203,10 +200,10 @@ rm -rf "$LIVE4"
 EXPORT_DIR="$(mktemp -d)"
 NEUTRAL="$(mktemp -d)"
 if git -C "$ROOT" archive HEAD 2>/dev/null | tar -x -C "$EXPORT_DIR" 2>/dev/null && [ -f "$EXPORT_DIR/extensions/index.ts" ]; then
-  exp_out="$(cd "$NEUTRAL" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+  exp_out="$(cd "$NEUTRAL" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
     | STEP_CODING_AGENT_DIR="$EXPORT_DIR/agent" timeout 45 "$STEP_BIN" -e "$EXPORT_DIR/extensions/index.ts" \
       --mode rpc --session-id live-export --session-dir "$EXPORT_DIR/sessions" --approval-mode auto 2>&1)" || true
-  if echo "$exp_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
+  if echo "$exp_out" | grep -q 'Agent team plugin activated (/topo command)'; then
     echo "live-clean-export: OK"
   else
     echo "live-clean-export: FAILED (extension from git archive did not activate)"

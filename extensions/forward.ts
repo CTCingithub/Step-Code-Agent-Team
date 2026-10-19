@@ -9,59 +9,78 @@
  * (Verified in the 2026-10-19 TUI report: verbatim forwarding produced zero
  * team tool calls.)
  *
- * Until 0.1.x the instruction was prepended to the forwarded text, which
- * made the session log differ from what the user typed. Since 0.2.0 the
- * request is forwarded verbatim (log fidelity) and this instruction is
- * injected request-locally through the `context` event (see index.ts): it
- * reaches the model for that turn only and is never written to the session
- * file.
+ * Since 0.2.0 the request is forwarded verbatim (log fidelity) and these
+ * instructions are injected request-locally through the `context` event
+ * (see index.ts): they reach the model for that turn only and are never
+ * written to the session file.
+ *
+ * Since the 0.2.0 revision, a plan tier is a *strategy prompt*, not a fixed
+ * roster: the tier instruction states the strategy and offers a non-binding
+ * example, and the leader model decides the actual members and topology.
  */
 
-import type { TeamTier } from "./plan.ts";
-import { tierMemberNames } from "./plan.ts";
+import type { CustomPicks, Lang, TeamTier } from "./plan.ts";
 
 /** CJK presence picks the instruction language, matching the request's own. */
 export function hasCjk(text: string): boolean {
 	return /[\u4e00-\u9fff]/.test(text);
 }
 
+export function detectLang(text: string): Lang {
+	return hasCjk(text) ? "zh" : "en";
+}
+
 /** Generic instruction used when no plan tier was chosen. */
-export function teamActivationInstruction(request: string): string {
-	return hasCjk(request)
+export function teamActivationInstruction(lang: Lang): string {
+	return lang === "zh"
 		? "[智能体团队已启用] 请使用团队工具完成用户的请求：先用 team_create_member 按需创建成员、用 team_set_topology 声明拓扑，再用 team_task / team_send 派活；不要把请求独自做完。"
 		: "[Agent team active] Use the team tools for the user's request: create members with team_create_member, declare the topology with team_set_topology, then dispatch with team_task / team_send. Do not complete the request solo.";
 }
 
-/** Structured instruction that applies a chosen plan tier. */
-export function tierInstruction(tier: TeamTier, request: string): string {
-	const zh = hasCjk(request);
-	const steps = tierMemberNames(tier)
-		.map((m, i) => `${i + 1}. team_create_member(name="${m.name}", role="${m.role}", thinking="${m.thinking}")`)
-		.join("\n");
-	const topology = `team_set_topology(shape="${tier.topology.shape}")`;
-	if (zh) {
+/** Tier instruction: strategy + non-binding example; the model decides the team. */
+export function tierInstruction(tier: TeamTier, lang: Lang): string {
+	const label = tier.label[lang] ?? tier.label.zh;
+	if (lang === "zh") {
 		return [
-			`[团队方案 · ${tier.label}（预估成本 ~${tier.multiplier}×）]`,
-			`适用：${tier.bestFor}`,
-			"请严格按以下步骤组建并驱动团队：",
-			steps,
-			`然后调用 ${topology} 声明拓扑，再用 team_task / team_send 派活。`,
-			`调度参考值（全局配置优先）：并发 ${tier.guidance.concurrency}、单次超时 ${tier.guidance.timeoutMs}ms、重试 ${tier.guidance.retries}。`,
-			tier.topology.note ? `拓扑说明：${tier.topology.note}。` : "",
-			"只读角色（scout/planner/reviewer）没有 bash 工具，指向它们的拓扑边会退化为队长中转；任务依赖请同时用任务板 blockedBy 表达。",
+			`[团队方案 · ${label}] ${tier.guidance.zh}`,
+			tier.example.zh,
+			"成员名、数量、角色、拓扑与 effort 均由你按任务实际需要决定——上述示例仅供参考，不要照搬。",
+		].join("\n");
+	}
+	return [
+		`[Team plan · ${label}] ${tier.guidance.en}`,
+		tier.example.en,
+		"Member names, counts, roles, topology, and effort are yours to decide from the task — the example above is a suggestion only, do not copy it verbatim.",
+	].join("\n");
+}
+
+/** Custom-requirements instruction: the user's needs travel with the request. */
+export function customTierInstruction(requirements: string, picks: CustomPicks, lang: Lang): string {
+	const pickParts: string[] = [];
+	if (picks.size) pickParts.push(lang === "zh" ? `参考规模 ${picks.size} 人` : `reference size ${picks.size}`);
+	if (picks.shape) pickParts.push(lang === "zh" ? `参考拓扑 ${picks.shape}` : `reference topology ${picks.shape}`);
+	if (picks.effort) pickParts.push(lang === "zh" ? `参考 effort ${picks.effort}` : `reference effort ${picks.effort}`);
+	const picksLine =
+		pickParts.length > 0
+			? lang === "zh"
+				? `用户参考项：${pickParts.join("、")}。`
+				: `User reference picks: ${pickParts.join(", ")}.`
+			: "";
+	if (lang === "zh") {
+		return [
+			"[团队方案 · 自定义]",
+			requirements ? `用户需求：${requirements}` : "用户未提供额外需求。",
+			picksLine,
+			"请按上述需求自行决定成员、角色、拓扑与 effort；用户参考项仅为建议，非固定方案。",
 		]
 			.filter(Boolean)
 			.join("\n");
 	}
 	return [
-		`[Team plan · ${tier.label} (est. ~${tier.multiplier}x)]`,
-		`Best for: ${tier.bestFor}`,
-		"Build and drive the team strictly as follows:",
-		steps,
-		`Then call ${topology} to declare the topology and dispatch with team_task / team_send.`,
-		`Dispatch reference values (global config wins): concurrency ${tier.guidance.concurrency}, timeout ${tier.guidance.timeoutMs}ms, retries ${tier.guidance.retries}.`,
-		tier.topology.note ? `Topology note: ${tier.topology.note}.` : "",
-		"Read-only roles (scout/planner/reviewer) have no bash tool, so topology edges touching them degrade to leader relay; express task dependencies with the task board's blockedBy as well.",
+		"[Team plan · Custom]",
+		requirements ? `User requirements: ${requirements}` : "No extra requirements provided.",
+		picksLine,
+		"Decide members, roles, topology, and effort from the requirements above; the user's reference picks are suggestions, not a fixed plan.",
 	]
 		.filter(Boolean)
 		.join("\n");

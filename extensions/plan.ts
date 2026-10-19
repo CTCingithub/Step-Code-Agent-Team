@@ -1,105 +1,98 @@
 /**
  * Team plan tiers.
  *
- * Four preset team configurations (economy / fast / balanced / performance)
+ * Four preset *strategies* (economic / fast / balanced / performance)
  * offered by the /topo picker when [stepcodeAgentTeam.plan] is enabled. A
- * tier is *data*: the leader model applies it through the regular team tools
- * (team_create_member / team_set_topology / team_task), so no spawn logic is
- * duplicated here.
+ * tier is guidance, not a fixed roster: each tier carries a localized
+ * instruction (built in forward.ts) whose member/topology examples are
+ * explicitly non-binding — the leader model decides the actual team from
+ * the task. This keeps the plugin's "leader orchestrates" philosophy and
+ * avoids hardcoding rosters that stop fitting as models improve.
  *
- * Design constraints baked into the data:
+ * Design notes:
+ * - No cost multipliers are shown: they were estimates, and estimates in a
+ *   picker read as promises.
+ * - Labels are bilingual so the picker can match the user's language
+ *   (detected from the request text; bare /topo falls back to Chinese).
  * - autonomousSelection is off by default, so tiers never depend on model
- *   choice — differentiation comes from role mix, member count, thinking
- *   level, and task structure. Model intents are an opt-in layer only.
- * - Read-only presets (scout/planner/reviewer) have no bash, so topology
- *   edges touching them degrade to leader relay; dependencies belong on the
- *   task board (blockedBy) instead.
- * - dispatch.maxConcurrent / timeoutMs / retries are global config values
- *   read once per session, so the tier's guidance block is advisory only.
+ *   choice — guidance mentions effort levels only.
  */
 
 import type { ThinkingLevel } from "./config.ts";
 import type { TopologyShape } from "./topology.ts";
 
-export const PLAN_TIER_IDS = ["economy", "fast", "balanced", "performance"] as const;
+export const PLAN_TIER_IDS = ["economic", "fast", "balanced", "performance"] as const;
 export type PlanTierId = (typeof PLAN_TIER_IDS)[number];
 
-/** Tier applied when the picker times out or runs headless. */
-export const DEFAULT_TIER_ID: PlanTierId = "balanced";
+/** Config values for plan.tier: ask every time, or pin one tier. */
+export const PLAN_TIER_MODES = ["always ask", ...PLAN_TIER_IDS] as const;
+export type PlanTierMode = (typeof PLAN_TIER_MODES)[number];
 
-export interface TierMemberSpec {
-	role: string;
-	count: number;
-	thinking: ThinkingLevel;
-}
+/** Default standing choice: the picker asks on every /topo activation. */
+export const DEFAULT_TIER_MODE: PlanTierMode = "always ask";
+
+/** Picker-timeout / no-choice fallback. */
+export const FALLBACK_TIER_ID: PlanTierId = "balanced";
+
+export type Lang = "zh" | "en";
 
 export interface TeamTier {
 	id: PlanTierId;
-	label: string;
-	/** Rough relative cost vs. a single session (estimate — see docs). */
-	multiplier: number;
-	members: TierMemberSpec[];
-	topology: { shape: TopologyShape; note?: string };
-	/** Advisory dispatch tuning (global config values win). */
-	guidance: { concurrency: number; timeoutMs: number; retries: number };
-	bestFor: string;
+	label: Record<Lang, string>;
+	/** One-line strategy statement, localized. */
+	guidance: Record<Lang, string>;
+	/** Non-binding example roster/topology, localized. */
+	example: Record<Lang, string>;
 }
 
 const TIERS: Record<PlanTierId, TeamTier> = {
-	economy: {
-		id: "economy",
-		label: "经济",
-		multiplier: 0.3,
-		members: [
-			{ role: "scout", count: 1, thinking: "low" },
-			{ role: "worker", count: 1, thinking: "medium" },
-		],
-		topology: {
-			shape: "pipeline",
-			note: "pipeline 表示 scout 探完交给 worker；只读角色没有 bash，该边实际退化为队长中转",
+	economic: {
+		id: "economic",
+		label: { zh: "经济", en: "Economic" },
+		guidance: {
+			zh: "以最低成本完成用户的请求：少成员、低 effort，省去不必要的规划与审查环节。",
+			en: "Complete the request at the lowest cost: few members, low effort, skip unnecessary planning and review stages.",
 		},
-		guidance: { concurrency: 1, timeoutMs: 120_000, retries: 0 },
-		bestFor: "只读调研、小文档改动、信息查询",
+		example: {
+			zh: "示例（仅供参考，非固定方案）：1 名 scout 只读调研 + 1 名 worker 执行，effort 取 low/medium，拓扑用 star，任务依赖用任务板 blockedBy 表达。",
+			en: "Example (a suggestion, not a fixed plan): 1 scout for read-only research + 1 worker to execute, effort low/medium, star topology, task dependencies via the task board's blockedBy.",
+		},
 	},
 	fast: {
 		id: "fast",
-		label: "快速",
-		multiplier: 0.5,
-		members: [{ role: "worker", count: 2, thinking: "low" }],
-		topology: { shape: "star" },
-		guidance: { concurrency: 2, timeoutMs: 60_000, retries: 0 },
-		bestFor: "格式化、重命名、批量小改、分钟级返回",
+		label: { zh: "快速", en: "Fast" },
+		guidance: {
+			zh: "以最短耗时完成用户的请求：立即并行开工，尽量减少中间环节。",
+			en: "Complete the request as fast as possible: start in parallel immediately and minimize intermediate stages.",
+		},
+		example: {
+			zh: "示例（仅供参考，非固定方案）：2 名 worker 并行分治，effort 取 low，拓扑用 star。",
+			en: "Example (a suggestion, not a fixed plan): 2 workers splitting the work in parallel, effort low, star topology.",
+		},
 	},
 	balanced: {
 		id: "balanced",
-		label: "均衡",
-		multiplier: 1.0,
-		members: [
-			{ role: "scout", count: 1, thinking: "low" },
-			{ role: "planner", count: 1, thinking: "medium" },
-			{ role: "worker", count: 2, thinking: "medium" },
-			{ role: "reviewer", count: 1, thinking: "medium" },
-		],
-		topology: { shape: "star" },
-		guidance: { concurrency: 3, timeoutMs: 180_000, retries: 1 },
-		bestFor: "常规功能开发、一般缺陷修复（默认档）",
+		label: { zh: "均衡", en: "Balanced" },
+		guidance: {
+			zh: "在成本与质量之间平衡地完成用户的请求：覆盖勘察、规划、执行、审查各环节。",
+			en: "Complete the request balancing cost and quality: cover the exploration, planning, execution, and review stages.",
+		},
+		example: {
+			zh: "示例（仅供参考，非固定方案）：scout + planner + 2 名 worker + reviewer，effort 取 low/medium，拓扑用 star，任务依赖用任务板 blockedBy 表达。",
+			en: "Example (a suggestion, not a fixed plan): scout + planner + 2 workers + reviewer, effort low/medium, star topology, task dependencies via the task board's blockedBy.",
+		},
 	},
 	performance: {
 		id: "performance",
-		label: "性能",
-		multiplier: 2.2,
-		members: [
-			{ role: "scout", count: 1, thinking: "medium" },
-			{ role: "planner", count: 1, thinking: "high" },
-			{ role: "worker", count: 3, thinking: "high" },
-			{ role: "reviewer", count: 2, thinking: "xhigh" },
-		],
-		topology: {
-			shape: "custom",
-			note: "菱形：planner 扇出至 worker、worker 汇入 reviewer；只读角色没有 bash，边退化为队长中转，依赖请同时用任务板 blockedBy 表达",
+		label: { zh: "性能", en: "Performance" },
+		guidance: {
+			zh: "以最高质量完成用户的请求，不计较成本：多成员、高 effort 深度协作，可并行竞速后择优。",
+			en: "Complete the request at the highest quality regardless of cost: many members, high effort, deep collaboration — parallel racing with a final pick is fine.",
 		},
-		guidance: { concurrency: 5, timeoutMs: 180_000, retries: 2 },
-		bestFor: "大规模重构、疑难缺陷、发布前深度审查",
+		example: {
+			zh: "示例（仅供参考，非固定方案）：scout + planner + 3 名 worker + 2 名 reviewer，effort 取 high/xhigh；可用 custom 拓扑表达依赖方向——只读角色没有 bash，指向它们的边会退化为队长中转，依赖请同时用任务板 blockedBy 表达。",
+			en: "Example (a suggestion, not a fixed plan): scout + planner + 3 workers + 2 reviewers, effort high/xhigh; a custom topology may express dependency direction — read-only roles have no bash, so edges touching them degrade to leader relay, and dependencies should also be expressed via the task board's blockedBy.",
+		},
 	},
 };
 
@@ -107,64 +100,37 @@ export function allTiers(): TeamTier[] {
 	return PLAN_TIER_IDS.map((id) => TIERS[id]);
 }
 
-/** Unknown or missing ids fall back to the default tier. */
+/** Unknown or missing ids fall back to the fallback tier. */
 export function getTier(id: string | undefined | null): TeamTier {
-	return (id && TIERS[id as PlanTierId]) || TIERS[DEFAULT_TIER_ID];
+	return (id && TIERS[id as PlanTierId]) || TIERS[FALLBACK_TIER_ID];
 }
 
-export function tierMemberCount(tier: TeamTier): number {
-	return tier.members.reduce((sum, m) => sum + m.count, 0);
+/** Localized label for the picker / summaries. */
+export function tierLabel(tier: TeamTier, lang: Lang): string {
+	return tier.label[lang] ?? tier.label.zh;
 }
 
-/** Deterministic member names for a tier: scout1, planner1, worker1, worker2, … */
-export function tierMemberNames(tier: TeamTier): Array<{ name: string; role: string; thinking: ThinkingLevel }> {
-	const out: Array<{ name: string; role: string; thinking: ThinkingLevel }> = [];
-	for (const spec of tier.members) {
-		for (let i = 1; i <= spec.count; i++) {
-			out.push({ name: `${spec.role}${i}`, role: spec.role, thinking: spec.thinking });
-		}
+/** Picker option strings (localized, no cost multipliers). */
+export function tierPickerOptions(lang: Lang): string[] {
+	const options = allTiers().map((t) => tierLabel(t, lang));
+	const custom = lang === "zh" ? "自定义需求…" : "Custom requirements…";
+	const balancedIdx = PLAN_TIER_IDS.indexOf("balanced");
+	return [...options.slice(0, balancedIdx), `${options[balancedIdx]}${lang === "zh" ? "（默认）" : " (default)"}`, ...options.slice(balancedIdx + 1), custom];
+}
+
+/** True when the token names a tier (id, or either localized label). */
+export function matchTierToken(token: string): PlanTierId | null {
+	const t = token.trim().toLowerCase();
+	if (!t) return null;
+	for (const tier of allTiers()) {
+		if (t === tier.id || t === tier.label.zh || t === tier.label.en.toLowerCase()) return tier.id;
 	}
-	return out;
+	return null;
 }
 
-/** Role mix per team size for the guided "custom requirements" flow. */
-const CUSTOM_MIX: Record<number, TierMemberSpec[]> = {
-	2: [{ role: "worker", count: 2, thinking: "medium" }],
-	3: [
-		{ role: "scout", count: 1, thinking: "medium" },
-		{ role: "worker", count: 1, thinking: "medium" },
-		{ role: "reviewer", count: 1, thinking: "medium" },
-	],
-	5: [
-		{ role: "scout", count: 1, thinking: "medium" },
-		{ role: "planner", count: 1, thinking: "medium" },
-		{ role: "worker", count: 2, thinking: "medium" },
-		{ role: "reviewer", count: 1, thinking: "medium" },
-	],
-	7: [
-		{ role: "scout", count: 1, thinking: "medium" },
-		{ role: "planner", count: 1, thinking: "medium" },
-		{ role: "worker", count: 3, thinking: "medium" },
-		{ role: "reviewer", count: 2, thinking: "medium" },
-	],
-};
-
-const CUSTOM_MULTIPLIER: Record<number, number> = { 2: 0.5, 3: 0.7, 5: 1.0, 7: 2.0 };
-
-/**
- * Builds a tier from the guided custom flow (team size → topology shape →
- * thinking level). The collected free-text requirements travel with the
- * forwarded request; this tier only fixes the structural parameters.
- */
-export function customTier(spec: { size: number; shape: TopologyShape; thinking: ThinkingLevel }): TeamTier {
-	const mix = CUSTOM_MIX[spec.size] ?? CUSTOM_MIX[5];
-	return {
-		id: "balanced", // custom plans reuse the balanced id for config lookups
-		label: "自定义",
-		multiplier: CUSTOM_MULTIPLIER[spec.size] ?? 1.0,
-		members: mix.map((m) => ({ ...m, thinking: spec.thinking })),
-		topology: { shape: spec.shape },
-		guidance: { concurrency: Math.min(5, Math.max(1, spec.size)), timeoutMs: 180_000, retries: 1 },
-		bestFor: "自定义需求",
-	};
+/** Optional guided picks from the custom flow (all non-binding). */
+export interface CustomPicks {
+	size?: number;
+	shape?: TopologyShape;
+	effort?: ThinkingLevel;
 }

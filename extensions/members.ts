@@ -385,14 +385,14 @@ export class TeamManager {
 		// A role may reference a bundled preset (agents/<role>.md); explicit params win.
 		// Without an explicit role, members default to the configured role.
 		const role = params.role?.trim() || config.members.defaultRole;
-		const preset = loadPreset(role);
+		const preset = loadPreset(role, this.cwd);
 		const systemPrompt = params.systemPrompt?.trim() || preset?.systemPrompt;
 
 		const record: MemberRecord = {
 			name,
 			role,
 			model: this.resolveMemberModel(name, params.model, preset, leaderModel, config),
-			thinking: this.resolveThinking(params.thinking, preset?.thinking),
+			thinking: this.resolveThinking(params.thinking, preset?.effort, role),
 			tools:
 				(params.tools && params.tools.length > 0 ? [...params.tools] : undefined) ??
 				preset?.tools ??
@@ -453,19 +453,27 @@ export class TeamManager {
 	}
 
 	/**
-	 * Member thinking level: an explicit, valid level always wins; otherwise
-	 * the role preset's declared level applies; failing both, the default
-	 * (high) is used.
+	 * Member effort resolution: an explicit, valid level always wins. With
+	 * models.autonomousThinking on, the leader is expected to choose per
+	 * member, so preset efforts (frontmatter and presets.effort config) are
+	 * inert. Otherwise: presets.effort[role] config override → preset
+	 * frontmatter effort → the default (high).
 	 */
-	private resolveThinking(requested: string | undefined, presetThinking?: string): ThinkingLevel {
+	private resolveThinking(requested: string | undefined, presetEffort?: string, role?: string): ThinkingLevel {
 		if (requested) {
 			if (!(VALID_THINKING as readonly string[]).includes(requested)) {
 				throw new Error(`Invalid thinking level "${requested}". Valid levels: ${VALID_THINKING.join(", ")}.`);
 			}
 			return requested as ThinkingLevel;
 		}
-		if (presetThinking && (VALID_THINKING as readonly string[]).includes(presetThinking)) {
-			return presetThinking as ThinkingLevel;
+		const config = getConfig();
+		if (config.models.autonomousThinking) return DEFAULT_MEMBER_THINKING;
+		const configured = role ? config.presets.effort[role] : undefined;
+		if (configured && (VALID_THINKING as readonly string[]).includes(configured)) {
+			return configured as ThinkingLevel;
+		}
+		if (presetEffort && (VALID_THINKING as readonly string[]).includes(presetEffort)) {
+			return presetEffort as ThinkingLevel;
 		}
 		return DEFAULT_MEMBER_THINKING;
 	}

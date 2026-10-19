@@ -19,15 +19,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { VALID_THINKING, type ThinkingLevel } from "./config.ts";
+import { VALID_THINKING, agentDir, type ThinkingLevel } from "./config.ts";
 
 export interface AgentPreset {
 	name: string;
 	description: string;
 	tools?: string[];
 	model?: string;
-	/** Default thinking level for the role (invalid values are ignored). */
-	thinking?: ThinkingLevel;
+	/** Default effort level for the role (invalid values are ignored). */
+	effort?: ThinkingLevel;
 	systemPrompt: string;
 }
 
@@ -90,48 +90,67 @@ function parseToolList(value: string | undefined): string[] | undefined {
 	return tools.length > 0 ? tools : undefined;
 }
 
-function parseThinking(value: string | undefined): ThinkingLevel | undefined {
+function parseEffort(value: string | undefined): ThinkingLevel | undefined {
 	if (!value) return undefined;
 	const v = value.trim().toLowerCase();
 	return (VALID_THINKING as readonly string[]).includes(v) ? (v as ThinkingLevel) : undefined;
 }
 
-let cache: AgentPreset[] | null = null;
+/**
+ * Preset directories, lowest → highest precedence: bundled agents/ (shipped
+ * with the package) < user <agentDir>/agents/ < project
+ * <projectDir>/.stepcode/agents/. Later tiers override earlier ones by role
+ * name, so users can shadow a bundled preset or add custom roles that behave
+ * exactly like built-in ones (same frontmatter format).
+ */
+function presetDirs(projectDir?: string | null): string[] {
+	const dirs = [presetsDir()];
+	const userDir = path.join(agentDir(), "agents");
+	if (!dirs.includes(userDir)) dirs.push(userDir);
+	if (projectDir) dirs.push(path.join(projectDir, ".stepcode", "agents"));
+	return dirs;
+}
 
-export function loadPresets(): AgentPreset[] {
-	if (cache) return cache;
-	const dir = presetsDir();
-	const presets: AgentPreset[] = [];
-	let entries: fs.Dirent[];
-	try {
-		entries = fs.readdirSync(dir, { withFileTypes: true });
-	} catch {
-		cache = [];
-		return cache;
-	}
-	for (const entry of entries) {
-		if (!entry.name.endsWith(".md")) continue;
-		let content: string;
+const presetCaches = new Map<string, AgentPreset[]>();
+
+/** Loads presets from every tier; later tiers win on role-name conflicts. */
+export function loadPresets(projectDir?: string | null): AgentPreset[] {
+	const key = projectDir ?? "";
+	const cached = presetCaches.get(key);
+	if (cached) return cached;
+	const byName = new Map<string, AgentPreset>();
+	for (const dir of presetDirs(projectDir)) {
+		let entries: fs.Dirent[];
 		try {
-			content = fs.readFileSync(path.join(dir, entry.name), "utf-8");
+			entries = fs.readdirSync(dir, { withFileTypes: true });
 		} catch {
-			continue;
+			continue; // a missing tier is normal
 		}
-		const { frontmatter, body } = parseFrontmatter(content);
-		if (!frontmatter.name || !frontmatter.description) continue;
-		presets.push({
-			name: frontmatter.name,
-			description: frontmatter.description,
-			tools: parseToolList(frontmatter.tools),
-			model: frontmatter.model,
-			thinking: parseThinking(frontmatter.thinking),
-			systemPrompt: body,
-		});
+		for (const entry of entries) {
+			if (!entry.name.endsWith(".md")) continue;
+			let content: string;
+			try {
+				content = fs.readFileSync(path.join(dir, entry.name), "utf-8");
+			} catch {
+				continue;
+			}
+			const { frontmatter, body } = parseFrontmatter(content);
+			if (!frontmatter.name || !frontmatter.description) continue;
+			byName.set(frontmatter.name, {
+				name: frontmatter.name,
+				description: frontmatter.description,
+				tools: parseToolList(frontmatter.tools),
+				model: frontmatter.model,
+				effort: parseEffort(frontmatter.effort),
+				systemPrompt: body,
+			});
+		}
 	}
-	cache = presets;
+	const presets = [...byName.values()];
+	presetCaches.set(key, presets);
 	return presets;
 }
 
-export function loadPreset(role: string): AgentPreset | undefined {
-	return loadPresets().find((p) => p.name === role);
+export function loadPreset(role: string, projectDir?: string | null): AgentPreset | undefined {
+	return loadPresets(projectDir).find((p) => p.name === role);
 }

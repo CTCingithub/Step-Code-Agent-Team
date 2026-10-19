@@ -26,13 +26,12 @@ export const TEAM_TOOL_NAMES = [
 ] as const;
 
 /**
- * Slash commands (without the leading slash) that activate the plugin.
- * "topo" is the 0.2.0 name — it avoids the bare "agent team"/"智能体团队"
- * terms a future official agent-teams feature would claim. "agent-team"
- * stays as a deprecated alias until 0.3.0 so existing habits (and the live
- * smoke assertions) keep working during the transition.
+ * Slash command (without the leading slash) that activates the plugin.
+ * "topo" deliberately avoids the bare "agent team"/"智能体团队" terms a
+ * future official agent-teams feature would claim. The 0.2.0 revision
+ * removed the /agent-team alias — a hard cut, no transition period.
  */
-export const ACTIVATION_COMMANDS = ["topo", "agent-team"] as const;
+export const ACTIVATION_COMMANDS = ["topo"] as const;
 
 let config: PluginConfig | null = null;
 let pi: ExtensionAPI | null = null;

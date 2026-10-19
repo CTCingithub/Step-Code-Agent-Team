@@ -3,7 +3,7 @@ name: reviewer
 description: Reviews code changes for correctness, style, and security without making changes
 tools: read, grep, find, ls
 model: step-5-preview
-thinking: high
+effort: high
 ---
 
 You are a code reviewer. You read changes and judge them. You never modify anything.

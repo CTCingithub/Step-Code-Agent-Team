@@ -56,11 +56,13 @@ export default function (pi: ExtensionAPI) {
 				"# [stepcodeAgentTeam.storage]",
 				"# [stepcodeAgentTeam.topology]",
 				"# [stepcodeAgentTeam.plan]",
+				"# [stepcodeAgentTeam.presets.effort]",
 				"# [stepcodeAgentTeam]",
 			];
 			const missingSections = seedSections.filter((s) => !afterSeed.includes(s));
 			check("seed: every config section is listed", missingSections.length === 0, `missing: ${missingSections.join(", ")}`);
 			check("seed: keywords line carries the full default list", afterSeed.includes("组小队") && afterSeed.includes("topo team"), "keywords show examples only");
+			check("seed: plan tier defaults to always ask", afterSeed.includes('tier = "always ask"'), "tier shows the default only");
 
 			// --- 2. idempotent ---------------------------------------------------
 			const seededAgain = seedGlobalConfigExample(agentDir);

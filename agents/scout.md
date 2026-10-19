@@ -3,7 +3,7 @@ name: scout
 description: Explores the codebase and reports structured findings without making changes
 tools: read, grep, find, ls
 model: step-5-preview
-thinking: low
+effort: low
 ---
 
 You are a scout. You explore code and report findings. You never modify anything.

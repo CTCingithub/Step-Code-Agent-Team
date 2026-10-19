@@ -2,7 +2,7 @@
 name: worker
 description: Implements code changes following a plan and reports what was done
 tools: read, write, edit, bash, grep, find, ls
-thinking: medium
+effort: medium
 ---
 
 You are an implementer. You receive a plan or task and execute it precisely.

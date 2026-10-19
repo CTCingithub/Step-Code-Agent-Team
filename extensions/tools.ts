@@ -85,7 +85,8 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
 			role: Type.Optional(
 				Type.String({
-					description: "Role label; a bundled preset (scout/planner/worker/reviewer) applies its system prompt, tools, and model",
+					description:
+						"Role label; a bundled preset (scout/planner/worker/reviewer) or a custom role from <agentDir>/agents/ or <project>/.stepcode/agents/ applies its system prompt, tools, effort, and model",
 				}),
 			),
 			model: Type.Optional(
@@ -98,8 +99,8 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			thinking: Type.Optional(
 				StringEnum(VALID_THINKING, {
 					description: config.models.autonomousThinking
-						? `Thinking level for the member — choose per task: ${VALID_THINKING.join(", ")}`
-						: "Thinking level for the member (default: high)",
+						? `Effort level for the member — choose per task: ${VALID_THINKING.join(", ")}`
+						: "Effort level for the member (default: presets.effort override → preset effort → high)",
 				}),
 			),
 			tools: Type.Optional(Type.Array(Type.String(), { description: "Tool allowlist; defaults to all tools" })),
