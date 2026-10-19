@@ -45,6 +45,21 @@ export default function (pi: ExtensionAPI) {
 			check("seed: original content preserved", afterSeed.startsWith('# StepCode configuration\ntheme = "step-blue"'));
 			check("seed: mcp_import section preserved", afterSeed.includes("[mcp_import]"));
 			check("seed: block is commented (defaults still apply)", /^# \[stepcodeAgentTeam/m.test(afterSeed) && loadConfig({ agentDir }).members.max === 8);
+			const seedSections = [
+				"# [stepcodeAgentTeam.activation]",
+				"# [stepcodeAgentTeam.models]",
+				"# [stepcodeAgentTeam.members]",
+				"# [stepcodeAgentTeam.dispatch]",
+				"# [stepcodeAgentTeam.oneshot]",
+				"# [stepcodeAgentTeam.cost]",
+				"# [stepcodeAgentTeam.idle]",
+				"# [stepcodeAgentTeam.storage]",
+				"# [stepcodeAgentTeam.topology]",
+				"# [stepcodeAgentTeam]",
+			];
+			const missingSections = seedSections.filter((s) => !afterSeed.includes(s));
+			check("seed: every config section is listed", missingSections.length === 0, `missing: ${missingSections.join(", ")}`);
+			check("seed: keywords line carries the full default list", afterSeed.includes("组队") && afterSeed.includes("team plugin"), "keywords show examples only");
 
 			// --- 2. idempotent ---------------------------------------------------
 			const seededAgain = seedGlobalConfigExample(agentDir);
