@@ -10,21 +10,24 @@ work (`team_send`), track a dependency-aware task board (`team_task`), and watch
 spend and status (`team_status`, `/topo`).
 
 **The plugin is dormant until activated.** The team tools only exist in your
-toolset after the user runs `/topo` (deprecated alias `/agent-team`) or the
-prompt mentions a plugin keyword (e.g. 智能体小队 / topo team). If the tools are
-missing, ask the user to run `/topo` — never pretend to orchestrate a team
-without them. `/topo off` deactivates and re-hides the tools again.
+toolset after the user runs `/topo` or the prompt mentions a plugin keyword
+(e.g. 智能体小队 / topo team). If the tools are missing, ask the user to run
+`/topo` — never pretend to orchestrate a team without them. `/topo off`
+deactivates and re-hides the tools again.
 
-Member models and thinking levels are policy-driven: by default every member
-runs on the conversation's current model with its preset's thinking default
+Member models and effort levels are policy-driven: by default every member
+runs on the conversation's current model with its preset's effort default
 (`scout`=low, `planner`/`worker`=medium, `reviewer`=high; `high` without a
-preset). If the config
+preset), overridable per role via `[stepcodeAgentTeam.presets.effort]`. With
+`models.autonomousThinking` on, the leader picks the effort per member and
+preset efforts are inert. Custom roles — Markdown files with the same
+frontmatter format in `<agentDir>/agents/` or `<project>/.stepcode/agents/` —
+work exactly like the bundled presets (see docs/ROLES.md). If the config
 enables autonomous selection, pick each member's model from the available list
 deliberately — cheap models for read-only scouting, stronger models for
-implementation — and set its thinking level to match the task. Configuration
-lives in the `stepcodeAgentTeam` table of step's unified `config.toml` (global
-`<stepRoot>/config.toml`, beside the agent dir; project-level
-`<cwd>/.stepcode/config.toml` when the project is trusted).
+implementation. Configuration lives in the `stepcodeAgentTeam` table of step's
+unified `config.toml` (global `<stepRoot>/config.toml`, beside the agent dir;
+project-level `<cwd>/.stepcode/config.toml` when the project is trusted).
 
 ## Design the communication topology first
 

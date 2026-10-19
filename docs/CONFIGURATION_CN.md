@@ -64,7 +64,13 @@ maxLoopCount = 2                     # 环形消息链跳数上限（0 = 无上�
 
 [stepcodeAgentTeam.plan]
 enabled = false                      # 团队方案选单：激活时给出经济/快速/均衡/性能 + 自定义
-defaultTier = "balanced"             # 选单超时或 headless 时应用的档位
+tier = "always ask"                  # always ask = 每次弹选单；固定档位则直接应用
+
+[stepcodeAgentTeam.presets.effort]
+scout = "low"                        # 按角色覆盖 effort（自定义角色在自己的 frontmatter 里写 effort）
+planner = "medium"                   # models.autonomousThinking 开启时一律不生效（由队长选择）
+worker = "medium"
+reviewer = "high"
 
 [stepcodeAgentTeam]
 debug = false                        # 调试日志
@@ -74,16 +80,17 @@ debug = false                        # 调试日志
 
 | 配置节 | 控制内容 |
 |---|---|
-| `activation` | 默认关闭门：`/topo` 命令（deprecated 别名 `/agent-team` 保留至 0.3.0；`/topo off` 停用并重新隐藏工具）或关键词提及（大小写不敏感）即激活，会话内粘性。`enabled: false` 时两种触发都无效，命令会提示已被配置禁用。`guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` 三层防误触——斜杠命令不经过防护 |
-| `models` | 成员模型池。`autonomousSelection` 关（默认）时所有成员强制使用对话当前模型（预设/显式 `model` 忽略）；开时解析链为显式 `model` → 预设 → 对话当前模型（显式模型不在列表则报错并列出可用模型，预设模型不在列表则回退 `available[0]`）。`autonomousThinking` 关时成员用预设的 thinking 默认值（`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`）；开时由队长逐成员选择 |
+| `activation` | 默认关闭门：`/topo` 命令（`/topo off` 停用并重新隐藏工具）或关键词提及（大小写不敏感）即激活，会话内粘性。`enabled: false` 时两种触发都无效，命令会提示已被配置禁用。旧版关键词（"agent team"/"智能体团队" 等裸词）会在加载时从生效清单中剥离——强制迁移，激活时提示一次。`guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` 三层防误触——斜杠命令不经过防护 |
+| `models` | 成员模型池。`autonomousSelection` 关（默认）时所有成员强制使用对话当前模型（预设/显式 `model` 忽略）；开时解析链为显式 `model` → 预设 → 对话当前模型（显式模型不在列表则报错并列出可用模型，预设模型不在列表则回退 `available[0]`）。`autonomousThinking` 关时 effort 解析链为：显式参数 → `presets.effort` 配置覆盖 → 预设 frontmatter `effort` → `high`；开时由队长逐成员选择（所有预设 effort 不生效） |
 | `members` | `max` 只计**存活**成员（dead 记录可恢复但不占名额）。`maxRecursionDepth`：1 = 成员不能组建团队（其会话中扩展完全惰性）；2+ 授予子队长独立团队（独立注册表与 socket），上限 4 |
 | `dispatch` | `maxConcurrent` 在**进程启动前**门控（排队启动）；oneshot 共享同一预算；嵌套成员间接力绕过全局门以避免链式死锁 |
 | `oneshot` | 无状态 `mode: "oneshot"` 派发超时 |
 | `cost` | 团队级累计花费告警；0 禁用 |
 | `idle` | 空闲成员被回收（session 保留可恢复）；运行中成员永不回收 |
 | `storage` | 团队数据根目录（注册表、sessions、prompts、socket）；null = `<agentDir>/teams` |
-| `topology` | 成员间消息默认拒绝，除非声明的边允许。`requireDeclaration` 落实「先设计再开工」。`maxLoopCount` 约束链长（队长派发 = 0，每转发 +1）；超限跳被拒且发送方转报队长——同时防止环形巡游死锁 |
-| `plan` | 团队方案选单（默认关）：激活时队长给出经济/快速/均衡/性能四档 + 自定义流程（规模 → 拓扑 → 思考强度）；`defaultTier` 兜底选单超时与 headless/RPC。档位固定角色组合、思考强度、成员名与拓扑——派发并发/超时维持全局配置 |
+| `topology` | 成员间消息默认拒绝，除非声明的边允许。`requireDeclaration` 落实「先设计再开工」。`maxLoopCount` 约束链长（队长派发 = 0，每转发 +1）；超限跳被拒且发送方转报队长——同时防止环形巡游死锁。指向只读角色（无 `bash`）的边**不可用，退化为队长中转**——依赖请用任务板 `blockedBy` 表达 |
+| `plan` | 团队方案选单（默认关）：激活时队长给出经济/快速/均衡/性能四种*策略* + 自定义流程（规模 → 拓扑 → effort）。档位是带非绑定示例的策略提示词——成员、角色、拓扑与 effort 由模型按任务决定。`tier = "always ask"`（默认）每次弹选单；固定档位在每次激活（命令与关键词路径）直接应用；`/topo <档位名>` 可按次覆盖。选单超时/headless 回退 `balanced`；选项按语言本地化；无成本倍率 |
+| `presets.effort` | 按角色覆盖 effort（内置角色名已列出；自定义角色在自己的 frontmatter 写 `effort`）。解析链：显式 `thinking` 参数 → 本配置 → 预设 frontmatter → `high`。`models.autonomousThinking` 开启时不生效。自定义角色从 `<agentDir>/agents/` 与 `<project>/.stepcode/agents/` 加载——见 [docs/ROLES.md](docs/ROLES_CN.md) |
 | `debug` | stderr 诊断日志 |
 
 拓扑形状（建成员后、派活前用 `team_set_topology` 声明）：

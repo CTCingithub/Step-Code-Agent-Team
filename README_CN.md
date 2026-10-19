@@ -82,7 +82,7 @@ step install npm:step-code-agent-team                               # 发布到 
 1. **斜杠命令 `/topo`**：调用即激活，并展示团队板；
 2. **自然语言**：prompt 文本命中激活关键词（清单见下，可配置）。
 
-激活后在本次会话内保持。**`/topo off`** 可再次停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复）。**迁移说明：** `/agent-team` 为 deprecated 别名，保留至 0.3.0——行为相同，仅多一条弃用提示。
+激活后在本次会话内保持。**`/topo off`** 可再次停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复）。**迁移说明：** `/agent-team` 别名已在 0.2.0 移除——`/topo` 是唯一命令。旧版激活关键词（"agent team" / "智能体团队" / "组队" 等裸词）会在加载时从生效清单中剥离，避免遮蔽未来官方的智能体团队功能；被剥离的词会在激活时提示一次。用户的配置文件不会被改写。
 
 ### 激活关键词（0.2.0 默认清单）
 
@@ -109,25 +109,25 @@ step code agent team · team_create_member · team_send · team_task
 
 ## 团队方案（默认关闭）
 
-可选的预设团队。`plan.enabled = true` 时，经 `/topo` 激活会先弹选单：
+可选的团队*策略*。`plan.enabled = true` 时，经 `/topo` 激活会弹选单——或直接应用固定的策略：
 
 ```toml
 # ~/.stepcode/config.toml（或 <项目>/.stepcode/config.toml）
 [stepcodeAgentTeam.plan]
 enabled = false
-defaultTier = "balanced"
+tier = "always ask"   # always ask | economic | fast | balanced | performance
 ```
 
-| 档位 | 成员（角色 × 数量 · 思考强度） | 拓扑 | 规模 | 约成本 | 适用 |
-|---|---|---|---|---|---|
-| 经济 economy | scout×1（low）+ worker×1（medium） | pipeline | 2 | ~0.3× | 只读调研、小改动 |
-| 快速 fast | worker×2（low） | star | 2 | ~0.5× | 格式化、批量小改 |
-| 均衡 balanced *（默认）* | scout×1（low）+ planner×1（medium）+ worker×2（medium）+ reviewer×1（medium） | star | 5 | ~1.0× | 常规功能开发 |
-| 性能 performance | scout×1（medium）+ planner×1（high）+ worker×3（high）+ reviewer×2（xhigh） | custom（菱形） | 7 | ~2.2× | 大规模重构、深度审查 |
+| 策略 | 说明 |
+|---|---|
+| 经济 Economic | 成本最低：少成员、低 effort，省去不必要的环节 |
+| 快速 Fast | 耗时最短：立即并行开工 |
+| 均衡 Balanced *（未选择时的回退）* | 在成本与质量间平衡，覆盖勘察、规划、执行、审查 |
+| 性能 Performance | 质量最高、不计成本：多成员、高 effort 深度协作 |
 
-选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → 思考强度），自由文字需求随请求一并携带。档位由队长通过常规团队工具落地：固定角色组合、思考强度、成员名（`scout1`、`planner1`、`worker1`……）与拓扑；派发并发/超时维持全局配置。
+档位是**策略提示词，而非固定阵容**：指令说明策略并给出非绑定示例（如"1 名 scout + 1 名 worker，effort 取 low/medium，拓扑用 star"），具体成员、角色、拓扑与 effort 由队长模型按任务实际需要决定。选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → effort），自由文字需求随请求一并携带。
 
-选单行为：30 秒超时回退 `defaultTier`；headless/RPC 激活跳过选单直接应用 `defaultTier`；`/topo <档位名>`（如 `/topo performance`）不弹选单直接应用。成本倍率为相对单轮会话的预估值。
+选单行为：选项按语言本地化（英文请求显示 Economic/Fast/Balanced/Performance）；30 秒超时回退 `balanced` 策略；headless/RPC 激活跳过选单直接应用。`plan.tier` 固定为某一策略时，每次激活（`/topo` 或关键词命中）都直接应用、不再询问；`/topo <档位名>` 仍可按次覆盖。
 
 ## 工具
 
@@ -139,11 +139,13 @@ defaultTier = "balanced"
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
 | `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
-| `/topo` | 命令：激活插件并查看团队板。`/topo off` 停用并重新隐藏团队工具；`/topo <档位>`（economy/fast/balanced/performance/custom）应用团队方案（见「团队方案」）；命令后的文本**逐字转发**给 agent——「使用团队」指令经 context 事件 request-local 注入，不写入会话文件。deprecated 别名 `/agent-team`（行为相同，0.3.0 移除） |
+| `/topo` | 命令：激活插件并查看团队板。`/topo off` 停用并重新隐藏团队工具；`/topo <档位>`（economic/fast/balanced/performance/custom）应用团队策略（见「团队方案」）；命令后的文本**逐字转发**给 agent——「使用团队」指令经 context 事件 request-local 注入，不写入会话文件 |
 
 ## 成员通信拓扑
 
 除非拓扑允许，成员之间的直达消息会被**拒绝**。队长在创建成员后、派活前，用 `team_set_topology` 按任务结构设计拓扑；默认为星型——全部经由队长中转。
+
+> **只读角色与拓扑边：** 只读预设（scout/planner/reviewer，以及任何不含 `bash` 的自定义角色）无法运行消息 shim，指向它们的拓扑边**不可用，退化为队长中转**。依赖关系请用任务板的 `blockedBy` 表达；具备 bash 的成员（如 worker）之间的边按声明生效。
 
 | 形状 | 边 | 适用 |
 |---|---|---|
@@ -202,7 +204,7 @@ flowchart LR
 
 强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居，成员可执行 `stepcode-team status` 查询。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。
 
-## 内置角色预设（`agents/`）
+## 角色预设（`agents/` + 自定义角色）
 
 | 预设 | 工具 | 用途 |
 |---|---|---|
@@ -211,9 +213,15 @@ flowchart LR
 | `worker` | 全量 | 执行计划、运行检查 |
 | `reviewer` | 只读 | 对抗式审查（正确性 / 风格 / 安全） |
 
-预设 thinking 默认值：`scout`=low、`planner`=medium、`worker`=medium、
-`reviewer`=high。`team_create_member` 显式传 `thinking` 仍优先；无预设的成员
-回退 `high`。
+预设 effort 默认值：`scout`=low、`planner`=medium、`worker`=medium、
+`reviewer`=high。解析顺序：`team_create_member` 显式 `thinking` 参数 →
+`[stepcodeAgentTeam.presets.effort]` 配置覆盖（仅内置角色名）→ 预设
+frontmatter `effort` → `high`。`models.autonomousThinking = true` 时由队长
+逐成员选择 effort，所有预设 effort 一律不生效。
+
+你可以添加自己的角色——把相同 frontmatter 格式的 Markdown 文件放入
+`<agentDir>/agents/` 或 `<project>/.stepcode/agents/`（项目需信任），按角色名
+覆盖内置预设：见 [docs/ROLES.md](docs/ROLES_CN.md)。
 
 另附 `prompts/team-review.md`（并行多审查员链）与
 `skills/team-orchestration/SKILL.md`（何时以及如何组队）。
@@ -274,6 +282,16 @@ defaultRole = "worker"
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5
+
+[stepcodeAgentTeam.plan]
+enabled = false
+tier = "always ask"
+
+[stepcodeAgentTeam.presets.effort]
+scout = "low"
+planner = "medium"
+worker = "medium"
+reviewer = "high"
 ```
 
 完整参考（全部配置节、语义与拓扑形状）：[docs/CONFIGURATION_CN.md](docs/CONFIGURATION_CN.md)。
@@ -304,6 +322,7 @@ LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，�
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE_CN.md) | 组件、数据流、存储布局、护栏位置 |
 | [docs/PROTOCOL.md](docs/PROTOCOL_CN.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md) | 配置参考 |
+| [docs/ROLES.md](docs/ROLES_CN.md) | 自定义角色：目录、frontmatter 格式、effort 规则 |
 | [docs/TESTING.md](docs/TESTING_CN.md) | 四层测试的运行方法 |
 
 ## 已知限制

@@ -11,7 +11,7 @@
 │
 ├── extensions/index.ts      入口：加载配置 → 深度门 → 注册 6 个工具 →
 │                            setUnavailableTools 关门（默认关闭）；
-│                            激活触发：/topo 命令（deprecated 别名 /agent-team）、input 钩子、before_agent_start 钩子、
+│                            激活触发：/topo 命令、input 钩子、before_agent_start 钩子、
 │                            STEPCODE_TEAM_AUTOACTIVATE（子队长授予）
 ├── extensions/config.ts     配置：统一配置 config.toml 的 [stepcodeAgentTeam] 表（默认值 < 全局 < 项目级 < 环境变量覆盖）；校验、缓存与首次激活种子化
 ├── extensions/activation.ts 激活门：关键词/命令检测、工具释放
@@ -22,11 +22,11 @@
 ├── extensions/team-server.ts Unix socket 服务：拓扑强制 + status(mayMessage)
 ├── extensions/topology.ts   五形状拓扑构造/校验/解析
 ├── extensions/registry.ts   团队状态持久化（原子写、storage.dir、旧版兼容）
-├── extensions/presets.ts    agents/*.md 预设加载、扩展入口路径、shim 路径
+├── extensions/presets.ts    预设加载（内置 + 用户/项目 agents/ 目录）、扩展入口路径、shim 路径
 ├── extensions/render.ts     TUI 渲染（renderCall / renderResult）
 │
 ├── bin/stepcode-team.mjs    成员侧 CLI shim（msg / status，携带发送方身份）
-└── agents/                  角色预设（scout · planner · worker · reviewer）
+└── agents/                  内置角色预设（scout · planner · worker · reviewer；自定义角色：<agentDir>/agents/、<project>/.stepcode/agents/）
 ```
 
 成员是独立的 `step --mode rpc` 子进程，不加载本扩展（除非被授予子团队，见 §4），

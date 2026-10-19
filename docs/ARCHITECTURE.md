@@ -11,7 +11,7 @@ Leader session (step, loads this extension)
 │
 ├── extensions/index.ts      entry: load config → depth gate → register 6 tools →
 │                            setUnavailableTools closes the gate (off by default);
-│                            activation triggers: /topo command (deprecated alias /agent-team), input hook, before_agent_start hook,
+│                            activation triggers: /topo command, input hook, before_agent_start hook,
 │                            STEPCODE_TEAM_AUTOACTIVATE (sub-leader grant)
 ├── extensions/config.ts     config: the [stepcodeAgentTeam] table of the unified config.toml (defaults < global < project < environment overrides); validation, caching, and first-activation seeding
 ├── extensions/activation.ts activation gate: keyword/command detection, tool release
@@ -22,11 +22,11 @@ Leader session (step, loads this extension)
 ├── extensions/team-server.ts Unix socket server: topology enforcement + status(mayMessage)
 ├── extensions/topology.ts   five-shape topology construction/validation/parsing
 ├── extensions/registry.ts   team state persistence (atomic write, storage.dir, legacy compatibility)
-├── extensions/presets.ts    agents/*.md preset loading, extension entry path, shim path
+├── extensions/presets.ts    preset loading (bundled + user/project agents/ dirs), extension entry path, shim path
 ├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │
 ├── bin/stepcode-team.mjs    member-side CLI shim (msg / status, carries sender identity)
-└── agents/                  role presets (scout · planner · worker · reviewer)
+└── agents/                  bundled role presets (scout · planner · worker · reviewer; custom roles: <agentDir>/agents/, <project>/.stepcode/agents/)
 ```
 
 Members are independent `step --mode rpc` subprocesses that do not load this extension (unless granted a sub-team, see §4),

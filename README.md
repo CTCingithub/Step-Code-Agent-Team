@@ -90,8 +90,12 @@ the model, and no server, timer, or member process exists. It activates when:
 
 Once activated it stays on for the session. **`/topo off`** turns it off again
 and re-hides the team tools — the escape hatch for a misfired activation
-(member sessions stay resumable). **Migration:** `/agent-team` is a deprecated
-alias kept until 0.3.0 — same behavior, plus a deprecation notice.
+(member sessions stay resumable). **Migration:** the `/agent-team` alias was
+removed in 0.2.0 — `/topo` is the only command. Deprecated activation keywords
+(the old "agent team" / "智能体团队" / "组队" style terms) are stripped from the
+effective keyword list on load, so a future official agent-teams feature is
+never shadowed; the stripped terms are reported once on activation. Your
+config file is never rewritten.
 
 ### Activation keywords (0.2.0 defaults)
 
@@ -127,34 +131,36 @@ All three default to `true`.
 
 ## Team plans (default off)
 
-Opt-in preset teams. With `plan.enabled = true`, activating via `/topo` first
-shows a picker:
+Opt-in team *strategies*. With `plan.enabled = true`, activating via `/topo`
+offers a picker — or applies a pinned strategy directly:
 
 ```toml
 # ~/.stepcode/config.toml (or <project>/.stepcode/config.toml)
 [stepcodeAgentTeam.plan]
 enabled = false
-defaultTier = "balanced"
+tier = "always ask"   # always ask | economic | fast | balanced | performance
 ```
 
-| Tier | Members (role × count · thinking) | Topology | Size | ≈ Cost | Best for |
-|---|---|---|---|---|---|
-| Economy | scout×1 (low) + worker×1 (medium) | pipeline | 2 | ~0.3× | Read-only research, small edits |
-| Fast | worker×2 (low) | star | 2 | ~0.5× | Formatting, batch small edits |
-| Balanced *(default)* | scout×1 (low) + planner×1 (medium) + worker×2 (medium) + reviewer×1 (medium) | star | 5 | ~1.0× | Regular development |
-| Performance | scout×1 (medium) + planner×1 (high) + worker×3 (high) + reviewer×2 (xhigh) | custom (diamond) | 7 | ~2.2× | Large refactors, deep review |
+| Strategy | Statement |
+|---|---|
+| Economic | Lowest cost: few members, low effort, skip unnecessary stages |
+| Fast | Shortest wall time: start in parallel immediately |
+| Balanced *(fallback when no choice is made)* | Balance cost and quality across exploration, planning, execution, and review |
+| Performance | Highest quality regardless of cost: many members, high effort |
 
-The picker's fifth entry — **custom requirements** — runs a short guided flow
-(team size → topology → thinking level) and carries your free-text
-requirements along with the request. A tier is applied by the leader through
-the regular team tools: it fixes the role mix, thinking levels, member names
-(`scout1`, `planner1`, `worker1`, …) and topology; dispatch limits stay
-global.
+A tier is a **strategy prompt, not a fixed roster**: the instruction states the
+strategy and offers a non-binding example (e.g. "1 scout + 1 worker, effort
+low/medium, star topology"), and the leader model decides the actual members,
+roles, topology, and effort from the task. The picker's fifth entry —
+**custom requirements** — runs a short guided flow (team size → topology →
+effort) and carries your free-text requirements along with the request.
 
-Picker behavior: a 30s timeout falls back to `defaultTier`; headless/RPC
-activations skip the picker and apply `defaultTier` directly; `/topo <tier>`
-(e.g. `/topo performance`) applies a tier without the picker. Cost multipliers
-are estimates relative to a single session turn.
+Picker behavior: options are localized (an English request sees
+Economic/Fast/Balanced/Performance); a 30s timeout falls back to the
+`balanced` strategy; headless/RPC activations skip the picker and apply it
+directly. With `plan.tier` pinned to a strategy, every activation — `/topo`
+or a keyword hit — applies it without asking; `/topo <tier>` still overrides
+per invocation.
 
 ## Tools
 
@@ -166,11 +172,17 @@ are estimates relative to a single session turn.
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
 | `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
-| `/topo` | Command: activate the plugin and show the team board. `/topo off` deactivates and re-hides the team tools; `/topo <tier>` (economy/fast/balanced/performance/custom) applies a team plan (see Team plans); text after the command is forwarded to the agent **verbatim** — the "use the team" instruction is injected request-locally through a context event and never written to the session file. Deprecated alias `/agent-team` (same behavior, removed in 0.3.0) |
+| `/topo` | Command: activate the plugin and show the team board. `/topo off` deactivates and re-hides the team tools; `/topo <tier>` (economic/fast/balanced/performance/custom) applies a team strategy (see Team plans); text after the command is forwarded to the agent **verbatim** — the "use the team" instruction is injected request-locally through a context event and never written to the session file |
 
 ## Member communication topology
 
 Direct member-to-member messaging is **denied unless the topology allows it**. The leader designs the topology that fits the task with `team_set_topology` after creating members and before dispatching work; the default is a star, where everything routes through the leader.
+
+> **Read-only roles and topology edges:** the read-only presets
+> (scout/planner/reviewer, and any custom role without `bash`) cannot run the
+> messaging shim, so topology edges touching them are **unusable and degrade
+> to leader relay**. Express dependencies with the task board's `blockedBy`
+> instead; edges among bash-capable members (e.g. workers) work as declared.
 
 | Shape | Edges | Fits |
 |---|---|---|
@@ -229,7 +241,7 @@ flowchart LR
 
 Enforcement lives in the team server: every message carries its sender (injected at spawn time) and is checked against the declared edges; violations are rejected with the sender's allowed neighbors, which members can query with `stepcode-team status`. In a ring, each forwarded message extends the sender's chain by one hop; a hop that would exceed `topology.maxLoopCount` (default 2, 0 = unlimited) is rejected and the sender is told to report to the leader instead — which also prevents ring-circulation deadlocks. Set `topology.requireDeclaration: true` in the config to block all dispatches until the topology is explicitly declared — the literal "design before work" workflow. Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-## Bundled role presets (`agents/`)
+## Role presets (`agents/` + custom roles)
 
 | Preset | Tools | Use |
 |---|---|---|
@@ -238,9 +250,16 @@ Enforcement lives in the team server: every message carries its sender (injected
 | `worker` | full | Executes plans, runs checks |
 | `reviewer` | read-only | Adversarial review (correctness / style / security) |
 
-Preset thinking defaults: `scout`=low, `planner`=medium, `worker`=medium,
-`reviewer`=high. An explicit `thinking` argument to `team_create_member` still
-wins; a member created without a preset falls back to `high`.
+Preset effort defaults: `scout`=low, `planner`=medium, `worker`=medium,
+`reviewer`=high. Resolution order: an explicit `thinking` argument to
+`team_create_member` → the `[stepcodeAgentTeam.presets.effort]` config
+override (built-in role names) → the preset's frontmatter `effort` → `high`.
+While `models.autonomousThinking = true` the leader picks the effort per
+member and all preset efforts are inert.
+
+You can add your own roles — Markdown files with the same frontmatter format
+in `<agentDir>/agents/` or `<project>/.stepcode/agents/` (trusted projects),
+overriding bundled presets by name: see [docs/ROLES.md](docs/ROLES.md).
 
 Also included: `prompts/team-review.md` (parallel multi-reviewer chain) and
 `skills/team-orchestration/SKILL.md` (when and how to form a team).
@@ -305,6 +324,16 @@ defaultRole = "worker"
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5
+
+[stepcodeAgentTeam.plan]
+enabled = false
+tier = "always ask"
+
+[stepcodeAgentTeam.presets.effort]
+scout = "low"
+planner = "medium"
+worker = "medium"
+reviewer = "high"
 ```
 
 Full reference (all sections, semantics, and topology shapes): [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
@@ -354,6 +383,7 @@ need a test key; see [docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, storage layout, guardrail map |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Member RPC protocol, socket protocol, registry schema, tool contracts |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Config reference |
+| [docs/ROLES.md](docs/ROLES.md) | Custom roles: directories, frontmatter format, effort rules |
 | [docs/TESTING.md](docs/TESTING.md) | How to run the four test layers |
 
 ## Known limitations
