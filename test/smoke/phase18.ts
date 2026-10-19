@@ -20,6 +20,7 @@ import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import {
 	TeamManager,
+	augmentDispatchError,
 	memberCanMessage,
 	messagingWarnings,
 	resumeIgnoredParams,
@@ -107,6 +108,33 @@ export default function (pi: ExtensionAPI) {
 			const warns = messagingWarnings(snap.members, topo.edges);
 			check("topology: warning flags the bash-less endpoint only", warns.length === 1 && warns[0].includes('"s1"') && !warns[0].includes('"w9"'), warns.join(" | "));
 			check("topology: no edges → no warnings", messagingWarnings(snap.members, []).length === 0);
+
+			// --- 4. dispatch failure context (mid-run failures strand relays) ----
+			const roster = snap.members;
+			const rosterText = roster.map((m) => `${m.name} ${m.status}`).join(" · ");
+			const timeoutErr = augmentDispatchError(new Error("timeout waiting for member to settle"), roster, false) as Error;
+			check(
+				"dispatch error: timeout gains relay hint + roster",
+				timeoutErr.message.startsWith("timeout waiting for member to settle") &&
+					/team_status/.test(timeoutErr.message) &&
+					roster.length > 0 &&
+					timeoutErr.message.includes(rosterText),
+				timeoutErr.message,
+			);
+			check("dispatch error: original error kept as cause", (timeoutErr as Error & { cause?: unknown }).cause instanceof Error);
+			check(
+				"dispatch error: nested sender keeps terse error",
+				(augmentDispatchError(new Error("timeout waiting for member to settle"), roster, true) as Error).message ===
+					"timeout waiting for member to settle",
+			);
+			for (const msg of ["member process exited during run (code null)", "member run aborted by leader"]) {
+				const e = augmentDispatchError(new Error(msg), roster, false) as Error;
+				check(`dispatch error: mid-run failure augmented (${msg.slice(0, 26)}…)`, /team_status/.test(e.message), e.message);
+			}
+			check(
+				"dispatch error: pre-run failure untouched",
+				(augmentDispatchError(new Error("handshake timed out"), roster, false) as Error).message === "handshake timed out",
+			);
 
 			await manager.disband();
 			const failed = results.filter((r) => !r.ok).length;

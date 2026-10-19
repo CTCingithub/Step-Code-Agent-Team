@@ -147,6 +147,30 @@ export function messagingWarnings(
 	);
 }
 
+/**
+ * A leader-side dispatch that fails mid-run (timeout / member exit / abort)
+ * can strand nested member-to-member relays that the team server is still
+ * running — e.g. a ring tour whose chain outlives the dispatch timeout. The
+ * dispatched member is killed (fail-fast), but its teammates may still be
+ * working. Give the leader the recovery facts instead of a bare error: relays
+ * may still be in flight (check team_status before re-dispatching — a
+ * respawned member would duplicate the work) and who is alive right now.
+ * Nested senders keep the terse error (it reaches them through the shim).
+ */
+export function augmentDispatchError(err: unknown, members: readonly MemberRecord[], nested: boolean): unknown {
+	if (nested || !(err instanceof Error)) return err;
+	if (!/timeout waiting for member to settle|exited during run|aborted by leader/.test(err.message)) return err;
+	const roster = members.map((m) => `${m.name} ${m.status}`).join(" · ");
+	const note = [
+		err.message,
+		"(team) this dispatch failed mid-run: nested member-to-member relays it triggered may still be running server-side — check team_status before re-dispatching (the dispatched member was killed fail-fast and will respawn with its context resumed).",
+		roster ? `(team) members now: ${roster}` : "",
+	]
+		.filter(Boolean)
+		.join("\n");
+	return new Error(note, { cause: err });
+}
+
 /** Depth of this process in the team tree (the leader session is 0). */
 export function currentDepth(): number {
 	const raw = process.env.STEPCODE_TEAM_DEPTH;
@@ -640,7 +664,7 @@ export class TeamManager {
 				this.rpcs.delete(member.name);
 				await rpc.killAndWait();
 			}
-			throw err;
+			throw augmentDispatchError(err, this.reg.members, options.nested === true);
 		} finally {
 			unsubscribe();
 			// Refresh the idle clock from completion (not run start), so a member
