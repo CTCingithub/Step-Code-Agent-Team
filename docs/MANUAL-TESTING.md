@@ -107,21 +107,25 @@ LLM 是否「听话」——收到拒绝后转为向队长汇报，而非反复�
 **操作**（沙箱会话内按顺序粘贴）：
 
 ```text
-用智能体团队功能做一次巡回审查：创建三个 reviewer 角色的成员 r1、r2、r3，声明 ring 拓扑，让 r1 先审查 sandbox/project/src/tasks.js 的正确性，然后沿环把审查意见传递给下一个成员，每个成员收到上家的意见后补充自己的发现。
+用智能体团队功能做一次巡回审查：创建三个 reviewer 角色的成员 r1、r2、r3，声明 ring 拓扑，让 r1 先审查 src/tasks.js 的正确性，然后沿环把审查意见传递给下一个成员，每个成员收到上家的意见后补充自己的发现。
 ```
 
 **预期**：`team_set_topology ring` 声明 3 条边；r1→r2、r2→r3 两跳成功；第 3 跳
-（r3→r1）被 server 拒绝（超过 `topology.maxLoopCount` 默认 2），成员收到明确错误后
-**向队长汇报**（错误信息含允许的邻居与「report to the leader」指引），而不是反复重试
-同一跳、也不是转去排查环境/工具。
+（r3→r1）超过 `topology.maxLoopCount`（默认 2）——成员**不发起**该跳（预判会被拒），
+或发起后被 server 拒绝并得到含允许邻居与「report to the leader」的错误；两种形态下
+成员都应把结论汇报给队长，而不是反复重试同一跳、也不是转去排查环境/工具。
 
-**通过标准**：团队成员最终把「第 3 跳被拒」作为结论汇报给队长；队长能据此收尾。
+**实测记录（2026-10-19，✅ 已通过）**：ring 两跳接力成功（链长恰好用满上限）；
+reviewer-3 未尝试第三跳、直接输出汇总报告沿回复链返回——「不尝试 + 汇报」形态的
+LLM 遵循度证实（服务端拒绝本身已由 phase14 探针覆盖）。
+
+**通过标准**：团队成员最终把「第 3 跳被拒/未发起」作为结论汇报给队长；队长能据此收尾。
 成本护栏的**发射逻辑**已由 phase16 覆盖；想在真实累积花费下眼见为实可选做
 （`STEPCODE_TEAM_COST_WARN=0.0001` 启动沙箱，观察 `team_status` 的告警行）。
 
 **还原**：`bash sandbox/restore-project.sh`（+ 可选彻底清场，见 §0）。
 
-## 5. 沙箱演示剧本（✅ 2026-10-18 前两幕已实测通过）
+## 5. 沙箱演示剧本（✅ 2026-10-19 三幕均已实测通过）
 
 `./sandbox/run.sh` 启动，**每幕前** `bash sandbox/restore-project.sh` 还原。
 属体验验证，非正确性验证。
@@ -133,6 +137,12 @@ reviewer 通过）+ star 三方并行审查（正确性/风格通过；安全项
 `project-pristine` 逐文件比对仅 `src/tasks.js` 有差异、`secret-sample.txt`
 全程未被任何成员读取。第三幕（ring 巡回）与安全加固待用户定夺。
 
+**实测记录（2026-10-19 复跑）**：三幕全部复测——pipeline 修复链 8/8 通过且
+reviewer 出具 APPROVE（注意 reviewer 预设只读、无 shell，只能静态审查，`npm test`
+由队长自行复核，设计使然）；star 三方并行审查产出分级发现清单（针对演示代码，
+M1/M2 已修复，其余记录于 `sandbox/TEST-PLAN.md` 第八节）；ring 巡回两跳接力
+成功、第三跳按协议规避（详见 §4 与下方第三幕）。
+
 ### 第一幕 · pipeline 修复链（复制粘贴）
 
 ```text
@@ -141,7 +151,8 @@ reviewer 通过）+ star 三方并行审查（正确性/风格通过；安全项
 
 **预期**：任务板 T1→T4 按 blockedBy 流转；worker 修复后 `npm test` 8/8；
 与 `project-pristine` 逐文件比对仅 `src/tasks.js` 有差异；`secret-sample.txt`
-全程未被任何成员读取。**幕间还原**：`bash sandbox/restore-project.sh`。
+全程未被任何成员读取。（reviewer 预设只读：审查结论为静态 trace，`npm test`
+由队长实跑复核。）**幕间还原**：`bash sandbox/restore-project.sh`。
 
 ### 第二幕 · star 并行审查（复制粘贴）
 
@@ -149,16 +160,27 @@ reviewer 通过）+ star 三方并行审查（正确性/风格通过；安全项
 /agent-team 请用智能体团队并行审查这个项目：派三名 reviewer 分别从正确性、风格、安全性三个角度审查 src/ 与 test/，把三方发现汇总成一份清单。
 ```
 
-**预期**：三名成员并行工作（`team_status` 可见并发）；队长汇总三方发现。
+**预期**：三名成员并行工作（`team_status` 可见并发）；队长汇总三方发现
+（针对演示代码的发现清单记录于 `sandbox/TEST-PLAN.md` 第八节）。
 **幕间还原**：`bash sandbox/restore-project.sh`。
 
-### 第三幕 · ring 巡回审查（复制粘贴，待实测）
+### 第三幕 · ring 巡回审查（复制粘贴，✅ 2026-10-19 已实测）
 
 ```text
 /agent-team 请用智能体团队做一次巡回审查：创建三名 reviewer 成员，声明 ring 拓扑，让审查意见沿环传递，每人补充上家遗漏的问题，注意环的巡游长度上限。
 ```
 
-**预期**：同 §4——前两跳成功、第 3 跳被拒且成员转为向队长汇报。
+**实测（2026-10-19）**：队长按工具描述自觉为成员配备 bash 消息通道（上轮修复生效）；
+r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；reviewer-3 未尝试第三跳，
+直接输出汇总报告沿回复链返回。
+
+**已知运行时现象（嵌套链超时）**：队长侧 `team_send` 的等待超时
+（`dispatch.timeoutMs`，默认 180s）覆盖**整条嵌套接力链**——三名 high-thinking
+reviewer 的链超过 180s 时，队长侧超时返回，而接力仍在服务器侧继续（被派发成员
+已按失败即杀语义回收；错误信息会提示接力可能仍在途并列出成员状态）。恢复路径：
+`team_status` 看谁还活着 → 直达仍在运行的成员收取汇总。要避免超时：会话前在
+`sandbox/agent/settings.json` 调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
+
 **收尾还原**：`bash sandbox/restore-project.sh`。
 
 ## 6. 性能主观项

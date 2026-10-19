@@ -91,4 +91,34 @@
 |---|---|---|
 | 修复链 | pipeline | scout 定位种子 bug → planner 出修复方案 → worker 修复并跑 `npm test` 转绿 → reviewer 审查 diff |
 | 并行审查 | star | 三个 reviewer 分头审查正确性 / 风格 / 安全，队长汇总 |
-| 巡回审查 | ring | 成员沿环传递审查意见；观察 `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应转为向队长汇报（错误信息明确提示） |
+| 巡回审查 | ring | 成员沿环传递审查意见；观察 `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应转为向队长汇报（错误信息明确提示）。2026-10-19 实测：两跳成功、第三跳成员按预判规避未发起 |
+
+## 八、演示项目复审与修复（plan-56，2026-10-19）
+
+来源：第二轮手动验证 session（`sandbox/session-log-2026-10-19.md`，已按 restore
+策略删除）的任务 2（star 三方并行审查）与任务 3（ring 巡回汇总）。复审对象为
+`sandbox/project` 演示代码（非插件本身）。
+
+**已修复（project 与 project-pristine 同步；带 bug 7/8、修复态 8/8 基线不变）**：
+
+| # | 问题 | 修复 |
+|---|---|---|
+| M1 | CLI store 调用未捕获：崩溃 + 完整堆栈、exit 1（与参数校验的 exit 2 不一致） | `src/cli.js` 增 `run(fn)` 包装四个 store 调用：`console.error(err.message)` + exit 2 |
+| M2 | `load()` 不校验 state 形状：`{}`/`[]`/`{"tasks":[]}` 通过 JSON.parse 后泄漏进 store——或 TypeError 崩溃，或 nextId=NaN 致 id 全 undefined 静默失效 | `src/tasks.js` `load()` 出口校验（tasks 为数组 + nextId 为正整数），非法回退默认状态（与不可解析文件同语义） |
+
+**有意不修（fixture 设计使然）**：
+
+- 种子 bug（`complete()` 的 `id-1` 索引）：演示靶子，restore 后必须重新存在；
+- 过期文案（测试名 `(seeded bug)`、兜底提示 `Expected demo failure`、README 已知问题 1）：描述的就是 restore 后重新成立的种子 bug；
+- M3 并发写无锁 / 非原子 save：README 已知项，单人 demo 可接受；
+- L6（parseInt 宽松）/ L3（add 非字符串崩溃）/ L8（strict === 字符串 id）/ L9（nextId 非 max+1）/ L10（remove 无返回）：API 健壮性 nit，CLI 层已有守门，demo 保持简单；
+- M5（测试顶层 rmSync 销毁真实 data/、CLI 测试打真实 DATA_FILE）：测试卫生问题，修复需为 store 注入数据目录，改动面超出 demo 定位——留待用户定夺；
+
+**成员视角误判（已核实）**：
+
+- 「项目缺 .gitignore，`data/tasks.json` 有被提交风险」：根仓库 .gitignore 已忽略 `sandbox/project/data/`——成员只见项目目录、不见仓库根，误判；
+- 「`secret-sample.txt` 被 git 跟踪属不良模式」：**有意设计**——README 明示的假密钥护栏样本，供「成员不得读取/外传密钥」验证，保持跟踪；
+
+**建议后续（可选，未实施）**：H1 区分 ENOENT 与损坏 JSON（损坏时显式报错而非静默重置）；title 控制字符/换行净化（防 list 输出注入）；测试数据目录隔离（M5）。
+
+**验证**：修复态 `npm test` 8/8；M1 复现路径（`add ""` / `done 99`）均为干净 exit 2；M2 复现路径（`{}` / `{"tasks":[]}`）均回退为空列表；restore 后 7/8 基线（种子失败）不变；project 与 project-pristine 逐文件一致。

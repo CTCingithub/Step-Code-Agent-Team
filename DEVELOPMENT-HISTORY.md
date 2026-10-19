@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-55，手动验证日志问题修复 + 测试流程增强 + 沙箱清理；此前为 plan-54）。
+> 最近更新：2026-10-19（plan-56，第二轮手动验证日志处理：嵌套链超时提示 + 演示项目修复 + 实测记录 + 沙箱收尾；此前为 plan-55）。
 
 ## 总览
 
@@ -27,6 +27,7 @@
 | 18 | 罗列剩余人工测试项 + 文档收尾 | plan-42 | 答复人工测试清单（6 项不可约项：TUI 观感/真实安装/信任弹窗 UX/LLM 行为遵循度/演示剧本/性能主观）；DEVELOPMENT-HISTORY 与 HANDOFF 刷新供新 session 接手 | — |
 | 19 | 测试流程文档可执行化（复制粘贴 prompt + 沙箱还原命令） | plan-54 | TUI-VERIFICATION 重写为 11 步可复制粘贴清单（预期与 render.ts 实际渲染对齐）；MANUAL-TESTING 每项补可执行步骤 + 新增 §0 沙箱还原通用节；TESTING §0 补沙箱运行时状态与清场命令 | 修正 `team_set_topology` 命名形状的 renderCall 不含边数、`step remove` 须用安装源两处文档与实现不符 |
 | 20 | 修复手动验证日志发现的三个问题 + 测试流程增强 + 沙箱清理 | plan-55 | `members.max` 改计存活成员（解散释放名额）；create_member 恢复列明被忽略参数；set_topology/create_member 对无 bash 成员警告；phase18 探针先红后绿；restore-project.sh 增删 session-log；沙箱运行时状态清理对齐远端；README/PROTOCOL/ARCHITECTURE/SKILL 等同步 | phase18 探针流程一度在 cap 检查后建 scout 被旧语义拦截（修探针：先整队解散） |
+| 21 | 第二轮手动验证日志处理：嵌套链超时提示 + 演示项目修复 + 实测记录 + 沙箱收尾 | plan-56 | members.ts 新增 augmentDispatchError（mid-run 失败提示接力在途+成员名册，phase18 加 6 项断言先红后绿）；演示项目 M1（CLI 干净 exit 2）/M2（load 形状校验）修复并同步 pristine；MANUAL-TESTING/PROTOCOL/TESTING/TEST-PLAN 记录 ring 实测与嵌套链超时指引；沙箱 restore+清理 | 无产品缺陷回归；演示项目其余发现按 fixture 设计有意不修（TEST-PLAN 八） |
 
 ## 明细
 
@@ -204,3 +205,13 @@
 **工作**：① 修复（`extensions/members.ts`）：`members.max` 改计**存活**成员（dead 记录可恢复但不占名额，错误文案同步改 "live members"）；导出 `memberCanMessage` / `resumeIgnoredParams` / `messagingWarnings` 三个 helper。② 修复（`extensions/tools.ts`）：`team_create_member` 恢复分支追加「参数已忽略，需解散重建」提示，无 bash 成员追加消息通道不可用提示；`team_set_topology` 对 bash-less 边端点追加警告；两个工具描述同步。③ `test/smoke/phase18.ts`（零 token，hermetic 临时 agentDir 暂存 `members.max=2`，13 项断言：名额释放/恢复参数列明/消息能力/拓扑警告）——先红（cap 两项 + helper 未实现）后绿；runner 默认列表加 18。④ `sandbox/restore-project.sh` 增删 `session-log-*.md`（头注释与回显同步）；`.gitignore` 增补该模式；`docs/TUI-VERIFICATION.md` §3 改为「收尾：会话日志（可选）与沙箱还原」并给复制粘贴 prompt；MANUAL-TESTING §0 / TESTING §0 状态表增日志行；sandbox/README 内容表同步。⑤ 沙箱清理：删会话日志、restore 复位演示项目（种子 bug 复位 7/8 实测）、清除 gitignored 运行时状态（`sandbox/agent/` 12M、config.toml、models-store.json、各 `cfg-*/sessions|teams|live-context`；保留 auth.json 凭证）——本地 sandbox/ 结构与远端一致。⑥ 文档同步：README 中英（消息 bash 前提/护栏存活成员/配置表）、ARCHITECTURE（数据流注 + 护栏表两行）、PROTOCOL（两工具契约）、CONFIGURATION（max 注释）、TESTING（phase18 行）、SKILL（msg bash 澄清）、HANDOFF（members.ts 两处）。
 
 **验证**：phase18 先红（cap 两项按预期失败 + helper 未实现）后绿；修复后全量 `npm run smoke` 14 phase + 6 live 检查全绿（phase5 无 key SKIP）；`restore-project.sh` `bash -n` + 实跑复位验证（种子 bug 7/8）；git status 仅剩本会话预期改动；子模块钉在 b5dbed9 干净。
+
+### 21. 第二轮手动验证日志处理（plan-56）
+
+**用户 prompt**：「我又手动做了测试，日志在 @sandbox/ 中，请阅读日志，创建合理的计划，检查并优化项目」
+
+**思路**：日志（三任务：pipeline 修复链 / star 三方并行审查 / ring 巡回）复验了既有功能（8/8、APPROVE、两跳接力成功、reviewer-3 正确规避第三跳），暴露的唯一插件级问题是嵌套链超时 UX：队长侧 `team_send` 的 180s 等待覆盖整条接力链，链未完成而队长已超时返回（fail-fast 回收被派发成员），恢复靠 `team_status` + 直达存活成员。处理分三个层面：插件错误信息优化（纯函数 + 探针先红后绿）、演示项目按日志实证修 M1/M2（其余发现按 fixture 设计有意不修，成员视角误判项核实澄清）、文档记录实测与嵌套链超时指引。
+
+**工作**：① 插件（`extensions/members.ts`）：新增导出 `augmentDispatchError(err, members, nested)`——mid-run 失败（settle 超时 / run 中退出 / leader 中止）且非 nested 发送方时，错误追加「嵌套接力可能仍在服务器侧运行，先查 team_status 再重派（被派发成员已 fail-fast 回收，重派会以恢复的上下文重复干活）」+ 当前成员名册，原错误保留为 `cause`；接入 `runDispatchInner` catch。② 探针（`test/smoke/phase18.ts`）：新增 6 项断言（超时获提示+名册、cause 保留、nested 保持简洁、两类 mid-run 均增强、握手类 pre-run 错误原样）——先红（函数未实现）后绿。③ 演示项目：M1 `src/cli.js` 增 `run(fn)` 包装四个 store 调用（`console.error(err.message)` + exit 2，对齐既有参数校验路径）；M2 `src/tasks.js` `load()` 出口校验形状（tasks 为数组 + nextId 为正整数），非法回退默认状态；project 与 project-pristine 同步（pristine 保留种子 bug）。④ 文档：MANUAL-TESTING §4 补 ring 实测记录（「不尝试+汇报」形态的遵循度证实）、§5 三幕标记已实测 + 嵌套链超时现象/恢复路径/`dispatch.timeoutMs` 调优指引；PROTOCOL team_send 契约补超时覆盖嵌套链说明；TESTING phase18 行补 dispatch 失败上下文；TEST-PLAN 新增第八节（演示复审：已修 M1/M2、有意不修清单、成员视角误判核实——「缺 .gitignore」实为根仓库已忽略、「secret-sample.txt 被跟踪」系有意设计的假密钥护栏、建议后续项）。⑤ 沙箱收尾：restore + 清理运行时状态（agent/、config.toml、models-store.json、data/）对齐远端。
+
+**验证**：phase18 新断言先红后绿；修复后全量 `npm run smoke` 14 phase + 6 live 检查全绿（phase5 无 key SKIP）；演示项目修复态 `npm test` 8/8、M1 复现（`add ""`/`done 99`）干净 exit 2、M2 复现（`{}`/`{"tasks":[]}`）回退空列表、restore 后 7/8 种子失败基线不变、project 与 pristine 逐文件一致；沙箱结构与远端一致（仅多 auth.json 与子模块内容）。
