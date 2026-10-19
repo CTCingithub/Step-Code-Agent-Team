@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-56，第二轮手动验证日志处理：嵌套链超时提示 + 演示项目修复 + 实测记录 + 沙箱收尾；此前为 plan-55）。
+> 最近更新：2026-10-19（plan-57，文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查；此前为 plan-56）。
 
 ## 总览
 
@@ -28,6 +28,7 @@
 | 19 | 测试流程文档可执行化（复制粘贴 prompt + 沙箱还原命令） | plan-54 | TUI-VERIFICATION 重写为 11 步可复制粘贴清单（预期与 render.ts 实际渲染对齐）；MANUAL-TESTING 每项补可执行步骤 + 新增 §0 沙箱还原通用节；TESTING §0 补沙箱运行时状态与清场命令 | 修正 `team_set_topology` 命名形状的 renderCall 不含边数、`step remove` 须用安装源两处文档与实现不符 |
 | 20 | 修复手动验证日志发现的三个问题 + 测试流程增强 + 沙箱清理 | plan-55 | `members.max` 改计存活成员（解散释放名额）；create_member 恢复列明被忽略参数；set_topology/create_member 对无 bash 成员警告；phase18 探针先红后绿；restore-project.sh 增删 session-log；沙箱运行时状态清理对齐远端；README/PROTOCOL/ARCHITECTURE/SKILL 等同步 | phase18 探针流程一度在 cap 检查后建 scout 被旧语义拦截（修探针：先整队解散） |
 | 21 | 第二轮手动验证日志处理：嵌套链超时提示 + 演示项目修复 + 实测记录 + 沙箱收尾 | plan-56 | members.ts 新增 augmentDispatchError（mid-run 失败提示接力在途+成员名册，phase18 加 6 项断言先红后绿）；演示项目 M1（CLI 干净 exit 2）/M2（load 形状校验）修复并同步 pristine；MANUAL-TESTING/PROTOCOL/TESTING/TEST-PLAN 记录 ring 实测与嵌套链超时指引；沙箱 restore+清理 | 无产品缺陷回归；演示项目其余发现按 fixture 设计有意不修（TEST-PLAN 八） |
+| 22 | 文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查 | plan-57 | 10 对中英双语文档（README + 7 docs + sandbox README/TEST-PLAN，5 个并行 subagent 翻译，术语对齐 README）；HANDOFF.md 取消跟踪 + .gitignore（本地保留）；DEVELOPMENT-HISTORY 迁入 docs/（仍仅中文）；全面检查（链接 73/73、配对 10/10、导出物无 HANDOFF、smoke 全绿）；MANUAL-TESTING 两语言新增状态总览 | 无 |
 
 ## 明细
 
@@ -215,3 +216,13 @@
 **工作**：① 插件（`extensions/members.ts`）：新增导出 `augmentDispatchError(err, members, nested)`——mid-run 失败（settle 超时 / run 中退出 / leader 中止）且非 nested 发送方时，错误追加「嵌套接力可能仍在服务器侧运行，先查 team_status 再重派（被派发成员已 fail-fast 回收，重派会以恢复的上下文重复干活）」+ 当前成员名册，原错误保留为 `cause`；接入 `runDispatchInner` catch。② 探针（`test/smoke/phase18.ts`）：新增 6 项断言（超时获提示+名册、cause 保留、nested 保持简洁、两类 mid-run 均增强、握手类 pre-run 错误原样）——先红（函数未实现）后绿。③ 演示项目：M1 `src/cli.js` 增 `run(fn)` 包装四个 store 调用（`console.error(err.message)` + exit 2，对齐既有参数校验路径）；M2 `src/tasks.js` `load()` 出口校验形状（tasks 为数组 + nextId 为正整数），非法回退默认状态；project 与 project-pristine 同步（pristine 保留种子 bug）。④ 文档：MANUAL-TESTING §4 补 ring 实测记录（「不尝试+汇报」形态的遵循度证实）、§5 三幕标记已实测 + 嵌套链超时现象/恢复路径/`dispatch.timeoutMs` 调优指引；PROTOCOL team_send 契约补超时覆盖嵌套链说明；TESTING phase18 行补 dispatch 失败上下文；TEST-PLAN 新增第八节（演示复审：已修 M1/M2、有意不修清单、成员视角误判核实——「缺 .gitignore」实为根仓库已忽略、「secret-sample.txt 被跟踪」系有意设计的假密钥护栏、建议后续项）。⑤ 沙箱收尾：restore + 清理运行时状态（agent/、config.toml、models-store.json、data/）对齐远端。
 
 **验证**：phase18 新断言先红后绿；修复后全量 `npm run smoke` 14 phase + 6 live 检查全绿（phase5 无 key SKIP）；演示项目修复态 `npm test` 8/8、M1 复现（`add ""`/`done 99`）干净 exit 2、M2 复现（`{}`/`{"tasks":[]}`）回退空列表、restore 后 7/8 种子失败基线不变、project 与 pristine 逐文件一致；沙箱结构与远端一致（仅多 auth.json 与子模块内容）。
+
+### 22. 文档双语化 + HANDOFF 移出仓库 + 历史迁入 docs + 全面复查（plan-57）
+
+**用户 prompt**：「1. 所有的文档（除了开发历史和HANDOFF），也要像README一样，分中英文；2.HANDOFF文档不要出现在github仓库中，开发历史文档放到docs/中；3.创建合理的计划再次全面检查项目，然后告诉我还有什么内容需要我手动测试」
+
+**思路**：发布就绪性整理。结构先行（HANDOFF 移出公仓、历史迁位、中文版改名 _ZH），再并行翻译英文版，最后做一次结构变迁后的全面复查；人工测试状态随两轮手动验证结果更新为总览表。
+
+**工作**：① 结构变更：`git rm --cached HANDOFF.md` + `.gitignore` 增补（本地保留供 session 接手，不再随仓库与 git archive 导出物发布）；`DEVELOPMENT-HISTORY.md` → `docs/DEVELOPMENT-HISTORY.md`（仍仅中文，内部历程）；9 个文档 `git mv` 为 `_ZH` 中文版。② 双语化：5 个并行 subagent 翻译 9 个英文版主文件（术语表对齐 README.md 既有译法；markdown 结构/表格/代码块/UI 字符串保留；复制粘贴 prompt 译英文——插件对英文关键词 "agent team" 同样激活；文首加「简体中文 →」切换链接）；中文版补「English →」切换头 + 内部链接改写为 _ZH 目标（含 sandbox 文档的 `../docs/` 与 README_ZH 链接表）；HANDOFF 本地件 13 处路径引用同步修正。③ 全面复查：链接审计 73/73 可解析；EN/ZH 配对 10/10；`git archive HEAD` 导出物无 HANDOFF.md、含 docs/DEVELOPMENT-HISTORY.md 与全部双语文档；phase 清单/工具名/README 链接表与代码一致；package.json files 清单无需改动；ARCHITECTURE 两语言护栏表补「派发失败上下文」行（plan-56 的 augmentDispatchError 此前未入表）；全量 `npm run smoke` 14 phase + 6 live 检查全绿。④ 人工测试状态：MANUAL-TESTING 两语言新增「状态总览」表——TUI 观感、ring LLM 遵循度、三幕演示剧本 ✅ 2026-10-19 实测通过；真实安装、信任弹窗 UX、英文译文审阅 ⬜ 待用户；性能主观项 ➖ 可选；TUI-VERIFICATION 两语言记录用户走查渲染无问题。
+
+**验证**：链接审计 73/73、配对 10/10、导出物核验通过、全量 smoke 全绿（phase5 无 key SKIP）；提交后本地/远程 HEAD 一致；`git status` 干净（HANDOFF.md 本地保留、不被跟踪）。

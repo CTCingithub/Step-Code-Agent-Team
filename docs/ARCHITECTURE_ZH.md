@@ -84,6 +84,7 @@ shim 经 shell 调用：成员工具白名单不含 `bash` 时（如 scout/plann
 | 默认关闭激活 | activation.ts（setUnavailableTools 关门 + 激活释放） |
 | spawn 竞态互斥 | members.ts `spawning` map + `memberLocks` 串行化 |
 | 失败即杀 | members.ts runDispatch catch → killAndWait |
+| 派发失败上下文 | members.ts augmentDispatchError（mid-run 失败提示接力在途 + 成员名册） |
 | 并发上限 | members.ts acquireSlot/releaseSlot |
 | 拓扑强制 | team-server.ts handle + members.ts mayMessage |
 | 递归深度 | index.ts 深度门 + members.ts buildSpawnArgs |

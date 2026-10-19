@@ -84,6 +84,7 @@ and `team_set_topology` and `team_create_member` results warn about this; the le
 | Default-off activation | activation.ts (setUnavailableTools gate + release on activation) |
 | Spawn race mutex | members.ts `spawning` map + `memberLocks` serialization |
 | Kill on failure | members.ts runDispatch catch → killAndWait |
+| Dispatch failure context | members.ts augmentDispatchError (mid-run failures note in-flight relays + roster) |
 | Concurrency cap | members.ts acquireSlot/releaseSlot |
 | Topology enforcement | team-server.ts handle + members.ts mayMessage |
 | Recursion depth | index.ts depth gate + members.ts buildSpawnArgs |

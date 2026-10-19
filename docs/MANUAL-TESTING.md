@@ -19,6 +19,18 @@
 > checklist is in [TUI-VERIFICATION.md](TUI-VERIFICATION.md) (the content layer is
 > already asserted by phase15; only look-and-feel remains).
 
+## Status overview (2026-10-19)
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Interactive TUI look and feel | ✅ Verified 2026-10-19 (no rendering issues found) |
+| 2 | Real install (`step install` from a clean export) | ⬜ To be run by you |
+| 3 | Trust prompt interactive UX | ⬜ To be run by you |
+| 4 | LLM behavior adherence (ring) | ✅ Verified 2026-10-19 (third hop avoided + reported to the leader) |
+| 5 | Sandbox demo scripts (three acts) | ✅ Verified 2026-10-19 |
+| 6 | Performance subjective items (8 full members) | ➖ Optional, subjective |
+| — | English translation review | ⬜ Recommended (new bilingual docs this round) |
+
 ## 0. General: sandbox environment and restore
 
 All manual items run inside the sandbox (`./sandbox/run.sh`, isolated from the real
@@ -57,6 +69,10 @@ enough; there is no need to verify specific text.
 copy-paste the prompts step by step (environment setup, the 11-step prompts, and the
 closing restore are all in that document), and tick the boxes after checking the look
 and feel.
+
+**Verification record (2026-10-19, ✅ passed)**: the user completed the interactive
+walkthrough per the checklist and **found no rendering issues**; this checklist only
+needs a re-run when `render.ts` changes.
 
 ## 2. Real install writes settings (one-time, you run it)
 

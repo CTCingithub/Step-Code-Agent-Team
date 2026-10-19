@@ -14,8 +14,9 @@
 > has been manually verified in a real TUI — activation, the team board, argument
 > forwarding, a real 7-member two-topology (pipeline + star) team run, and
 > T1→T4 task board transitions all work (see the manual test records in
-> [MANUAL-TESTING.md](MANUAL-TESTING.md) §5); the unchecked look-and-feel items
-> below still need a pass one by one.
+> [MANUAL-TESTING.md](MANUAL-TESTING.md) §5); on 2026-10-19 the user completed the
+> interactive walkthrough per the checklist below and **found no rendering issues**.
+> A re-run is only needed when render.ts changes.
 
 ## 0. Environment setup (copy-paste)
 
