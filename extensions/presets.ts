@@ -19,12 +19,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { VALID_THINKING, type ThinkingLevel } from "./config.ts";
 
 export interface AgentPreset {
 	name: string;
 	description: string;
 	tools?: string[];
 	model?: string;
+	/** Default thinking level for the role (invalid values are ignored). */
+	thinking?: ThinkingLevel;
 	systemPrompt: string;
 }
 
@@ -87,6 +90,12 @@ function parseToolList(value: string | undefined): string[] | undefined {
 	return tools.length > 0 ? tools : undefined;
 }
 
+function parseThinking(value: string | undefined): ThinkingLevel | undefined {
+	if (!value) return undefined;
+	const v = value.trim().toLowerCase();
+	return (VALID_THINKING as readonly string[]).includes(v) ? (v as ThinkingLevel) : undefined;
+}
+
 let cache: AgentPreset[] | null = null;
 
 export function loadPresets(): AgentPreset[] {
@@ -115,6 +124,7 @@ export function loadPresets(): AgentPreset[] {
 			description: frontmatter.description,
 			tools: parseToolList(frontmatter.tools),
 			model: frontmatter.model,
+			thinking: parseThinking(frontmatter.thinking),
 			systemPrompt: body,
 		});
 	}

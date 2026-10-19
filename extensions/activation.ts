@@ -3,8 +3,9 @@
  *
  * The plugin is OFF by default: its tools are registered but declared
  * unavailable (pi.setUnavailableTools) so the model never sees them. It turns
- * on when the user invokes the /agent-team command or the prompt matches the
- * configured keywords, and stays on for the rest of the session.
+ * on when the user invokes the /topo command (deprecated alias:
+ * /agent-team) or the prompt matches the configured keywords, and stays on
+ * for the rest of the session.
  *
  * Tool release happens through the `pi` handle captured at init (declarations
  * belong to the extension instance that made them), so activation triggered
@@ -24,8 +25,14 @@ export const TEAM_TOOL_NAMES = [
 	"team_status",
 ] as const;
 
-/** Slash commands (without the leading slash) that activate the plugin. */
-export const ACTIVATION_COMMANDS = ["agent-team"] as const;
+/**
+ * Slash commands (without the leading slash) that activate the plugin.
+ * "topo" is the 0.2.0 name — it avoids the bare "agent team"/"智能体团队"
+ * terms a future official agent-teams feature would claim. "agent-team"
+ * stays as a deprecated alias until 0.3.0 so existing habits (and the live
+ * smoke assertions) keep working during the transition.
+ */
+export const ACTIVATION_COMMANDS = ["topo", "agent-team"] as const;
 
 let config: PluginConfig | null = null;
 let pi: ExtensionAPI | null = null;
@@ -75,13 +82,60 @@ function releaseTools(): void {
 	}
 }
 
+/** Re-hides the team tools after a deactivate (used by /topo off). */
+export function regateTools(): void {
+	if (!pi) return;
+	pi.setUnavailableTools([...TEAM_TOOL_NAMES]);
+}
+
+// --- L1 false-positive guard (0.2.0) --------------------------------------
+// A keyword hit that reads as negation, meta-discussion, or a code reference
+// is not a team request. Pure string heuristics — no model calls — applied
+// only while activation.guardEnabled is on (default). L2 (TUI confirm) and
+// L3 (headless policy) live in index.ts.
+
+const NEGATION_RE = /(不要|不用|无需|没必要|先不|暂时不|禁止|别用|别提|别去|don'?t|do not|without|no need)/i;
+const META_RE = /(什么是|是什么|如何|怎么|怎样|文档|readme|提到|what is|how to)|\bdocs?\b/i;
+const CODEISH_RE = /(`|import |require\(|=>)/;
+
+/** Index of the keyword in `lower`, or -1. ASCII keywords match on word boundaries. */
+function keywordIndex(lower: string, keyword: string): number {
+	if (/^[a-z0-9 _-]+$/.test(keyword)) {
+		const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const m = new RegExp(`\\b${escaped}\\b`).exec(lower);
+		return m ? m.index : -1;
+	}
+	return lower.indexOf(keyword);
+}
+
+/**
+ * Heuristic veto for a keyword hit at `index`: negation or meta-discussion
+ * shortly before it, a code-ish line (backticks / imports / calls), or the
+ * keyword itself quoted as a literal — the mention is a reference, not a
+ * request.
+ */
+export function keywordMentionSuppressed(text: string, index: number, keywordLength: number): boolean {
+	if (NEGATION_RE.test(text.slice(Math.max(0, index - 6), index))) return true;
+	if (META_RE.test(text.slice(Math.max(0, index - 12), index))) return true;
+	const lineStart = text.lastIndexOf("\n", index - 1) + 1;
+	const lineEnd = text.indexOf("\n", index);
+	if (CODEISH_RE.test(text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd))) return true;
+	const around = `${text[index - 1] ?? ""}${text[index + keywordLength] ?? ""}`;
+	if (/['"`]/.test(around)) return true;
+	return false;
+}
+
 /** True when the text explicitly mentions the plugin (case-insensitive). */
 export function detectKeyword(text: string): boolean {
 	if (!config || config.activation.keywords.length === 0) return false;
 	const lower = text.toLowerCase();
+	const guard = config.activation.guardEnabled !== false;
 	return config.activation.keywords.some((keyword) => {
 		const k = keyword.trim().toLowerCase();
-		return k.length > 0 && lower.includes(k);
+		if (k.length === 0) return false;
+		const idx = keywordIndex(lower, k);
+		if (idx < 0) return false;
+		return !guard || !keywordMentionSuppressed(text, idx, k.length);
 	});
 }
 

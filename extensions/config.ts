@@ -35,6 +35,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as stepCore from "@step-harness/coding-agent";
 import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
+import { PLAN_TIER_IDS } from "./plan.ts";
 
 export const CONFIG_FILE_NAME = "stepcode-agent-team.json";
 /** Legacy settings file name (Step Code's pre-config.toml convention). */
@@ -53,6 +54,30 @@ export interface ActivationConfig {
 	enabled: boolean;
 	keywords: string[];
 	notifyOnActivate: boolean;
+	/**
+	 * L1 false-positive guard: a keyword hit that reads as negation,
+	 * meta-discussion, or a code reference is not a team request. Pure
+	 * string heuristics — no model calls.
+	 */
+	guardEnabled: boolean;
+	/**
+	 * L2: in the interactive TUI, confirm before activating on a keyword
+	 * hit. Ignored in headless/RPC modes (nobody can answer the dialog).
+	 */
+	confirmBeforeActivate: boolean;
+	/**
+	 * L3: headless/RPC keyword hits activate without a dialog — scripted
+	 * runs have nobody to answer, and auto-declining would break them.
+	 */
+	headlessAutoActivate: boolean;
+}
+
+/** Team-plan picker (default off): choose a preset team tier on activation. */
+export interface PlanConfig {
+	/** Master switch; false keeps the pre-0.2.0 behavior (model self-organizes). */
+	enabled: boolean;
+	/** Tier applied when the picker times out or runs headless. */
+	defaultTier: string;
 }
 
 export interface ModelsConfig {
@@ -120,6 +145,7 @@ export interface PluginConfig {
 	idle: IdleConfig;
 	storage: StorageConfig;
 	topology: TopologyConfig;
+	plan: PlanConfig;
 	debug: boolean;
 }
 
@@ -213,6 +239,9 @@ function seedBlock(): string {
 		line(`enabled = ${d.activation.enabled}`, "master switch; false disables both triggers"),
 		line(`keywords = [${kw}]`, "the full default list; [] disables keyword activation"),
 		line(`notifyOnActivate = ${d.activation.notifyOnActivate}`, "notify on activation"),
+		line(`guardEnabled = ${d.activation.guardEnabled}`, "suppress negation / meta-discussion / code-reference keyword hits"),
+		line(`confirmBeforeActivate = ${d.activation.confirmBeforeActivate}`, "TUI: confirm before a keyword activation (headless ignores it)"),
+		line(`headlessAutoActivate = ${d.activation.headlessAutoActivate}`, "headless/RPC: activate on keyword hits without a dialog"),
 		"#",
 		"# [stepcodeAgentTeam.models]",
 		line(`available = [${models}]`, "member model pool"),
@@ -249,6 +278,10 @@ function seedBlock(): string {
 		line(`requireDeclaration = ${d.topology.requireDeclaration}`, "true = no dispatch before the topology is declared"),
 		line(`maxLoopCount = ${d.topology.maxLoopCount}`, "ring message-chain bound (0 = unlimited, 0-64)"),
 		"#",
+		"# [stepcodeAgentTeam.plan]",
+		line(`enabled = ${d.plan.enabled}`, "team-plan picker: economy/fast/balanced/performance + custom on activation"),
+		line(`defaultTier = "${d.plan.defaultTier}"`, "tier applied when the picker times out or runs headless"),
+		"#",
 		"# [stepcodeAgentTeam]",
 		line(`debug = ${d.debug}`, "diagnostic logging to stderr"),
 		"",
@@ -283,24 +316,29 @@ export function defaultConfig(): PluginConfig {
 	return {
 		activation: {
 			enabled: true,
+			// Plugin-specific keywords only: bare "agent team"/"智能体团队" style
+			// terms are deliberately excluded so a future official agent-teams
+			// feature does not collide with this plugin's activation (0.2.0).
 			keywords: [
-				"agent team",
-				"agent teams",
-				"team of agents",
-				"multi-agent team",
-				"team plugin",
+				"智能体小队",
+				"多智能体小队",
+				"组小队",
+				"stepcode 小队",
+				"topo team",
+				"topo-agent",
+				"stepcode topo",
+				"topology team",
+				"agent squad",
 				"stepcode-agent-team",
 				"step code agent team",
 				"team_create_member",
 				"team_send",
 				"team_task",
-				"智能体团队",
-				"团队插件",
-				"多智能体",
-				"多智能体协作",
-				"组队",
 			],
 			notifyOnActivate: true,
+			guardEnabled: true,
+			confirmBeforeActivate: true,
+			headlessAutoActivate: true,
 		},
 		models: {
 			available: ["step-5-preview"],
@@ -314,6 +352,7 @@ export function defaultConfig(): PluginConfig {
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
 		topology: { default: "star", requireDeclaration: false, maxLoopCount: 2 },
+		plan: { enabled: false, defaultTier: "balanced" },
 		debug: false,
 	};
 }
@@ -531,6 +570,9 @@ function validate(config: PluginConfig): string[] {
 
 	expectBoolean(asRecord(config.activation), "enabled", d.activation.enabled, warnings);
 	expectBoolean(asRecord(config.activation), "notifyOnActivate", d.activation.notifyOnActivate, warnings);
+	expectBoolean(asRecord(config.activation), "guardEnabled", d.activation.guardEnabled, warnings);
+	expectBoolean(asRecord(config.activation), "confirmBeforeActivate", d.activation.confirmBeforeActivate, warnings);
+	expectBoolean(asRecord(config.activation), "headlessAutoActivate", d.activation.headlessAutoActivate, warnings);
 	if (!isStringArray(config.activation.keywords)) {
 		config.activation.keywords = d.activation.keywords;
 		warnings.push("activation.keywords");
@@ -580,6 +622,11 @@ function validate(config: PluginConfig): string[] {
 	}
 	expectBoolean(asRecord(config.topology), "requireDeclaration", d.topology.requireDeclaration, warnings);
 	expectIntRange(asRecord(config.topology), "maxLoopCount", d.topology.maxLoopCount, 0, 64, warnings);
+	expectBoolean(asRecord(config.plan), "enabled", d.plan.enabled, warnings);
+	if (typeof config.plan.defaultTier !== "string" || !(PLAN_TIER_IDS as readonly string[]).includes(config.plan.defaultTier)) {
+		config.plan.defaultTier = d.plan.defaultTier;
+		warnings.push("plan.defaultTier");
+	}
 	expectBoolean(asRecord(config), "debug", d.debug, warnings);
 
 	return warnings;

@@ -392,7 +392,7 @@ export class TeamManager {
 			name,
 			role,
 			model: this.resolveMemberModel(name, params.model, preset, leaderModel, config),
-			thinking: this.resolveThinking(params.thinking),
+			thinking: this.resolveThinking(params.thinking, preset?.thinking),
 			tools:
 				(params.tools && params.tools.length > 0 ? [...params.tools] : undefined) ??
 				preset?.tools ??
@@ -454,14 +454,18 @@ export class TeamManager {
 
 	/**
 	 * Member thinking level: an explicit, valid level always wins; otherwise
-	 * the default (high) applies in both modes.
+	 * the role preset's declared level applies; failing both, the default
+	 * (high) is used.
 	 */
-	private resolveThinking(requested: string | undefined): ThinkingLevel {
+	private resolveThinking(requested: string | undefined, presetThinking?: string): ThinkingLevel {
 		if (requested) {
 			if (!(VALID_THINKING as readonly string[]).includes(requested)) {
 				throw new Error(`Invalid thinking level "${requested}". Valid levels: ${VALID_THINKING.join(", ")}.`);
 			}
 			return requested as ThinkingLevel;
+		}
+		if (presetThinking && (VALID_THINKING as readonly string[]).includes(presetThinking)) {
+			return presetThinking as ThinkingLevel;
 		}
 		return DEFAULT_MEMBER_THINKING;
 	}

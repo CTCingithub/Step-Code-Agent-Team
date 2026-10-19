@@ -63,7 +63,7 @@ export function renderTeamCall(tool: TeamToolName) {
 				const task = args.taskId ? theme.fg("warning", ` [${str(args.taskId)}]`) : "";
 				const mode = args.mode === "oneshot" ? theme.fg("dim", " (oneshot)") : "";
 				return new Text(
-					`${head}${theme.fg("accent", `→${str(args.member)}`)}${task}${mode}\n  ${theme.fg("dim", preview(args.message, 70))}`,
+					`${head}${theme.fg("accent", `→ ${str(args.member)}`)}${task}${mode}\n  ${theme.fg("dim", preview(args.message, 70))}`,
 					0,
 					0,
 				);
