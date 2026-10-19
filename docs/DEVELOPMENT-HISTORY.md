@@ -299,4 +299,4 @@
 
 **工作**：① `extensions/config.ts`：`seedBlock()` 改为从 `defaultConfig()` 生成（值不再硬写，杜绝与默认值漂移），覆盖全部 10 节/所有键；keywords 行用完整默认列表；null 默认键（`members.defaultTools`、`storage.dir`）以示例值 + "omit for null" 注释呈现。② `test/smoke/phase20.ts`：补「全节齐全」与「keywords 完整列表」断言（先红后绿）。③ 历史同步 + 全量回归 + 发布 v0.1.4（main + 附注标签 + latest 分支）。
 
-**验证**：键位差异经源码逐节核实（defaultConfig 10 节 vs 种子块 5 节 12 键）；keywords 内置默认 15 个经 config.ts 确认。修复、回归与发布结果见本轮后续提交。
+**验证**：键位差异经源码逐节核实（defaultConfig 10 节 vs 种子块 5 节 12 键）；keywords 内置默认 15 个经 config.ts 确认；phase20 补断言先红（缺 5 个节 + keywords 仅示例）后绿；全量 `npm run smoke` 17 phase + 10 检查全绿；种子块生成结果经肉眼核验（10 节齐全、keywords 完整列表、注释对齐）；发布 v0.1.4（main + 附注标签 + latest 分支）。
