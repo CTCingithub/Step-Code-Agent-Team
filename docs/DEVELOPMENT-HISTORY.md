@@ -286,4 +286,4 @@
 
 **工作**：① `extensions/forward.ts`（新增）：`wrapTeamRequest(request)`——CJK 检测选择中文/英文指令行，原请求逐字保留（`请使用智能体团队工具完成以下请求：\n<request>` / `Use the agent team tools to accomplish the following request:\n<request>`）。② `extensions/index.ts`：命令处理器转发前包裹（注释记录根因）；命令描述同步为 "forwarded to the agent as a team request"。③ `test/smoke/phase21.ts`（新增，零 token 纯函数级）：6 项断言——CJK→中文指令、ASCII→英文指令、混合文本、多行保真、结构恰为「一行指令+请求」；runner 默认列表加 21。④ `test/run-smoke.sh` live-args-forward 强化为**三级硬断言**：激活 notify（必需，修既往漏检）+ 团队板转发行（必需）+ 包裹文本入流或入会话文件（必需）；原 send_user_message/会话文件积分证据被更强断言覆盖。⑤ README 中英命令表同步。
 
-**验证**：RPC 复现（修复后）激活 1 次、包裹指令入流 2 次；phase21 绿；全量 `npm run smoke` 17 phase + 10 检查全绿；发布 v0.1.3 并移动 latest 分支后，PTY 端到端复测用户原命令——会话文件出现团队工具调用（修复前为零）。
+**验证**：RPC 复现（修复后）激活 1 次、包裹指令入流 2 次；phase21 绿；全量 `npm run smoke` 17 phase + 10 检查全绿；发布 v0.1.3 并移动 latest 分支后，PTY 端到端复测用户原命令——会话文件出现 `team_create_member` ×3（scout/worker/reviewer）、`team_set_topology`、`team_send` ×2（成员均回复），模型真正组建团队并派活（修复前同一场景为零工具调用、独自作答）。
