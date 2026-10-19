@@ -71,8 +71,8 @@ config, shared with your team, auto-installed once the project is trusted).
 From git or npm — no packaging step needed, it is a standard step package:
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team        # tracks the default branch
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.1 # or pin a tag
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest # latest release (recommended)
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.2 # or pin a version
 step install npm:step-code-agent-team                               # once published to npm
 ```
 
@@ -217,89 +217,27 @@ sandbox/       isolated dev environment (ships with the repo; runtime state giti
 
 ## Configuration
 
-All behavior lives in the plugin's `stepcodeAgentTeam` config section. Step Code
-first kept settings in `settings.json` and later moved them to the unified
-`config.toml` (`agent/settings.json` is retired there); both locations are
-honored, and the unified config is the current convention. Precedence:
-defaults < legacy files < settings.json sections < config.toml tables <
-environment overrides.
-
-| Tier | Path | Notes |
-|---|---|---|
-| Global | `[stepcodeAgentTeam]` table in `<stepRoot>/config.toml` (beside the agent dir, default `~/.stepcode`) | Legacy fallback: `stepcodeAgentTeam` section of `<agentDir>/settings.json` |
-| Project | `[stepcodeAgentTeam]` table in `<cwd>/.stepcode/config.toml` | Loaded only when the project is trusted; legacy fallback: `<cwd>/.stepcode/settings.json` |
-| Environment | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | One-off overrides; highest precedence |
-
-**How to apply changes:** add a `[stepcodeAgentTeam]` table to `config.toml`
-(unknown keys are ignored; invalid values fall back to defaults with a debug
-warning; the plugin only reads its section and never writes the file) and start
-a new session — config is read once at load. `/reload` re-reads it but also
-returns the plugin to its default-off state. Environment overrides apply to a
-single run. Legacy dedicated files (`<agentDir>/stepcode-agent-team.json`,
-`<cwd>/.stepcode/stepcode-agent-team.json`) and the `settings.json` sections are
-still honored as a fallback. Full reference:
-[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+All behavior lives in the `stepcodeAgentTeam` table of Step Code's unified
+config — globally in `<stepRoot>/config.toml` (beside the agent dir, default
+`~/.stepcode`) and, for trusted projects, in `<cwd>/.stepcode/config.toml`.
+Precedence: built-in defaults < global < project < environment overrides
+(`STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH`).
+No config file is required; on first activation the plugin appends a commented
+defaults block to your global config so the options are discoverable. Config is
+read once per session (`/reload` re-reads it, but also returns the plugin to its
+default-off state).
 
 ```toml
-# Global: <stepRoot>/config.toml · Project: <cwd>/.stepcode/config.toml
-[stepcodeAgentTeam.activation]
-enabled = true
-keywords = ["agent team", "智能体团队"]
-notifyOnActivate = true
-
-[stepcodeAgentTeam.models]
-available = ["step-5-preview"]
-autonomousSelection = false
-autonomousThinking = false
-
+# ~/.stepcode/config.toml (or <project>/.stepcode/config.toml)
 [stepcodeAgentTeam.members]
 max = 8
 defaultRole = "worker"
-# defaultTools omitted (TOML has no null) = use the preset or all tools
-maxRecursionDepth = 1
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5
-timeoutMs = 180000
-handshakeTimeoutMs = 15000
-retries = 1
-
-[stepcodeAgentTeam.oneshot]
-timeoutMs = 180000
-
-[stepcodeAgentTeam.cost]
-warnThreshold = 1
-
-[stepcodeAgentTeam.idle]
-reapAfterMs = 1800000
-reapIntervalMs = 300000
-
-[stepcodeAgentTeam.storage]
-# dir omitted = <agentDir>/teams
-
-[stepcodeAgentTeam.topology]
-default = "star"
-requireDeclaration = false
-maxLoopCount = 2
-
-[stepcodeAgentTeam]
-debug = false
 ```
 
-### Options at a glance
-
-| Section | Key options (default) | What it controls |
-|---|---|---|
-| `activation` | `enabled` (true) · `keywords` · `notifyOnActivate` (true) | Default-off gate: the `/agent-team` command or a keyword mention activates the plugin |
-| `models` | `available` (`["step-5-preview"]`) · `autonomousSelection` (false) · `autonomousThinking` (false) | Member model pool; with the autonomous switches off, members use the conversation model and `high` thinking |
-| `members` | `max` (8) · `defaultRole` (`worker`) · `defaultTools` (null) · `maxRecursionDepth` (1) | Live-member cap (dead members don't count), default role and tool allowlist, team-tree depth bound |
-| `dispatch` | `maxConcurrent` (5) · `timeoutMs` (180000) · `handshakeTimeoutMs` (15000) · `retries` (1) | Concurrency gate (queue-before-start), per-dispatch timeouts, retry count |
-| `oneshot` | `timeoutMs` (180000) | Stateless `mode: "oneshot"` dispatch timeout |
-| `cost` | `warnThreshold` (1) | Cumulative team spend warning (0 disables) |
-| `idle` | `reapAfterMs` (1800000) · `reapIntervalMs` (300000) | Idle member reaping (sessions stay resumable) |
-| `storage` | `dir` (null) | Team data root; null = `<agentDir>/teams` |
-| `topology` | `default` (`star`) · `requireDeclaration` (false) · `maxLoopCount` (2) | Default shape, design-before-work gate, ring message-chain bound (0 = unlimited) |
-| `debug` | `false` | Diagnostic logging |
+Full reference (all sections, semantics, and topology shapes): [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 Key points: with `autonomousSelection` off (default) every member runs on the
 conversation's current model; with `autonomousThinking` off (default) members

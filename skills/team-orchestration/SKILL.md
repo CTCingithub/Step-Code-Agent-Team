@@ -19,9 +19,9 @@ runs on the conversation's current model with `high` thinking. If the config
 enables autonomous selection, pick each member's model from the available list
 deliberately — cheap models for read-only scouting, stronger models for
 implementation — and set its thinking level to match the task. Configuration
-lives in the `stepcodeAgentTeam` section of settings.json (global
-`<agentDir>/settings.json`; project-level `<cwd>/.stepcode/settings.json` when
-the project is trusted).
+lives in the `stepcodeAgentTeam` table of step's unified `config.toml` (global
+`<stepRoot>/config.toml`, beside the agent dir; project-level
+`<cwd>/.stepcode/config.toml` when the project is trusted).
 
 ## Design the communication topology first
 

@@ -89,18 +89,17 @@ step install <仓库绝对路径>
 ## 3. 信任提示的交互 UX
 
 `-a`/`-na` 的语义已自动化；剩下的是交互式信任弹窗本身：首次在带有
-`.stepcode/settings.json` 的项目里启动 step 时，看一眼提示与「记住」选项即可。
+`.stepcode/config.toml` 的项目里启动 step 时，看一眼提示与「记住」选项即可。
 
 **操作**（在沙箱内制造一次「首次进入带项目配置的项目」）：
 
 ```bash
 mkdir -p sandbox/project/.stepcode
-cat > sandbox/project/.stepcode/settings.json <<'EOF'
-{
-  "stepcodeAgentTeam": {
-    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true }
-  }
-}
+cat > sandbox/project/.stepcode/config.toml <<'EOF'
+[stepcodeAgentTeam.activation]
+enabled = true
+keywords = ["agent team", "智能体团队"]
+notifyOnActivate = true
 EOF
 ./sandbox/run.sh     # 首次启动应弹信任提示；看一眼提示与「记住」选项
 ```
@@ -196,7 +195,7 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 reviewer 的链超过 180s 时，队长侧超时返回，而接力仍在服务器侧继续（被派发成员
 已按失败即杀语义回收；错误信息会提示接力可能仍在途并列出成员状态）。恢复路径：
 `team_status` 看谁还活着 → 直达仍在运行的成员收取汇总。要避免超时：会话前在
-`sandbox/agent/settings.json` 调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
+`sandbox/config.toml` 调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
 
 **收尾还原**：`bash sandbox/restore-project.sh`。
 

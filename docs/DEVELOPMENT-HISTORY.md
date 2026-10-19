@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-60，插件配置迁移至统一 config.toml（settings.json 回退）+ phase19 探针 + 双语文档；此前为 plan-59）。
+> 最近更新：2026-10-19（plan-61，@latest 安装 + 配置种子化 + 文档清理整合（v0.1.2）；此前为 plan-60）。
 
 ## 总览
 
@@ -32,6 +32,7 @@
 | 23 | 安装方式重构（检索 step/pi 打包安装文档） | plan-58 | 检索 packages.md/extensions.md + package-manager.ts 源码 + pi 上游（earendil-works/pi）：本地路径安装实为引用式零拷贝（README 原述「整目录拷贝」有误，git-archive 变通多余）；修复真 bug——pi manifest 缺 skills/prompts 声明，按「有 manifest 时仅加载声明资源类型」规则装包后静默不加载；README 中英/MANUAL-TESTING/TESTING-OPTIMIZATION-PLAN/HANDOFF 改引用式安装 + git/npm 分发；runner 新增 manifest-check 与 live-package-install 两个零 token 检查 | 无 |
 | 24 | 发布 v0.1.0（peer 依赖安装修复 + 标签 + git 安装全链路实测） | plan-59 | 用户按 README 的 git 标签方式在另一台机器安装失败（无 v0.1.0 标签）；发布前排查出隐藏阻塞——step git 安装流 clone→checkout 后跑裸 `npm install --omit=dev`，而 peerDependencies 的三个 `@step-harness/*` 未发布至公共 registry（E404），npm 自动装 peer 会失败；修复：`peerDependenciesMeta` 四 peer 标 optional + 新增 `.npmrc`（legacy-peer-deps，与 step 自身托管安装的 `--legacy-peer-deps` 一致）；附注标签 v0.1.0（cf9be95）推送；hermetic 实测全链路通过 | 无 |
 | 25 | 插件配置迁移至统一 config.toml | plan-60 | 用户另一台机器装 v0.1.0 后「找不到配置文件」——安装实际成功（packages 条目在 config.toml），但插件配置只读已退役的 `<agentDir>/settings.json`；扩展无 settings API（官方示例亦为自行读盘），`@step-harness/coding-agent` 导出 readStepConfig/CONFIG_DIR_NAME/STEP_CONFIG_FILE_NAME 且 0.1.5 实测具备；config.ts 新增统一配置层（全局 `<stepRoot>/config.toml` + 项目级 `<cwd>/.stepcode/config.toml` trust 门控，防御式查找旧版无导出则跳过）；优先级：默认 < 旧版专用文件 < settings.json < config.toml < env；phase19 探针 8 组断言先红 7 项后绿；CONFIGURATION/README/ARCHITECTURE/TESTING/HANDOFF 中英同步；全量回归 14 phase + 10 检查全绿 | 无 |
+| 26 | @latest 安装 + 配置种子化 + 文档清理整合（v0.1.2） | plan-61 | 新机器装 v0.1.1 后 config.toml 无默认配置信息；① 种子化：config.ts 新增 seedGlobalConfigExample——首次激活时全局 config.toml 无 stepcodeAgentTeam 表则追加注释默认值块（保序追加不重写——step 的 updateGlobalStepConfig 会整体 stringify 丢失用户注释；全注释默认值照常生效；幂等）；phase20 探针 10 项断言先红后绿；② @latest：step 的 splitRef 将 @latest 当普通 git ref，建随发布移动的 latest 分支（`git push origin <tag>:latest`）并纳入发布流程；README 中英安装示例改 @latest 优先；③ 文档清理整合：CONFIGURATION 中英重写（删去全部 settings.json/专用文件旧版表述，位置/优先级/TOML 示例/速览表/拓扑表/种子化说明），README 中英配置节大压缩（长示例+速览表→导语+精简片段+指针），ARCHITECTURE/TESTING/MANUAL-TESTING/SKILL/sandbox README/HANDOFF 同步 | 无 |
 
 ## 明细
 
@@ -265,3 +266,13 @@
 **工作**：① `extensions/config.ts`：新增统一配置层——经 `stepCore.readStepConfig` 读 `<stepRoot>/config.toml` 与（信任时）`<cwd>/.stepcode/config.toml` 的 `stepcodeAgentTeam` 表；`readStepConfig`/`CONFIG_DIR_NAME`/`STEP_CONFIG_FILE_NAME` 均防御式查找（旧版 step 无导出则该层静默跳过）；文件缺失/非法 TOML 静默回退（非 ENOENT 错误 debug 留痕）；接入 `applyGlobalTier` 与 `applyProjectConfig`（settings.json 之后、env 之前）。优先级（每层内）：**默认 < 旧版专用文件 < settings.json 节 < config.toml 表 < env 覆盖**——统一配置覆盖旧 settings、项目级覆盖全局、env 最高。② `test/smoke/phase19.ts`（零 token，纯函数级驱动 `loadConfig`，hermetic 临时目录）：8 组断言——全局层布尔/数字/枚举+零界应用、config.toml 覆盖 settings.json、旧 settings.json 单独仍生效、项目层信任门控（信任应用/不信任忽略）、项目统一表覆盖项目 settings.json、非法 TOML 容忍、env 仍胜出、缺失 config.toml 回退默认——先红 7 项后绿；runner 默认列表加 19。③ 文档：CONFIGURATION 中英重写位置/优先级（TOML 为主示例、settings.json 为旧版回退、TOML 无 null 的省略约定）；README 中英配置节同步（含清理替换残留）；ARCHITECTURE 中英 config.ts 行、TESTING 中英 phase19 行、HANDOFF §1 同步。
 
 **验证**：phase19 先红（7 项：未实现的新层级）后绿；修复后全量 `npm run smoke` 14 phase + 10 检查全绿（config.ts 新增 `@step-harness/coding-agent` 命名空间导入未影响 standalone 探针 15/16/17——与 tools.ts 既有的 providers 值导入先例一致）；文档安装/配置语义与 step 0.1.5 行为一致。
+
+### 26. @latest 安装 + 配置种子化 + 文档清理整合（plan-61）
+
+**用户 prompt**：「1.我需要安装的时候可以使用@latest来安装最新版本；2.请删除之前错误的旧版本设置相关内容，全部改为正确的；3.新电脑是安装，现在config.toml中没有默认配置信息，我希望可以改进；4.现在的配置信息过杂过长，请进行整理整合。」+ 新机器终端输出（`~/.stepcode/config.toml` 只有 theme/packages/mcp_import，无插件配置）。
+
+**思路**：四项请求分别定性——① `splitRef` 把 `@latest` 当普通 git ref（`installGit` 会 `git checkout <ref>`），因此建一个随发布移动的 `latest` 分支即可，`step update --extensions` 也会 reconcil 它；② 「旧版设置相关内容」= 文档中 settings.json/专用文件的配置指引（代码层的旧版回退保留并继续被 phase9/19 覆盖，但用户面向文档全部改为 config.toml）；③ 种子化必须**保序追加**——`updateGlobalStepConfig` 会经 smol-toml 整体 stringify，**丢失用户注释**，故用 ensure + 原文追加，且块全为注释（默认值照常生效）；④ 整合以「删冗余、并表格、指向 CONFIGURATION」为原则。
+
+**工作**：① `extensions/config.ts`：新增导出 `seedGlobalConfigExample(agentDirPath)`——全局 config.toml 存在且无 `stepcodeAgentTeam` 字样时追加注释默认值块（约 20 行，覆盖常用项）；缺失则经 `ensureStepConfigFile` 建文件（step 头）再追加；非 ENOENT 读取错误 debug 留痕；返回是否写入。② `extensions/index.ts`：`tryActivate` 接线（激活即种子化；探测/live 检查各有独立临时目录，无 /tmp 污染）。③ `test/smoke/phase20.ts`（零 token，纯函数级驱动）：10 项断言——既有配置追加且原内容（theme/mcp_import）保序、块全注释且解析后仍为默认、二次调用幂等（字节不变）、已有 `stepcodeAgentTeam` 表则跳过、缺失文件则创建（step 头+种子块）——先红（函数未实现）后绿；runner 默认列表加 20。④ @latest：建 `latest` 分支并在每次发布时移动（`git push origin <tag>:latest`）；README 中英安装示例改 `@latest`（推荐）+ `@vX.Y.Z`（钉住）。⑤ 文档清理整合：CONFIGURATION 中英重写（位置/优先级/完整 TOML 示例含无 null 省略约定/速览表/拓扑形状表/环境变量/说明——种子化行为入「说明」）；README 中英配置节压缩（原导语+层级表+生效段+55 行 TOML+速览表 → 一段导语+6 行精简片段+指向 CONFIGURATION 的指针）；ARCHITECTURE 中英 config.ts 行、TESTING 中英（phase20 行、phase19 行去 settings.json 表述）、MANUAL-TESTING 中英 3 处（信任 UX heredoc 改 TOML、超时调参路径改 sandbox/config.toml）、SKILL.md 配置位置、sandbox/README 中英（沙箱配置位置改 sandbox/config.toml、fixture 行注明旧版层级）、HANDOFF §1 同步。
+
+**验证**：phase20 先红后绿；全量 `npm run smoke` 16 phase + 10 检查全绿；用户面向文档旧版设置表述清零（仅存 sandbox 探针 fixture 清单的两处有意说明）；发布后 hermetic 实测 `step install git:...@latest` 全链路 + 种子化端到端（见下）。

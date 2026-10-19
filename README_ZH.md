@@ -68,8 +68,8 @@ step remove /absolute/path/to/Step-Code-Agent-Team  # 卸载（同一路径）
 从 git 或 npm 安装——无需任何打包步骤，它就是标准 step 包：
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team        # 跟踪默认分支
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.1 # 或钉住标签
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest # 最新发布版（推荐）
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.2 # 或钉住版本
 step install npm:step-code-agent-team                               # 发布到 npm 后
 ```
 
@@ -209,95 +209,25 @@ sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitigno
 
 ## 配置
 
-全部行为参数集中于插件的 `stepcodeAgentTeam` 配置节。Step Code 先将设置置于
-`settings.json`，后迁移至统一配置 `config.toml`（该版本中 `agent/settings.json`
-已退役）；两个位置都受支持，统一配置为当前惯例。优先级：内置默认 < 旧版专用文件
-< settings.json 节 < config.toml 表 < 环境变量覆盖。
-
-| 层级 | 路径 | 说明 |
-|---|---|---|
-| 全局 | `<stepRoot>/config.toml` 的 `[stepcodeAgentTeam]` 表（位于 agentDir 旁边，默认 `~/.stepcode`） | 旧版回退：`<agentDir>/settings.json` 的 `stepcodeAgentTeam` 节 |
-| 项目级 | `<cwd>/.stepcode/config.toml` 的 `[stepcodeAgentTeam]` 表 | 仅项目被信任时加载；旧版回退：`<cwd>/.stepcode/settings.json` |
-| 环境变量 | `STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` · `STEPCODE_TEAM_MAXDEPTH` | 一次性覆盖，优先级最高 |
-
-**如何修改生效**：在 `config.toml` 中添加 `[stepcodeAgentTeam]` 表（未知键忽略；
-非法值回退默认并在 debug 日志警告；插件只读取该节，绝不写入文件），然后**开启新会话**——
-配置在加载时只读一次。`/reload` 会重新读取，但插件也会随之回到默认关闭状态。环境变量
-覆盖仅对当次运行生效。旧版专用文件（`<agentDir>/stepcode-agent-team.json`、
-`<cwd>/.stepcode/stepcode-agent-team.json`）与 settings.json 节作为回退仍然有效。
-完整参考见 [docs/CONFIGURATION_ZH.md](docs/CONFIGURATION_ZH.md)。
+全部行为参数由 Step Code 统一配置中的 `stepcodeAgentTeam` 表控制——全局在
+`<stepRoot>/config.toml`（位于 agentDir 旁边，默认 `~/.stepcode`），项目级在
+`<cwd>/.stepcode/config.toml`（仅项目被信任时加载）。优先级：内置默认 < 全局 <
+项目级 < 环境变量覆盖（`STEPCODE_TEAM_DEBUG` · `STEPCODE_TEAM_COST_WARN` ·
+`STEPCODE_TEAM_MAXDEPTH`）。无需配置文件；插件首次激活时会向你的全局配置追加
+一段注释默认值块以便发现可配置项。配置在每次会话加载时只读一次（`/reload` 会
+重新读取，但插件也会随之回到默认关闭状态）。
 
 ```toml
-# 全局：<stepRoot>/config.toml · 项目级：<cwd>/.stepcode/config.toml
-[stepcodeAgentTeam.activation]
-enabled = true
-keywords = ["agent team", "智能体团队"]
-notifyOnActivate = true
-
-[stepcodeAgentTeam.models]
-available = ["step-5-preview"]
-autonomousSelection = false
-autonomousThinking = false
-
+# ~/.stepcode/config.toml（或 <项目>/.stepcode/config.toml）
 [stepcodeAgentTeam.members]
 max = 8
 defaultRole = "worker"
-# defaultTools 省略（TOML 无 null）= 用预设或全量
-maxRecursionDepth = 1
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5
-timeoutMs = 180000
-handshakeTimeoutMs = 15000
-retries = 1
-
-[stepcodeAgentTeam.oneshot]
-timeoutMs = 180000
-
-[stepcodeAgentTeam.cost]
-warnThreshold = 1
-
-[stepcodeAgentTeam.idle]
-reapAfterMs = 1800000
-reapIntervalMs = 300000
-
-[stepcodeAgentTeam.storage]
-# dir 省略 = <agentDir>/teams
-
-[stepcodeAgentTeam.topology]
-default = "star"
-requireDeclaration = false
-maxLoopCount = 2
-
-[stepcodeAgentTeam]
-debug = false
 ```
 
-### 可配置项速览
-
-| 节 | 关键选项（默认值） | 控制内容 |
-|---|---|---|
-| `activation` | `enabled`（true）· `keywords` · `notifyOnActivate`（true） | 默认关闭门：`/agent-team` 命令或关键词提及才激活 |
-| `models` | `available`（`["step-5-preview"]`）· `autonomousSelection`（false）· `autonomousThinking`（false） | 成员模型池；两个自主开关关闭时，成员用对话当前模型与 `high` 思考 |
-| `members` | `max`（8）· `defaultRole`（`worker`）· `defaultTools`（null）· `maxRecursionDepth`（1） | 存活成员上限（dead 成员不计数）、默认角色与工具白名单、团队树深度上限 |
-| `dispatch` | `maxConcurrent`（5）· `timeoutMs`（180000）· `handshakeTimeoutMs`（15000）· `retries`（1） | 并发门（排队启动）、单次派发超时、重试次数 |
-| `oneshot` | `timeoutMs`（180000） | 无状态 `mode: "oneshot"` 派发超时 |
-| `cost` | `warnThreshold`（1） | 累计花费告警（0 禁用） |
-| `idle` | `reapAfterMs`（1800000）· `reapIntervalMs`（300000） | 空闲成员回收（session 保留可恢复） |
-| `storage` | `dir`（null） | 团队数据根目录；null = `<agentDir>/teams` |
-| `topology` | `default`（`star`）· `requireDeclaration`（false）· `maxLoopCount`（2） | 默认形状、先设计再开工门、环形消息链上限（0 = 无上限） |
-| `debug` | `false` | 调试日志 |
-
-要点：`autonomousSelection` 关闭（默认）时所有成员使用对话当前模型；
-`autonomousThinking` 关闭（默认）时成员思考强度默认为 `high`。
-`members.maxRecursionDepth`（默认 1）界定团队树深度——调大后成员才能组建自己的
-子团队；`dispatch.maxConcurrent`（默认 5）限制同时运行的成员数，超出的派活排队，
-轮到且有空位时才启动成员进程。完整参考：
-[docs/CONFIGURATION.md](docs/CONFIGURATION_ZH.md)。
-
-环境变量覆盖：`STEPCODE_TEAM_DEBUG=1`（≡ `debug: true`）、
-`STEPCODE_TEAM_COST_WARN=<usd>`（≡ `cost.warnThreshold`）、
-`STEPCODE_TEAM_MAXDEPTH=<n>`（≡ `members.maxRecursionDepth`，1–4；队长按生效值注入成员进程）。
+完整参考（全部配置节、语义与拓扑形状）：[docs/CONFIGURATION_ZH.md](docs/CONFIGURATION_ZH.md)。
 `STEPCODE_TEAM_SOCK` 由队长自动注入成员进程。
 
 ## 开发

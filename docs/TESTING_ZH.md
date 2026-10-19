@@ -86,7 +86,8 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput） | 零 token（独立运行） |
 | phase17 | 孤儿进程（成员不得比队长长寿） | 零 token |
 | phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + 拓扑 bash 警告/消息能力提示 + dispatch 失败上下文（超时/中止提示接力在途与成员名册） | 零 token |
-| phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、覆盖 settings.json、非法 TOML 容忍、env 仍胜出） | 零 token |
+| phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、优先级、非法 TOML 容忍、env 仍胜出） | 零 token |
+| phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
 

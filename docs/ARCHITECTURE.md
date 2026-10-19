@@ -13,7 +13,7 @@ Leader session (step, loads this extension)
 │                            setUnavailableTools closes the gate (off by default);
 │                            activation triggers: /agent-team command, input hook, before_agent_start hook,
 │                            STEPCODE_TEAM_AUTOACTIVATE (sub-leader grant)
-├── extensions/config.ts     config: the [stepcodeAgentTeam] table of the unified config.toml (defaults < legacy files < settings.json section < config.toml table < environment overrides); settings.json stays honored as a legacy fallback; validation and caching
+├── extensions/config.ts     config: the [stepcodeAgentTeam] table of the unified config.toml (defaults < global < project < environment overrides); validation, caching, and first-activation seeding
 ├── extensions/activation.ts activation gate: keyword/command detection, tool release
 ├── extensions/tools.ts      6 LLM tools (create_member / send / task / set_topology / disband / status)
 ├── extensions/members.ts    TeamManager: member lifecycle, concurrency gate, task-board dispatch, topology methods,

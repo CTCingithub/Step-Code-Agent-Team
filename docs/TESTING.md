@@ -103,7 +103,8 @@ the regression run.
 | phase16 | Cost guardrail and output truncation unit tests (costWarning / truncateOutput) | zero token (standalone run) |
 | phase17 | Orphan processes (a member must not outlive the leader) | zero token |
 | phase18 | Slot counting (disband frees a slot) + resume argument ignored notice + topology bash warning / messaging capability notice + dispatch failure context (the timeout/abort notice relays in-flight messages and the member roster) | zero token |
-| phase19 | Unified config tiers (global/project config.toml, trust gating, precedence over settings.json, invalid-TOML tolerance, env still wins) | zero token |
+| phase19 | Unified config tiers (global/project config.toml, trust gating, precedence, invalid-TOML tolerance, env still wins) | zero token |
+| phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
 
 The LLM-path probes (phase4/10/11/12) need a test key and still live in the
 gitignored `sandbox/` (see Layer C).

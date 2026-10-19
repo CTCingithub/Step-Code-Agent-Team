@@ -104,19 +104,18 @@ a session and confirm the team tools no longer appear.
 
 The semantics of `-a`/`-na` are already automated; what remains is the interactive
 trust popup itself: when starting step for the first time in a project that has
-`.stepcode/settings.json`, glance at the prompt and the "Remember" option.
+`.stepcode/config.toml`, glance at the prompt and the "Remember" option.
 
 **Action** (inside the sandbox, produce a "first entry into a project with project
 config"):
 
 ```bash
 mkdir -p sandbox/project/.stepcode
-cat > sandbox/project/.stepcode/settings.json <<'EOF'
-{
-  "stepcodeAgentTeam": {
-    "activation": { "enabled": true, "keywords": ["agent team", "智能体团队"], "notifyOnActivate": true }
-  }
-}
+cat > sandbox/project/.stepcode/config.toml <<'EOF'
+[stepcodeAgentTeam.activation]
+enabled = true
+keywords = ["agent team", "智能体团队"]
+notifyOnActivate = true
 EOF
 ./sandbox/run.sh     # first start should pop the trust prompt; glance at the prompt and the "Remember" option
 ```
@@ -234,7 +233,7 @@ returns while the relay continues on the server side (the dispatched members are
 per the kill-on-failure semantics; the error message indicates the relay may still be
 in flight and lists member status). Recovery path: use `team_status` to see who is
 still alive → reach the still-running members directly to collect the summary. To
-avoid the timeout: raise `dispatch.timeoutMs` in `sandbox/agent/settings.json` before
+avoid the timeout: raise `dispatch.timeoutMs` in `sandbox/config.toml` before
 the session (config is read only once at session startup).
 
 **Closing restore**: `bash sandbox/restore-project.sh`.

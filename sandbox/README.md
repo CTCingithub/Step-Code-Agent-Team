@@ -27,7 +27,7 @@ agent team.
 | `project/` | Demo project: zero-dependency Node.js task manager (`npm test`) |
 | `project-pristine/` | Initial snapshot of the demo project (the source for restore; do not modify) |
 | `smoke-phase4/10/11/12.ts` | LLM-layer regression probes (need a key; see docs/TESTING.md for how to run) |
-| `cfg-*/settings.json` | Config fixtures for the probes (`stepcodeAgentTeam` section) |
+| `cfg-*/settings.json` | Probe config fixtures (staged through the legacy settings.json tier, still honored) |
 | `TEST-PLAN.md` | Test plan and execution history |
 | `step/` | Step Code source submodule (pins the version this sandbox tracks) |
 | `step-bin.sh` | step binary resolver (sourced by the scripts) |
@@ -84,4 +84,4 @@ bash test/run-smoke.sh 5 # phase5 needs a key
 
 How to run the LLM-layer probes: [../docs/TESTING.md](../docs/TESTING.md);
 how to configure them: [../docs/CONFIGURATION.md](../docs/CONFIGURATION.md)
-(the `stepcodeAgentTeam` section of `sandbox/agent/settings.json`).
+(the `[stepcodeAgentTeam]` table of `sandbox/config.toml`).

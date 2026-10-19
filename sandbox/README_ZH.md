@@ -24,7 +24,7 @@ export STEP_API_KEY=<你自己的 key>   # 仅涉及模型调用时才需要；�
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
-| `cfg-*/settings.json` | 各探针的配置 fixture（`stepcodeAgentTeam` 节） |
+| `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效） |
 | `TEST-PLAN.md` | 测试计划与历史执行记录 |
 | `step/` | Step Code 源码 submodule（钉住本沙箱跟踪的版本） |
 | `step-bin.sh` | step 二进制解析器（被各脚本 source） |
@@ -74,4 +74,4 @@ bash test/run-smoke.sh 5 # phase5 需 key
 
 LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_ZH.md)；
 配置方式见 [../docs/CONFIGURATION.md](../docs/CONFIGURATION_ZH.md)
-（`sandbox/agent/settings.json` 的 `stepcodeAgentTeam` 节）。
+（`sandbox/config.toml` 的 `[stepcodeAgentTeam]` 表）。
