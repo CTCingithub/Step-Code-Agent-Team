@@ -1,10 +1,10 @@
 # Step-Code-Agent-Team
 
-Agent team plugin for [Step Code](https://stepfun.com) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly.
+[简体中文说明 →](./README_ZH.md)
+
+Agent team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly.
 
 > **Reference:** This project references the **agent teams feature of DeepSeek Harness** — the leader/member model, the dependency-aware task board, and member-to-member messaging follow its design. It is an independent implementation for Step Code and is not affiliated with DeepSeek.
-
-[简体中文说明 →](./README_ZH.md)
 
 > **⚠️ Cost warning:** every team member is a full agent process with its own
 > context window, running on the conversation's current model (default thinking:

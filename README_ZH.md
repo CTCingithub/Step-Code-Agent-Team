@@ -1,10 +1,10 @@
 # Step-Code-Agent-Team
 
-[Step Code](https://stepfun.com)（`step`）的智能体团队插件：当前会话成为**队长**，按需创建可续聊的**成员** Agent，把目标拆解为带依赖的**任务板**，并行调度成员执行，并支持成员间直达消息。
+[English →](./README.md)
+
+[Step Code](https://github.com/stepfun-ai/Step-Code)（`step`）的智能体团队插件：当前会话成为**队长**，按需创建可续聊的**成员** Agent，把目标拆解为带依赖的**任务板**，并行调度成员执行，并支持成员间直达消息。
 
 > **参考说明：** 本项目**参考了 DeepSeek Harness 的智能体团队（agent teams）功能**——队长/成员模型、带依赖的任务板、成员间消息均沿袭其设计。本插件是面向 Step Code 的独立实现，与 DeepSeek 无隶属关系。
-
-[English →](./README.md)
 
 > **⚠️ 消耗警告：** 每个团队成员都是独立的完整 agent 进程，拥有自己的上下文窗口，
 > 默认使用对话当前模型、思考强度 `high`。N 个成员并行干活的成本约为单轮对话的 N 倍，
