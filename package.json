@@ -36,5 +36,11 @@
     "@step-harness/providers": "*",
     "@step-harness/pi-tui": "*",
     "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@step-harness/coding-agent": { "optional": true },
+    "@step-harness/providers": { "optional": true },
+    "@step-harness/pi-tui": { "optional": true },
+    "typebox": { "optional": true }
   }
 }
