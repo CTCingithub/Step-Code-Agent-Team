@@ -9,7 +9,13 @@
 import { Type } from "typebox";
 import { StringEnum } from "@step-harness/providers";
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
-import type { SendOptions, TeamManager } from "./members.ts";
+import {
+	memberCanMessage,
+	messagingWarnings,
+	resumeIgnoredParams,
+	type SendOptions,
+	type TeamManager,
+} from "./members.ts";
 import type { MemberUsage } from "./registry.ts";
 import type { PluginConfig } from "./config.ts";
 import { VALID_THINKING } from "./config.ts";
@@ -69,7 +75,10 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		description: [
 			"Create (or resume) a member agent in the current team.",
 			"Members run as isolated `step --mode rpc` processes with their own context window,",
-			"model, and tool allowlist. Idempotent: an existing member name is resumed, not duplicated.",
+			"model, and tool allowlist. Idempotent: an existing member name is resumed, not duplicated,",
+			"and on resume the passed role/tools/model/thinking/systemPrompt are ignored — disband and",
+			"recreate the member to change its configuration. Members need bash in their tool allowlist",
+			"to use the member-to-member messaging channel (read-only presets cannot).",
 			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
 		].join(" "),
 		parameters: Type.Object({
@@ -113,15 +122,31 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 				},
 				leaderModel,
 			);
+			const lines = [
+				`${created ? "Created" : "Resumed"} member "${member.name}" (role: ${member.role}).`,
+				`Model: ${member.model ?? "leader default"}; thinking: ${member.thinking ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
+				`Status: ${member.status}. Use team_send to give it work.`,
+			];
+			if (!created) {
+				// Resume is idempotent: the existing record wins, so say which
+				// passed params were dropped instead of implying a reconfiguration.
+				const ignored = resumeIgnoredParams(params, member);
+				if (ignored.length > 0) {
+					lines.push(
+						`Note: "${member.name}" already existed and was resumed; the passed ${ignored.join(", ")} ${ignored.length > 1 ? "were" : "was"} ignored (existing configuration kept). Disband the member and recreate it to change its configuration.`,
+					);
+				}
+			}
+			if (!memberCanMessage(member.tools)) {
+				lines.push(
+					`Note: "${member.name}" has no bash tool, so it cannot use the member-to-member messaging channel; topology edges touching it are unusable — the leader can still relay messages to it.`,
+				);
+			}
 			return {
 				content: [
 					{
 						type: "text",
-						text: [
-							`${created ? "Created" : "Resumed"} member "${member.name}" (role: ${member.role}).`,
-							`Model: ${member.model ?? "leader default"}; thinking: ${member.thinking ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
-							`Status: ${member.status}. Use team_send to give it work.`,
-						].join("\n"),
+						text: lines.join("\n"),
 					},
 				],
 				details: { teamId: manager.teamId, member, created },
@@ -331,7 +356,8 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"ring (each member may message the next), custom (explicit edges).",
 			"Match the shape to the task: parallel independent work needs only star; sequential refinement fits",
 			"pipeline; cross-checking peers fit mesh or a few custom edges. Members learn their allowed",
-			"neighbors from the team status the shim reports.",
+			"neighbors from the team status the shim reports. Members need bash in their tool allowlist to",
+			"message each other; the result warns about edges touching members without bash.",
 		].join(" "),
 		promptGuidelines: [
 			"Use team_set_topology to design the member communication topology (star/pipeline/mesh/ring/custom) after creating members and before dispatching work with team_send or team_task.",
@@ -357,8 +383,11 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			assertActive();
 			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
 			const topology = manager.setTopology(params.shape, edges);
+			// Edges are only usable if both endpoints can run the messaging shim.
+			const lines = ["Topology set:", manager.describeTopology()];
+			lines.push(...messagingWarnings(manager.snapshot().members, topology.edges));
 			return {
-				content: [{ type: "text", text: `Topology set:\n${manager.describeTopology()}` }],
+				content: [{ type: "text", text: lines.join("\n") }],
 				details: { teamId: manager.teamId, topology },
 			};
 		},

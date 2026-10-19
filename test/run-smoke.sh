@@ -27,7 +27,7 @@ trap 'rm -rf "$AGENT_DIR"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-PHASES="${*:-1 2 3 5 6 7 8 9 13 14 15 16 17}"
+PHASES="${*:-1 2 3 5 6 7 8 9 13 14 15 16 17 18}"
 # Pure-logic probes (render/tools helpers) run standalone — without
 # extensions/index.ts. Importing them transitively pulls @step-harness/pi-tui,
 # which makes step stage the repo package into the agent dir and load a second

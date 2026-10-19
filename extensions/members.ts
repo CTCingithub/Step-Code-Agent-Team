@@ -100,6 +100,53 @@ function debugNote(message: string): void {
 	if (getConfig().debug) console.error(`[stepcode-agent-team] ${message}`);
 }
 
+/**
+ * Whether a member can run the messaging shim: the shim is invoked through a
+ * shell (`node bin/stepcode-team.mjs ...`), so a member needs bash in its tool
+ * allowlist. An undefined or empty allowlist means "all tools".
+ */
+export function memberCanMessage(tools: readonly string[] | undefined): boolean {
+	return !tools || tools.length === 0 || tools.includes("bash");
+}
+
+/**
+ * Create params that a resume silently ignores (the existing record wins).
+ * Empty when nothing conflicting was passed — used to tell the leader LLM
+ * instead of letting it believe a reconfiguration happened.
+ */
+export function resumeIgnoredParams(params: CreateMemberParams, member: MemberRecord): string[] {
+	const ignored: string[] = [];
+	if (params.role && params.role !== member.role) ignored.push("role");
+	if (params.tools && params.tools.length > 0 && params.tools.join(",") !== (member.tools ?? []).join(",")) {
+		ignored.push("tools");
+	}
+	if (params.model && params.model !== member.model) ignored.push("model");
+	if (params.thinking && params.thinking !== member.thinking) ignored.push("thinking");
+	if (params.systemPrompt && params.systemPrompt.trim().length > 0) ignored.push("systemPrompt");
+	return ignored;
+}
+
+/**
+ * Warnings for topology edges whose endpoints cannot run the messaging shim
+ * (no bash in their allowlist). One warning per flagged member, deduplicated.
+ */
+export function messagingWarnings(
+	members: ReadonlyArray<Pick<MemberRecord, "name" | "tools">>,
+	edges: readonly TopologyEdge[],
+): string[] {
+	const flagged = new Set<string>();
+	for (const [from, to] of edges) {
+		for (const endpoint of [from, to]) {
+			const m = members.find((x) => x.name === endpoint);
+			if (m && !memberCanMessage(m.tools)) flagged.add(endpoint);
+		}
+	}
+	return [...flagged].map(
+		(name) =>
+			`Warning: member "${name}" has no bash tool and cannot use the member-to-member messaging channel; edges touching it are unusable — relay through the leader, or recreate the member with bash in its tools.`,
+	);
+}
+
 /** Depth of this process in the team tree (the leader session is 0). */
 export function currentDepth(): number {
 	const raw = process.env.STEPCODE_TEAM_DEPTH;
@@ -302,8 +349,13 @@ export class TeamManager {
 		}
 
 		const config = getConfig();
-		if (this.reg.members.length >= config.members.max) {
-			throw new Error(`Team is full (max ${config.members.max} members). Disband one first.`);
+		// Only live members consume slots: dead records stay resumable (same
+		// session id) but must not permanently exhaust the team cap.
+		const liveMembers = this.reg.members.filter((m) => m.status !== "dead").length;
+		if (liveMembers >= config.members.max) {
+			throw new Error(
+				`Team is full (max ${config.members.max} live members). Disband one first — disbanded and reaped members no longer count against the limit.`,
+			);
 		}
 
 		// A role may reference a bundled preset (agents/<role>.md); explicit params win.
