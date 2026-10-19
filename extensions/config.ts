@@ -1,20 +1,27 @@
 /**
  * Plugin configuration.
  *
- * Following Step Code's settings convention, our configuration lives in the
- * "stepcodeAgentTeam" section of settings.json: globally at
- * <agentDir>/settings.json (agentDir honors STEP_CODING_AGENT_DIR, so the
- * development sandbox gets its own config) and, gated on project trust, at
- * <projectDir>/.stepcode/settings.json. Precedence:
+ * Step Code first kept settings in settings.json and later moved them to the
+ * unified config.toml (global beside the agent dir, project under
+ * <projectDir>/.stepcode/, agent/settings.json retired). Both locations are
+ * honored; the unified config is the current convention and overrides the
+ * legacy settings.json section. Precedence:
  *
- *   defaults  <  legacy files  <  settings.json sections  <  env overrides
+ *   defaults < legacy files < settings.json < config.toml < env overrides
+ *
+ * (per tier: config.toml overrides settings.json; the project tier overrides
+ * the global tier; env overrides win over everything.)
  *
  * Legacy dedicated files (<agentDir>/stepcode-agent-team.json and
  * <projectDir>/.stepcode/stepcode-agent-team.json) remain honored as a
  * compatibility layer, applied before the settings section at each tier
  * (debug mode logs a migration hint).
  *
- * The project-level section is gated on project trust, which is only knowable
+ * The unified config is read through @step-harness/coding-agent's exported
+ * readers (readStepConfig / CONFIG_DIR_NAME / STEP_CONFIG_FILE_NAME), looked
+ * up defensively: step versions without those exports simply skip that tier.
+ *
+ * The project-level tiers are gated on project trust, which is only knowable
  * inside event handlers — so loadConfig accepts it as an option, and
  * applyProjectConfig re-applies it in place on the cached config from
  * session_start (see index.ts).
@@ -26,10 +33,11 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as stepCore from "@step-harness/coding-agent";
 import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
 
 export const CONFIG_FILE_NAME = "stepcode-agent-team.json";
-/** Settings file name (Step Code convention); our config is a section of it. */
+/** Legacy settings file name (Step Code's pre-config.toml convention). */
 export const SETTINGS_FILE_NAME = "settings.json";
 /** Our configuration section inside settings.json. */
 export const CONFIG_SECTION = "stepcodeAgentTeam";
@@ -129,14 +137,58 @@ export function projectConfigFilePath(projectDir: string): string {
 	return path.join(projectDir, ".stepcode", CONFIG_FILE_NAME);
 }
 
-/** Global settings file (Step Code convention: <agentDir>/settings.json). */
+/** Global settings file (<agentDir>/settings.json, legacy location). */
 export function settingsFilePath(agentDirPath: string): string {
 	return path.join(agentDirPath, SETTINGS_FILE_NAME);
 }
 
-/** Project settings file (<projectDir>/.stepcode/settings.json). */
+/** Project settings file (<projectDir>/.stepcode/settings.json, legacy location). */
 export function projectSettingsFilePath(projectDir: string): string {
 	return path.join(projectDir, ".stepcode", SETTINGS_FILE_NAME);
+}
+
+/**
+ * Global unified step config (<configRoot>/config.toml). The config root sits
+ * beside the agent dir — the same place step's own settings manager resolves
+ * it (settings-manager.ts: join(dirname(agentDir), "config.toml")).
+ */
+export function unifiedConfigFilePath(agentDirPath: string): string {
+	return path.join(path.dirname(path.resolve(agentDirPath)), unifiedConfigFileName());
+}
+
+/** Project-level unified config (<projectDir>/.stepcode/config.toml). */
+export function projectUnifiedConfigFilePath(projectDir: string): string {
+	const dirName = (stepCore as Record<string, unknown>).CONFIG_DIR_NAME;
+	return path.join(projectDir, typeof dirName === "string" && dirName ? dirName : ".stepcode", unifiedConfigFileName());
+}
+
+function unifiedConfigFileName(): string {
+	const name = (stepCore as Record<string, unknown>).STEP_CONFIG_FILE_NAME;
+	return typeof name === "string" && name ? name : "config.toml";
+}
+
+/**
+ * Reads our section out of a unified config.toml; null when the file is
+ * absent/unreadable, the section is missing or malformed, or the running step
+ * version does not export the reader.
+ */
+function readUnifiedSection(file: string): Record<string, unknown> | null {
+	const read = (stepCore as Record<string, unknown>).readStepConfig as ((path: string) => unknown) | undefined;
+	if (typeof read !== "function") return null;
+	let doc: unknown;
+	try {
+		doc = read(file);
+	} catch (err) {
+		// Missing file is normal; a present-but-broken one is worth a trace.
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+			configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
+		}
+		return null;
+	}
+	if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return null;
+	const section = (doc as Record<string, unknown>)[CONFIG_SECTION];
+	if (typeof section !== "object" || section === null || Array.isArray(section)) return null;
+	return section as Record<string, unknown>;
 }
 
 export function defaultConfig(): PluginConfig {
@@ -216,6 +268,11 @@ export function applyProjectConfig(config: PluginConfig, projectDir?: string | n
 		mergeSection(config as unknown as Record<string, unknown>, section);
 		applied = true;
 	}
+	const unified = readUnifiedSection(projectUnifiedConfigFilePath(projectDir));
+	if (unified) {
+		mergeSection(config as unknown as Record<string, unknown>, unified);
+		applied = true;
+	}
 	if (!applied) return false;
 	applyEnvOverrides(config);
 	logWarnings(validate(config));
@@ -252,7 +309,7 @@ function applyFile(config: PluginConfig, file: string): void {
 	mergeSection(config as unknown as Record<string, unknown>, raw as Record<string, unknown>);
 }
 
-/** Global tier: legacy dedicated file first, then the settings.json section. */
+/** Global tier: legacy dedicated file, then settings.json, then the unified config. */
 function applyGlobalTier(config: PluginConfig, agentDirPath: string): void {
 	const legacy = configFilePath(agentDirPath);
 	if (fs.existsSync(legacy)) {
@@ -261,6 +318,8 @@ function applyGlobalTier(config: PluginConfig, agentDirPath: string): void {
 	}
 	const section = readSection(settingsFilePath(agentDirPath));
 	if (section) mergeSection(config as unknown as Record<string, unknown>, section);
+	const unified = readUnifiedSection(unifiedConfigFilePath(agentDirPath));
+	if (unified) mergeSection(config as unknown as Record<string, unknown>, unified);
 }
 
 /** Reads our section out of a settings.json file; null when absent/unusable. */
@@ -283,7 +342,7 @@ function readSection(file: string): Record<string, unknown> | null {
 
 /** Debug hint when a legacy dedicated config file is honored. */
 function legacyNote(file: string): void {
-	configNote(`legacy file ${file} still honored; prefer the "${CONFIG_SECTION}" section in ${SETTINGS_FILE_NAME}`);
+	configNote(`legacy file ${file} still honored; prefer the "${CONFIG_SECTION}" table in the unified step config (config.toml)`);
 }
 
 /** Debug-gated one-line config trace. */
