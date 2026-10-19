@@ -63,7 +63,9 @@ step remove /absolute/path/to/Step-Code-Agent-Team  # uninstall (same path)
 
 Local-path installs are **reference-only**: step records the path in your step
 configuration and loads the package's declared resources (the `pi` manifest
-in `package.json`: `extensions/`, `skills/`, `prompts/`) from it — nothing is
+in `package.json`: `extensions/` — the plugin ships no skills or prompt
+templates; orchestration guidance is injected request-locally and the review
+workflow is the `/topo review` command) from it — nothing is
 copied, so `local/` (credentials) and `sandbox/` (dev state) are never involved.
 Use an absolute path (relative paths resolve against the step config file's
 directory, not your shell's cwd), and note the entry breaks if the checkout
@@ -172,7 +174,7 @@ per invocation.
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
 | `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
-| `/topo` | Command: activate the plugin and show the team board. `/topo off` deactivates and re-hides the team tools; `/topo <tier>` (economic/fast/balanced/performance/custom) applies a team strategy (see Team plans); text after the command is forwarded to the agent **verbatim** — the "use the team" instruction is injected request-locally through a context event and never written to the session file |
+| `/topo` | Command: activate the plugin and show the team board. `/topo off` deactivates and re-hides the team tools; `/topo <tier>` (economic/fast/balanced/performance/custom) applies a team strategy (see Team plans); `/topo review [target]` runs the parallel multi-reviewer protocol; text after the command is forwarded to the agent **verbatim** — the "use the team" instruction is injected request-locally through a context event and never written to the session file |
 
 ## Member communication topology
 
@@ -261,8 +263,9 @@ You can add your own roles — Markdown files with the same frontmatter format
 in `<agentDir>/agents/` or `<project>/.stepcode/agents/` (trusted projects),
 overriding bundled presets by name: see [docs/ROLES.md](docs/ROLES.md).
 
-Also included: `prompts/team-review.md` (parallel multi-reviewer chain) and
-`skills/team-orchestration/SKILL.md` (when and how to form a team).
+The parallel multi-reviewer workflow ships as the **`/topo review [target]`**
+command, and the orchestration protocol is injected request-locally on
+activation — no skill or prompt-template resources are shipped.
 
 ## Development sandbox
 
@@ -295,9 +298,7 @@ extensions/    index.ts (wiring) · config.ts · activation.ts · rpc-client.ts 
                render.ts
 bin/           stepcode-team.mjs (member-side CLI shim)
 agents/        role presets (scout · planner · worker · reviewer)
-prompts/       team-review.md
-skills/        team-orchestration/SKILL.md
-docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
+docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · ROLES · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING references
 test/          smoke/ zero-token probes + run-smoke.sh (npm run smoke)
 sandbox/       isolated dev environment (ships with the repo; runtime state gitignored)

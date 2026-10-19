@@ -74,8 +74,8 @@ bash sandbox/restore-project.sh
 step install <仓库绝对路径>
 ```
 
-**预期**：安装后新会话可激活、成员可 spawn；包内 `skills/`（team-orchestration
-技能）与 `prompts/`（team-review 提示模板）随包可用（manifest 已声明）；
+**预期**：安装后新会话可激活、成员可 spawn；包只分发扩展资源（无 skill 或提示词
+模板——编排协议经请求本地注入，评审工作流是 `/topo review` 命令）；
 `step remove <同一路径>` 可卸载。
 
 **验证安装生效**（安装后开一个普通会话，粘贴）：

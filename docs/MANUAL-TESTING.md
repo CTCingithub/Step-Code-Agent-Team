@@ -86,10 +86,10 @@ manifest), so installing the checkout directly is fine:
 step install <absolute path to the repo>
 ```
 
-**Expected**: after install, a new session can activate, members can spawn, and
-the package's `skills/` (team-orchestration) and `prompts/` (team-review)
-resources are available (declared in the manifest); `step remove <same path>`
-uninstalls.
+**Expected**: after install, a new session can activate and members can spawn;
+the package ships its extension resource only (no skills or prompt templates —
+the orchestration protocol is injected request-locally and the review workflow
+is the `/topo review` command); `step remove <same path>` uninstalls.
 
 **Verify the install works** (open a normal session after installing, paste):
 

@@ -59,8 +59,9 @@ step remove /absolute/path/to/Step-Code-Agent-Team  # 卸载（同一路径）
 ```
 
 本地路径安装是**引用式**的：step 只把路径记入你的 step 配置，并按包
-`package.json` 中 `pi` manifest 声明的资源（`extensions/`、`skills/`、
-`prompts/`）从该路径加载——不发生任何拷贝，`local/`（凭证）与 `sandbox/`
+`package.json` 中 `pi` manifest 声明的资源（仅 `extensions/`——插件不再分发
+skill 或提示词模板资源；编排协议在激活时经请求本地注入，评审工作流是
+`/topo review` 命令）从该路径加载——不发生任何拷贝，`local/`（凭证）与 `sandbox/`
 （开发状态）不会被卷入。请使用**绝对路径**（相对路径相对 step 配置文件所在目
 录解析，不是 shell 的 cwd）；移动或删除检出副本会使该设置失效。加 `-l` 改为
 项目级安装（项目 `.stepcode/` 配置，可随团队共享，项目信任后自动安装）。
@@ -139,7 +140,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
 | `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
-| `/topo` | 命令：激活插件并查看团队板。`/topo off` 停用并重新隐藏团队工具；`/topo <档位>`（economic/fast/balanced/performance/custom）应用团队策略（见「团队方案」）；命令后的文本**逐字转发**给 agent——「使用团队」指令经 context 事件 request-local 注入，不写入会话文件 |
+| `/topo` | 命令：激活插件并查看团队板。`/topo off` 停用并重新隐藏团队工具；`/topo <档位>`（economic/fast/balanced/performance/custom）应用团队策略（见「团队方案」）；`/topo review [目标]` 运行并行多评审员协议；命令后的文本**逐字转发**给 agent——「使用团队」指令经 context 事件 request-local 注入，不写入会话文件 |
 
 ## 成员通信拓扑
 
@@ -223,8 +224,8 @@ frontmatter `effort` → `high`。`models.autonomousThinking = true` 时由队�
 `<agentDir>/agents/` 或 `<project>/.stepcode/agents/`（项目需信任），按角色名
 覆盖内置预设：见 [docs/ROLES.md](docs/ROLES_CN.md)。
 
-另附 `prompts/team-review.md`（并行多审查员链）与
-`skills/team-orchestration/SKILL.md`（何时以及如何组队）。
+并行多审查员工作流以 **`/topo review [目标]`** 命令提供，编排协议在激活时经
+请求本地注入——不再分发任何 skill 或提示词模板资源。
 
 ## 开发沙箱
 
@@ -255,9 +256,7 @@ extensions/    index.ts（接线）· config.ts · activation.ts · rpc-client.t
                render.ts
 bin/           stepcode-team.mjs（成员侧 CLI shim）
 agents/        角色预设（scout · planner · worker · reviewer）
-prompts/       team-review.md
-skills/        team-orchestration/SKILL.md
-docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · TESTING ·
+docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · ROLES · TESTING ·
                TUI-VERIFICATION · MANUAL-TESTING 参考文档
 test/          smoke/ 零 token 探针 + run-smoke.sh（npm run smoke）
 sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitignore）
