@@ -75,6 +75,30 @@ for p in $PHASES; do
   fi
 done
 
+# ---- package manifest sanity ----
+# A `pi` manifest suppresses convention-directory discovery for the resource
+# types it does not declare — an undeclared skills/ or prompts/ would silently
+# not load once the plugin is installed as a package. Guard the manifest.
+if node -e '
+const root = process.argv[1];
+const pkg = require(`${root}/package.json`);
+const fs = require("node:fs");
+const assert = require("node:assert/strict");
+for (const t of ["extensions", "skills", "prompts"]) {
+	assert.ok(Array.isArray(pkg.pi?.[t]) && pkg.pi[t].length > 0, `pi.${t} not declared`);
+	for (const p of pkg.pi[t]) {
+		assert.ok(fs.existsSync(`${root}/${p.replace(/^\.\//, "")}`), `declared path missing: ${p}`);
+	}
+}
+assert.ok(fs.existsSync(`${root}/skills/team-orchestration/SKILL.md`), "skill entry missing");
+assert.ok(fs.existsSync(`${root}/prompts/team-review.md`), "prompt entry missing");
+' "$ROOT" 2>&1; then
+	echo "manifest-check: OK"
+else
+	echo "manifest-check: FAILED (the pi manifest must declare extensions/skills/prompts with existing paths)"
+	FAILED+=("manifest-check")
+fi
+
 # ---- live wiring checks (zero-token, hermetic temp cwd) ----
 # index.ts applies the trusted project tier to its own config instance and the
 # /agent-team command surfaces the result. In-probe observation is impossible
@@ -103,6 +127,25 @@ live_check "project-config" "$LIVE1" "disabled by configuration"
 
 LIVE2="$(mktemp -d)"
 live_check "command-activate" "$LIVE2" "Agent team plugin activated (/agent-team command)"
+
+# Package install path: a `packages` entry in the step config (the unified
+# config.toml beside the agent dir — the form `step install <local path>`
+# records; agent/settings.json is retired) must load the extension through
+# the package machinery (manifest-driven), with no -e flag.
+PKGDIR="$(mktemp -d)"
+mkdir -p "$PKGDIR/agent/sessions"
+printf 'packages = ["%s"]\n' "$ROOT" > "$PKGDIR/config.toml"
+pkg_out="$(cd "$PKGDIR" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/agent-team"}\n' \
+  | STEP_CODING_AGENT_DIR="$PKGDIR/agent" timeout 45 "$STEP_BIN" \
+    --mode rpc --session-id live-pkg --session-dir "$PKGDIR/agent/sessions" -a 2>&1)" || true
+if echo "$pkg_out" | grep -q 'Agent team plugin activated (/agent-team command)'; then
+	echo "live-package-install: OK"
+else
+	echo "live-package-install: FAILED (extension from the step config packages entry did not activate)"
+	echo "$pkg_out" | tail -5
+	FAILED+=("live-package-install")
+fi
+rm -rf "$PKGDIR"
 
 # Args after the command must be forwarded to the agent as a real user message
 # (a slash command otherwise consumes the whole input and drops the request).
