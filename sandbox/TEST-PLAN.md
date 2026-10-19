@@ -56,6 +56,7 @@
 | 回归（修复后） | ✅ phase1/2/3/5/6/7 + phase4 全绿 | — | 三处产品修复无回归 |
 | phase13 / default（plan-51） | ✅ 14/14 通过（1 项 SKIP：探针环境项目未授信，live 受信任分支跳过；不受信 live 断言通过） | phase9 旧断言哨兵值 99 越界（members.max 校验范围 1–64），改 7 后通过——探针缺陷，非产品缺陷 | 项目级配置已接线；phase1–9 零 token 回归全绿 |
 | 探针入库（plan-51） | ✅ `test/smoke/` 承接 phase1/2/3/5/6/7/8/9/13，`test/run-smoke.sh` hermetic 运行；带 key 验证 phase5 通过 | phase5 需 key（此前手工循环以 `grep 'FAIL '` 漏判为通过——探针输出为 `FAILED:` 无尾随空格；runner 以 DONE 标记 + key 门控修正） | sandbox 副本已删；LLM 层（4/10/11/12）留 sandbox |
+| phase18 / 暂存 max=2（plan-55） | ✅ 13/13（先红后绿） | 探针流程缺陷：cap 检查后直接建 scout 会被旧语义拦截致中途退出——修探针（先整队解散再建） | 名额仅计存活成员；恢复参数忽略提示；拓扑/创建的无 bash 警告；随 runner 默认列表入库 |
 
 ## 六、产品缺陷清单（本轮发现并已修复）
 

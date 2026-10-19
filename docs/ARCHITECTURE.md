@@ -50,6 +50,8 @@
 
 成员间消息：成员 bash → `node bin/stepcode-team.mjs msg --to B --message ...` →
 socket → server 校验拓扑边 A→B → `manager.sendMessage(B, msg, {nested:true})` → 回复经同一连接返回。
+shim 经 shell 调用：成员工具白名单不含 `bash` 时（如 scout/planner/reviewer 预设）无法发消息，
+`team_set_topology` 与 `team_create_member` 的结果会就此警告，由队长中转兜底。
 
 ## 3. 持久化布局
 
@@ -87,6 +89,8 @@ socket → server 校验拓扑边 A→B → `manager.sendMessage(B, msg, {nested
 | socket 权限 | team-server.ts listen 后 chmod 0600 |
 | 成本告警 | tools.ts costWarning（config.cost.warnThreshold，0 禁用） |
 | idle 收割 | members.ts reapIdleMembers（跳过有排队派发的成员） |
+| 成员名额（仅存活计数） | members.ts createMemberLocked（dead 记录可恢复但不占名额） |
+| 消息能力提示 | members.ts memberCanMessage / messagingWarnings + tools.ts 结果文本 |
 | 退出清理 | index.ts session_shutdown → manager.shutdown（全置 dead + kill） |
 
 ## 6. 相关文档

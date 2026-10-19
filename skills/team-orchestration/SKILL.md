@@ -70,8 +70,10 @@ Rules of thumb:
    isolated contexts — they do not see your conversation.
 4. **Merge yourself.** Collect member outputs and synthesize. Do not ask members
    to read each other's full transcripts; use the task results and short direct
-   messages (`stepcode-team msg`, available inside members) for the few facts
-   that genuinely cross boundaries.
+   messages (`stepcode-team msg`) for the few facts that genuinely cross
+   boundaries. The shim runs through a shell, so only members with `bash` in
+   their tool allowlist can message directly — read-only presets (scout/planner/
+   reviewer) cannot, and the leader relays for them.
 5. **Disband when done.** `team_disband` stops member processes. Sessions persist,
    so recreating a member later resumes its context.
 

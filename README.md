@@ -36,8 +36,8 @@ flowchart TD
 
 - **Members are real `step` processes** with their own context window, model, and tool allowlist, spoken to over the RPC protocol. A member's context lives in its session file, so respawning it with the same session id resumes the conversation.
 - **The task board is a DAG**: a task is `ready` when every task in its `blockedBy` is `done`; cycles are rejected.
-- **Messaging**: members reach teammates through the `stepcode-team` CLI shim, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader.
-- **Guardrails**: max 8 members, max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), all children killed on leader shutdown.
+- **Messaging**: members reach teammates through the `stepcode-team` CLI shim, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader. The shim runs through a shell, so a member needs `bash` in its tool allowlist to message teammates — the read-only presets (`scout`/`planner`/`reviewer`) cannot, and the leader relays for them.
+- **Guardrails**: max 8 live members (disbanded or reaped members no longer count against the limit), max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), all children killed on leader shutdown.
 
 ## Requirements
 
@@ -247,7 +247,7 @@ single run. Legacy dedicated files (`<agentDir>/stepcode-agent-team.json`,
 |---|---|---|
 | `activation` | `enabled` (true) · `keywords` · `notifyOnActivate` (true) | Default-off gate: the `/agent-team` command or a keyword mention activates the plugin |
 | `models` | `available` (`["step-5-preview"]`) · `autonomousSelection` (false) · `autonomousThinking` (false) | Member model pool; with the autonomous switches off, members use the conversation model and `high` thinking |
-| `members` | `max` (8) · `defaultRole` (`worker`) · `defaultTools` (null) · `maxRecursionDepth` (1) | Team size cap, default role and tool allowlist, team-tree depth bound |
+| `members` | `max` (8) · `defaultRole` (`worker`) · `defaultTools` (null) · `maxRecursionDepth` (1) | Live-member cap (dead members don't count), default role and tool allowlist, team-tree depth bound |
 | `dispatch` | `maxConcurrent` (5) · `timeoutMs` (180000) · `handshakeTimeoutMs` (15000) · `retries` (1) | Concurrency gate (queue-before-start), per-dispatch timeouts, retry count |
 | `oneshot` | `timeoutMs` (180000) | Stateless `mode: "oneshot"` dispatch timeout |
 | `cost` | `warnThreshold` (1) | Cumulative team spend warning (0 disables) |

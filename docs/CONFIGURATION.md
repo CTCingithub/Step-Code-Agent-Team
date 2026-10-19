@@ -48,7 +48,7 @@ Step-Code-Agent-Team 通过 settings.json 中的 `stepcodeAgentTeam` 配置节�
     "autonomousThinking": false       // 对话模型自主为子代理选思考强度
   },
   "members": {
-    "max": 8,                         // 团队成员上限（1–64）
+    "max": 8,                         // 存活成员上限（1–64；dead 成员可恢复但不占名额）
     "defaultRole": "worker",          // 未指定 role 时的默认角色（命中同名预设）
     "defaultTools": null,             // 成员默认工具白名单；null = 用预设或全量
     "maxRecursionDepth": 1            // 团队树最大深度（1–4）：队长=0，其成员=1

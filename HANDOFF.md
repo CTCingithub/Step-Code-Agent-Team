@@ -25,7 +25,8 @@ Step Code 的智能体团队插件，对标 DeepSeek Harness agent teams，**功
   ├── tools.ts ── 6 个 LLM 工具（create_member/send/task/set_topology/disband/status）
   ├── members.ts ── TeamManager：spawn 互斥、模型/思考解析、拓扑方法、
   │    并发门（nested 绕过）、任务调度（重试+每任务锁）、等待环检测、
-  │    oneshot、reaper
+  │    oneshot、reaper、存活名额计数、消息能力提示（memberCanMessage/
+  │    messagingWarnings/resumeIgnoredParams）
   ├── rpc-client.ts ── JSONL 客户端（严格 \n 分行、id 关联、握手、abort、killAndWait）
   ├── team-server.ts ── Unix socket：拓扑强制 + 环形链长强制 + status(mayMessage)
   ├── topology.ts ── 五形状构造/校验/解析
@@ -44,7 +45,7 @@ sandbox/（随仓库分发）── step/（Step Code 源码 submodule，钉住�
 
 | 文件 | 职责 | 修改高频点 |
 |---|---|---|
-| `extensions/members.ts` | 成员/任务/拓扑核心逻辑 | 模型解析、并发门、prompt 生成 |
+| `extensions/members.ts` | 成员/任务/拓扑核心逻辑 | 模型解析、并发门、名额计数（仅存活）、prompt 生成、消息能力 helper |
 | `extensions/config.ts` | 配置 schema 与校验 | 新增配置项必改此处 + docs/CONFIGURATION.md |
 | `extensions/index.ts` | 激活接线 | 触发方式、启动副作用 |
 | `extensions/topology.ts` | 拓扑模型 | 新形状 |

@@ -35,8 +35,8 @@ flowchart TD
 
 - **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
 - **任务板是 DAG**：`blockedBy` 全部完成的任务才 `ready`；成环的依赖在创建时即被拒绝。
-- **成员间消息**：成员通过 `stepcode-team` CLI shim 连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。
-- **护栏**：最多 8 个成员；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
+- **成员间消息**：成员通过 `stepcode-team` CLI shim 连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。shim 经 shell 调用，成员需要 `bash` 工具才能发消息——只读预设（`scout`/`planner`/`reviewer`）无法直达，由队长中转。
+- **护栏**：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
 
 ## 环境要求
 
@@ -238,7 +238,7 @@ sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitigno
 |---|---|---|
 | `activation` | `enabled`（true）· `keywords` · `notifyOnActivate`（true） | 默认关闭门：`/agent-team` 命令或关键词提及才激活 |
 | `models` | `available`（`["step-5-preview"]`）· `autonomousSelection`（false）· `autonomousThinking`（false） | 成员模型池；两个自主开关关闭时，成员用对话当前模型与 `high` 思考 |
-| `members` | `max`（8）· `defaultRole`（`worker`）· `defaultTools`（null）· `maxRecursionDepth`（1） | 团队规模上限、默认角色与工具白名单、团队树深度上限 |
+| `members` | `max`（8）· `defaultRole`（`worker`）· `defaultTools`（null）· `maxRecursionDepth`（1） | 存活成员上限（dead 成员不计数）、默认角色与工具白名单、团队树深度上限 |
 | `dispatch` | `maxConcurrent`（5）· `timeoutMs`（180000）· `handshakeTimeoutMs`（15000）· `retries`（1） | 并发门（排队启动）、单次派发超时、重试次数 |
 | `oneshot` | `timeoutMs`（180000） | 无状态 `mode: "oneshot"` 派发超时 |
 | `cost` | `warnThreshold`（1） | 累计花费告警（0 禁用） |

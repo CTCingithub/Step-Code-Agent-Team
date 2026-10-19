@@ -27,6 +27,7 @@ LLM 层测试前 `export STEP_API_KEY=<你自己的 key>`（经环境变量传�
 | 演示项目 | `sandbox/project/`（会被成员改动，如修复种子 bug） | `bash sandbox/restore-project.sh` 还原为种子态 |
 | 会话 / 团队 / 计划 / live-context | `sandbox/agent/{sessions,teams,plans,live-context}` | `rm -rf` 后重跑（全新沙箱） |
 | 演示项目运行数据 | `sandbox/project/data/` | `restore-project.sh` 自动清除 |
+| 会话日志 | `sandbox/session-log-*.md`（验证会话按需生成，prompt 见 [TUI-VERIFICATION.md](TUI-VERIFICATION.md) §3） | `restore-project.sh` 自动删除 |
 | 各 fixture 的运行时状态 | `sandbox/cfg-*/{sessions,teams,teams-*,live-context}` | 同上，按需清理 |
 
 ```bash
@@ -83,6 +84,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
 | phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput） | 零 token（独立运行） |
 | phase17 | 孤儿进程（成员不得比队长长寿） | 零 token |
+| phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + 拓扑 bash 警告/消息能力提示 | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
 
