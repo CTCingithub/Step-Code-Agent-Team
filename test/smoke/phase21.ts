@@ -15,6 +15,7 @@ import {
 	customTierInstruction,
 	detectLang,
 	teamActivationInstruction,
+	teamReviewInstruction,
 	tierInstruction,
 } from "../../extensions/forward.ts";
 import {
@@ -94,6 +95,25 @@ export default function (pi: ExtensionAPI) {
 			);
 			const customEn = customTierInstruction("", {}, "en");
 			check("custom: en without requirements", customEn.includes("No extra requirements provided"));
+
+			// 8. review protocol instruction (the former team-review prompt
+			// template, reimplemented as code for /topo review)
+			const reviewZh = teamReviewInstruction("src/app.ts", "zh");
+			check(
+				"review: zh carries target + reviewers + merge + disband",
+				reviewZh.includes("[团队方案 · 并行评审]") &&
+					reviewZh.includes("评审对象：src/app.ts") &&
+					reviewZh.includes("r1（正确性）") &&
+					reviewZh.includes("合并任务 T1") &&
+					reviewZh.includes("team_disband"),
+			);
+			const reviewEn = teamReviewInstruction("", "en");
+			check(
+				"review: en without focus, no multipliers",
+				reviewEn.includes("[Team plan · Parallel review]") &&
+					reviewEn.includes("the target named in the user's request") &&
+					!reviewEn.includes("×"),
+			);
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE21 DONE (all passed)" : `SMOKE21 DONE (${failed}/${results.length} failed)`);

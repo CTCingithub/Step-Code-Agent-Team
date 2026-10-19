@@ -30,11 +30,28 @@ export function detectLang(text: string): Lang {
 	return hasCjk(text) ? "zh" : "en";
 }
 
-/** Generic instruction used when no plan tier was chosen. */
+/**
+ * Generic instruction used when no plan tier was chosen. It carries the
+ * condensed orchestration protocol that used to live in the
+ * skills/team-orchestration skill — delivered request-locally on the
+ * activation turn instead of occupying context as a skill resource.
+ */
 export function teamActivationInstruction(lang: Lang): string {
 	return lang === "zh"
-		? "[智能体团队已启用] 请使用团队工具完成用户的请求：先用 team_create_member 按需创建成员、用 team_set_topology 声明拓扑，再用 team_task / team_send 派活；不要把请求独自做完。"
-		: "[Agent team active] Use the team tools for the user's request: create members with team_create_member, declare the topology with team_set_topology, then dispatch with team_task / team_send. Do not complete the request solo.";
+		? [
+				"[智能体团队已启用] 请用团队工具完成用户的请求，并遵守以下协议：",
+				"1. 组队判据：任务有独立并行 strand 才组队；2–4 成员为宜，每人一个明确焦点；单点小改动不要过度拆分。",
+				"2. 拓扑先行：建成员后、派活前用 team_set_topology 声明拓扑——默认 star（队长中转）；顺序精炼用 pipeline；同伴互查用 mesh/ring。只读角色（scout/planner/reviewer）没有 bash，指向它们的边不可用、退化为队长中转；依赖请用任务板 blockedBy 表达。",
+				"3. 运行流程：team_create_member 建成员 → team_set_topology 声明拓扑 → team_task 拆解任务（blockedBy 表达依赖）→ team_send / team_task start 派活（指令短小自包含，成员看不到你的对话）→ 自己合并各成员结论 → 完工后 team_disband。",
+				'4. 成本纪律：不要把同一任务分给两个成员"求保险"；无状态扇出用 mode: "oneshot"；留意 team_status 的累计花费。',
+			].join("\n")
+		: [
+				"[Agent team active] Use the team tools for the user's request, following this protocol:",
+				"1. When to form a team: only when the work has independent parallel strands; 2–4 members is the sweet spot, each with a distinct focus; do not over-split a single small edit.",
+				"2. Topology first: after creating members and before dispatching, declare the topology with team_set_topology — star by default (leader relays); pipeline for sequential refinement; mesh/ring for cross-checking. Read-only roles (scout/planner/reviewer) have no bash, so edges touching them are unusable and degrade to leader relay; express dependencies with the task board's blockedBy.",
+				"3. Run loop: team_create_member → team_set_topology → team_task with blockedBy → team_send / team_task start (short, self-contained instructions; members do not see your conversation) → merge the results yourself → team_disband when done.",
+				'4. Cost discipline: never give two members the same task "for safety"; use mode: "oneshot" for stateless fan-out; watch cumulative spend in team_status.',
+			].join("\n");
 }
 
 /** Tier instruction: strategy + non-binding example; the model decides the team. */
@@ -51,6 +68,36 @@ export function tierInstruction(tier: TeamTier, lang: Lang): string {
 		`[Team plan · ${label}] ${tier.guidance.en}`,
 		tier.example.en,
 		"Member names, counts, roles, topology, and effort are yours to decide from the task — the example above is a suggestion only, do not copy it verbatim.",
+	].join("\n");
+}
+
+/**
+ * Parallel multi-reviewer protocol — the former prompts/team-review.md
+ * template, reimplemented as code for the `/topo review` command (no
+ * prompt-template resource, no context cost until invoked).
+ */
+export function teamReviewInstruction(focus: string, lang: Lang): string {
+	if (lang === "zh") {
+		return [
+			"[团队方案 · 并行评审]",
+			focus ? `评审对象：${focus}` : "评审对象：用户请求中指定的目标。",
+			"按以下流程执行：",
+			"1. team_create_member 建三名 reviewer：r1（正确性）、r2（风格）、r3（安全性）——均用只读预设；",
+			"2. team_send 并行派发，每人只审自己的焦点区；",
+			"3. team_task 建无依赖合并任务 T1 派给一名 worker：去重、消解矛盾、逐条给出结论；",
+			"4. 队长注明每条发现出自哪个审查员，输出单一报告；",
+			"5. 收尾 team_disband。拓扑用 star；reviewer 没有 bash，无法互发消息，由队长中转。",
+		].join("\n");
+	}
+	return [
+		"[Team plan · Parallel review]",
+		focus ? `Review target: ${focus}` : "Review target: the target named in the user's request.",
+		"Run the following protocol:",
+		"1. team_create_member three reviewers: r1 (correctness), r2 (style), r3 (security) — read-only presets;",
+		"2. Dispatch in parallel with team_send, each reviewing only its own focus area;",
+		"3. team_task create a dependency-free merge task T1 assigned to a worker: deduplicate, resolve conflicts, and give a conclusion per finding;",
+		"4. The leader attributes each finding to its reviewer and emits a single report;",
+		"5. Finish with team_disband. Topology: star; reviewers have no bash and cannot message each other — the leader relays.",
 	].join("\n");
 }
 

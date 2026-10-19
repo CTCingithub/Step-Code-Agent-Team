@@ -41,7 +41,14 @@ import {
 	regateTools,
 	TEAM_TOOL_NAMES,
 } from "./activation.ts";
-import { customTierInstruction, detectLang, teamActivationInstruction, tierInstruction, type Lang } from "./forward.ts";
+import {
+	customTierInstruction,
+	detectLang,
+	teamActivationInstruction,
+	teamReviewInstruction,
+	tierInstruction,
+	type Lang,
+} from "./forward.ts";
 import {
 	allTiers,
 	FALLBACK_TIER_ID,
@@ -60,10 +67,11 @@ import { VALID_TOPOLOGY_SHAPES } from "./topology.ts";
 /** Timeout for every interactive dialog (select / confirm / input). */
 const INTERACTIVE_TIMEOUT_MS = 30_000;
 
-/** A resolved plan choice: a pinned tier, or the custom guided flow. */
+/** A resolved plan choice: a pinned tier, the custom guided flow, or the review protocol. */
 type PlanChoice =
 	| { kind: "tier"; tier: TeamTier }
-	| { kind: "custom"; requirements: string; picks: CustomPicks };
+	| { kind: "custom"; requirements: string; picks: CustomPicks }
+	| { kind: "review"; focus: string };
 
 export default function (pi: ExtensionAPI) {
 	// Config first: tool descriptions and gating depend on it.
@@ -180,7 +188,9 @@ export default function (pi: ExtensionAPI) {
 	const choiceInstruction = (choice: PlanChoice, lang: Lang): string =>
 		choice.kind === "tier"
 			? tierInstruction(choice.tier, lang)
-			: customTierInstruction(choice.requirements, choice.picks, lang);
+			: choice.kind === "custom"
+				? customTierInstruction(choice.requirements, choice.picks, lang)
+				: teamReviewInstruction(choice.focus, lang);
 
 	/** Applies the standing tier (plan.tier) after an activation, if pinned. */
 	const applyStandingTier = (text: string): void => {
@@ -366,11 +376,14 @@ export default function (pi: ExtensionAPI) {
 		const standingTier = getConfig().plan.tier;
 		const tierArg = matchTierToken(first);
 		const customArg = first === "custom" || first === "自定义";
-		const request = tierArg || customArg ? rest.join(" ").trim() : trimmed;
+		const reviewArg = first === "review" || first === "评审";
+		const request = tierArg || customArg || reviewArg ? rest.join(" ").trim() : trimmed;
 
 		let choice: PlanChoice | null = null;
 		let extraRequest = "";
-		if (tierArg) {
+		if (reviewArg) {
+			choice = { kind: "review", focus: request };
+		} else if (tierArg) {
 			choice = { kind: "tier", tier: getTier(tierArg) };
 		} else if (customArg) {
 			({ choice, request: extraRequest } = await resolveCustomChoice(ctx, request.length > 0, lang));
@@ -380,7 +393,8 @@ export default function (pi: ExtensionAPI) {
 			({ choice, request: extraRequest } = await pickChoice(ctx, request.length > 0, lang));
 		}
 		if (choice) {
-			const confirmed = await confirmChoice(ctx, choice, lang);
+			// The review protocol is deterministic — no summary confirm needed.
+			const confirmed = choice.kind === "review" ? true : await confirmChoice(ctx, choice, lang);
 			if (!confirmed) choice = null;
 			else if (!request && !extraRequest) activeChoice = choice; // applies to the next message
 		}
@@ -406,9 +420,17 @@ export default function (pi: ExtensionAPI) {
 		const totalCost = reg.members.reduce((sum, m) => sum + m.usage.cost, 0);
 		lines.push(`  spend: $${totalCost.toFixed(4)}`);
 		if (choice) {
-			lines.push(
-				`  plan: ${choice.kind === "tier" ? tierLabel(choice.tier, lang) : lang === "zh" ? "自定义" : "Custom"}`,
-			);
+			const planLabel =
+				choice.kind === "tier"
+					? tierLabel(choice.tier, lang)
+					: choice.kind === "review"
+						? lang === "zh"
+							? "并行评审"
+							: "Parallel review"
+						: lang === "zh"
+							? "自定义"
+							: "Custom";
+			lines.push(`  plan: ${planLabel}`);
 		}
 		if (effectiveRequest) lines.push("  → forwarding your request to the agent…");
 		ctx.ui.notify(lines.join("\n"), "info");
@@ -437,12 +459,17 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerCommand("topo", {
 		description:
-			"Activate the agent team plugin and show the team board; optionally pick a team plan (economic/fast/balanced/performance/custom) or turn the plugin off (/topo off); text after the command is forwarded to the agent verbatim",
+			"Activate the agent team plugin and show the team board; optionally pick a team plan (economic/fast/balanced/performance/custom), run the parallel review protocol (/topo review [target]), or turn the plugin off (/topo off); text after the command is forwarded to the agent verbatim",
 		getArgumentCompletions: (prefix: string) => {
-			const items = [...PLAN_TIER_IDS, "custom", "off"].map((value) => ({
+			const items = [...PLAN_TIER_IDS, "custom", "review", "off"].map((value) => ({
 				value,
 				label: value,
-				description: value === "off" ? "deactivate and re-hide the team tools" : `apply the ${value} team plan`,
+				description:
+					value === "off"
+						? "deactivate and re-hide the team tools"
+						: value === "review"
+							? "run the parallel multi-reviewer protocol"
+							: `apply the ${value} team plan`,
 			}));
 			const filtered = items.filter((item) => item.value.startsWith(prefix));
 			return filtered.length > 0 ? filtered : null;

@@ -10,8 +10,6 @@
     "extensions",
     "bin",
     "agents",
-    "prompts",
-    "skills",
     "docs",
     "README.md",
     "README_CN.md",
@@ -23,12 +21,6 @@
   "pi": {
     "extensions": [
       "./extensions"
-    ],
-    "skills": [
-      "./skills"
-    ],
-    "prompts": [
-      "./prompts"
     ]
   },
   "peerDependencies": {

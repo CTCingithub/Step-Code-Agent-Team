@@ -77,25 +77,23 @@ done
 
 # ---- package manifest sanity ----
 # A `pi` manifest suppresses convention-directory discovery for the resource
-# types it does not declare — an undeclared skills/ or prompts/ would silently
-# not load once the plugin is installed as a package. Guard the manifest.
+# types it does not declare — the plugin ships its extension only (skills and
+# prompt templates were replaced by code), so guard that declaration.
 if node -e '
 const root = process.argv[1];
 const pkg = require(`${root}/package.json`);
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
-for (const t of ["extensions", "skills", "prompts"]) {
+for (const t of ["extensions"]) {
 	assert.ok(Array.isArray(pkg.pi?.[t]) && pkg.pi[t].length > 0, `pi.${t} not declared`);
 	for (const p of pkg.pi[t]) {
 		assert.ok(fs.existsSync(`${root}/${p.replace(/^\.\//, "")}`), `declared path missing: ${p}`);
 	}
 }
-assert.ok(fs.existsSync(`${root}/skills/team-orchestration/SKILL.md`), "skill entry missing");
-assert.ok(fs.existsSync(`${root}/prompts/team-review.md`), "prompt entry missing");
 ' "$ROOT" 2>&1; then
 	echo "manifest-check: OK"
 else
-	echo "manifest-check: FAILED (the pi manifest must declare extensions/skills/prompts with existing paths)"
+	echo "manifest-check: FAILED (the pi manifest must declare extensions with existing paths)"
 	FAILED+=("manifest-check")
 fi
 
@@ -178,6 +176,22 @@ else
   echo "live-args-forward: OK"
 fi
 rm -rf "$LIVE3"
+
+# /topo review: the command activates and forwards the target verbatim (the
+# review-protocol instruction is injected request-locally and never logged).
+LIVE5="$(mktemp -d)"
+mkdir -p "$LIVE5/sessions"
+rev_out="$(cd "$LIVE5" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo review ping-review-check"}\n' \
+  | STEP_CODING_AGENT_DIR="$LIVE5/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
+    --mode rpc --session-id live-review --session-dir "$LIVE5/sessions" -a 2>&1)" || true
+if echo "$rev_out" | grep -q 'Agent team plugin activated' && echo "$rev_out" | grep -q '"text":"ping-review-check"'; then
+  echo "live-review: OK"
+else
+  echo "live-review: FAILED (the /topo review command did not activate and forward verbatim)"
+  echo "$rev_out" | tail -5
+  FAILED+=("live-review")
+fi
+rm -rf "$LIVE5"
 
 # Untrusted project config must NOT apply: staged activation.enabled=false with
 # --no-approve → /topo still activates.

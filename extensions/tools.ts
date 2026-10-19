@@ -80,6 +80,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"recreate the member to change its configuration. Members need bash in their tool allowlist",
 			"to use the member-to-member messaging channel (read-only presets cannot).",
 			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
+			"Keep teams small (2-4 members) and give each member a distinct focus.",
 		].join(" "),
 		parameters: Type.Object({
 			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
@@ -165,6 +166,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Pass taskId to run the message as a task (marks it running, writes the reply back as the task result, one retry on failure).",
 			"Pass mode: \"oneshot\" for stateless fire-and-forget work (fresh process, no session, no context continuity).",
 			"Members may only message each other along edges of the declared team topology (default: star — no direct member messaging).",
+			"Keep each message complete and self-contained — members do not see your conversation.",
 		].join(" "),
 		parameters: Type.Object({
 			member: Type.String({ description: "Target member name" }),
@@ -251,6 +253,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"complete / fail: set a task's terminal status manually (result / reason recorded).",
 			"list: show the board.",
 			"A task is ready when every task in blockedBy is done; cycles are rejected.",
+			"Prefer blockedBy dependencies over member-to-member messages.",
 		].join(" "),
 		parameters: Type.Object({
 			action: StringEnum(["create", "start", "complete", "fail", "list"] as const, {
