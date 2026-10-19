@@ -101,7 +101,7 @@ tune the keywords.
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
 | `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
-| `/agent-team` | Command: activate the plugin and show the team board; text after the command is forwarded to the agent |
+| `/agent-team` | Command: activate the plugin and show the team board; text after the command is forwarded to the agent as a team request |
 
 ## Member communication topology
 

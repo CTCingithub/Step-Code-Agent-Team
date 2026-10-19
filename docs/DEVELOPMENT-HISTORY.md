@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-61，@latest 安装 + 配置种子化 + 文档清理整合（v0.1.2）；此前为 plan-60）。
+> 最近更新：2026-10-19（plan-62，/agent-team 带参转发包裹修复（v0.1.3）；此前为 plan-61）。
 
 ## 总览
 
@@ -33,6 +33,7 @@
 | 24 | 发布 v0.1.0（peer 依赖安装修复 + 标签 + git 安装全链路实测） | plan-59 | 用户按 README 的 git 标签方式在另一台机器安装失败（无 v0.1.0 标签）；发布前排查出隐藏阻塞——step git 安装流 clone→checkout 后跑裸 `npm install --omit=dev`，而 peerDependencies 的三个 `@step-harness/*` 未发布至公共 registry（E404），npm 自动装 peer 会失败；修复：`peerDependenciesMeta` 四 peer 标 optional + 新增 `.npmrc`（legacy-peer-deps，与 step 自身托管安装的 `--legacy-peer-deps` 一致）；附注标签 v0.1.0（cf9be95）推送；hermetic 实测全链路通过 | 无 |
 | 25 | 插件配置迁移至统一 config.toml | plan-60 | 用户另一台机器装 v0.1.0 后「找不到配置文件」——安装实际成功（packages 条目在 config.toml），但插件配置只读已退役的 `<agentDir>/settings.json`；扩展无 settings API（官方示例亦为自行读盘），`@step-harness/coding-agent` 导出 readStepConfig/CONFIG_DIR_NAME/STEP_CONFIG_FILE_NAME 且 0.1.5 实测具备；config.ts 新增统一配置层（全局 `<stepRoot>/config.toml` + 项目级 `<cwd>/.stepcode/config.toml` trust 门控，防御式查找旧版无导出则跳过）；优先级：默认 < 旧版专用文件 < settings.json < config.toml < env；phase19 探针 8 组断言先红 7 项后绿；CONFIGURATION/README/ARCHITECTURE/TESTING/HANDOFF 中英同步；全量回归 14 phase + 10 检查全绿 | 无 |
 | 26 | @latest 安装 + 配置种子化 + 文档清理整合（v0.1.2） | plan-61 | 新机器装 v0.1.1 后 config.toml 无默认配置信息；① 种子化：config.ts 新增 seedGlobalConfigExample——首次激活时全局 config.toml 无 stepcodeAgentTeam 表则追加注释默认值块（保序追加不重写——step 的 updateGlobalStepConfig 会整体 stringify 丢失用户注释；全注释默认值照常生效；幂等）；phase20 探针 10 项断言先红后绿；② @latest：step 的 splitRef 将 @latest 当普通 git ref，建随发布移动的 latest 分支（`git push origin <tag>:latest`）并纳入发布流程；README 中英安装示例改 @latest 优先；③ 文档清理整合：CONFIGURATION 中英重写（删去全部 settings.json/专用文件旧版表述，位置/优先级/TOML 示例/速览表/拓扑表/种子化说明），README 中英配置节大压缩（长示例+速览表→导语+精简片段+指针），ARCHITECTURE/TESTING/MANUAL-TESTING/SKILL/sandbox README/HANDOFF 同步 | 无 |
+| 27 | /agent-team 带参转发包裹修复（v0.1.3） | plan-62 | 用户报告「/agent-team <请求> 不启动团队、斜杠命令消失只剩文本」；三层复现定位：RPC 证明激活/团队板/转发全正常（live-args-forward 原只断言转发、漏激活）；PTY 驱动真实 TUI 复现（首次运行主题选择器会吃输入，需先回车越过）——激活 toast 被 TUI 帧合并且未写入终端（装饰性），团队板 toast 正常；会话文件检查：模型对转发请求【零工具调用】——根因是请求原样转发、不含「使用团队」指示，模型对简单任务独自完成（自然语言路径生效是因用户原文含「使用智能体团队功能」）；修复：extensions/forward.ts wrapTeamRequest（CJK 检测选中文/英文指令行+原请求保真），index.ts 转发前包裹；phase21 单测 6 项；live-args-forward 强化为三级硬断言（激活+团队板+包裹文本）；README 中英命令表同步 | 无 |
 
 ## 明细
 
@@ -276,3 +277,13 @@
 **工作**：① `extensions/config.ts`：新增导出 `seedGlobalConfigExample(agentDirPath)`——全局 config.toml 存在且无 `stepcodeAgentTeam` 字样时追加注释默认值块（约 20 行，覆盖常用项）；缺失则经 `ensureStepConfigFile` 建文件（step 头）再追加；非 ENOENT 读取错误 debug 留痕；返回是否写入。② `extensions/index.ts`：`tryActivate` 接线（激活即种子化；探测/live 检查各有独立临时目录，无 /tmp 污染）。③ `test/smoke/phase20.ts`（零 token，纯函数级驱动）：10 项断言——既有配置追加且原内容（theme/mcp_import）保序、块全注释且解析后仍为默认、二次调用幂等（字节不变）、已有 `stepcodeAgentTeam` 表则跳过、缺失文件则创建（step 头+种子块）——先红（函数未实现）后绿；runner 默认列表加 20。④ @latest：建 `latest` 分支并在每次发布时移动（`git push origin <tag>:latest`）；README 中英安装示例改 `@latest`（推荐）+ `@vX.Y.Z`（钉住）。⑤ 文档清理整合：CONFIGURATION 中英重写（位置/优先级/完整 TOML 示例含无 null 省略约定/速览表/拓扑形状表/环境变量/说明——种子化行为入「说明」）；README 中英配置节压缩（原导语+层级表+生效段+55 行 TOML+速览表 → 一段导语+6 行精简片段+指向 CONFIGURATION 的指针）；ARCHITECTURE 中英 config.ts 行、TESTING 中英（phase20 行、phase19 行去 settings.json 表述）、MANUAL-TESTING 中英 3 处（信任 UX heredoc 改 TOML、超时调参路径改 sandbox/config.toml）、SKILL.md 配置位置、sandbox/README 中英（沙箱配置位置改 sandbox/config.toml、fixture 行注明旧版层级）、HANDOFF §1 同步。
 
 **验证**：phase20 先红后绿；全量 `npm run smoke` 16 phase + 10 检查全绿；用户面向文档旧版设置表述清零（仅存 sandbox 探针 fixture 清单的两处有意说明）；发布后 hermetic 实测 `step install git:...@latest` 全链路 + 种子化端到端（见下）。
+
+### 27. /agent-team 带参转发包裹修复（plan-62）
+
+**用户 prompt**：「我的测试场景是，在一个科研工作的项目中，尝试输入prompt『请不要修或新增改工作空间中的内容，我需要你使用智能体团队功能，深入阅读本项目，然后输出一段学术性的文字介绍本项目』可以启动智能体团队。但是如果输入prompt『/agent-team 请不要修或新增改工作空间中的内容，我需要你深入阅读本项目，然后输出一段学术性的文字介绍本项目』则不会启动智能体团队，且斜杠命令在发送以后会消失，我只看得到『请不要修…』。请给我排查原因」
+
+**思路**：用户体感「不激活」与协议层事实不符，用三层复现夹逼根因——① **RPC 复现**：`/agent-team <args>` 的激活 notify、团队板（含转发行）、agent turn 全部出现（既往 live-args-forward 只断言转发、未断言激活，故此类回归漏网）；② **PTY 驱动真实 TUI 复现**用户场景（注意：首次运行的主题选择器会吃掉输入，需先回车越过 onboarding 再发命令）：激活 toast 因 TUI 差分渲染的帧合并且**从未写入终端**（装饰性问题，团队板 toast 正常出现）；③ **会话文件检查**：模型对该转发请求【零工具调用】——**根因：命令把请求原样转发，转发文本不含任何「使用团队」的指示，模型对「读项目写介绍」这类简单任务独自完成**；自然语言路径生效是因为用户原文含「使用智能体团队功能」。
+
+**工作**：① `extensions/forward.ts`（新增）：`wrapTeamRequest(request)`——CJK 检测选择中文/英文指令行，原请求逐字保留（`请使用智能体团队工具完成以下请求：\n<request>` / `Use the agent team tools to accomplish the following request:\n<request>`）。② `extensions/index.ts`：命令处理器转发前包裹（注释记录根因）；命令描述同步为 "forwarded to the agent as a team request"。③ `test/smoke/phase21.ts`（新增，零 token 纯函数级）：6 项断言——CJK→中文指令、ASCII→英文指令、混合文本、多行保真、结构恰为「一行指令+请求」；runner 默认列表加 21。④ `test/run-smoke.sh` live-args-forward 强化为**三级硬断言**：激活 notify（必需，修既往漏检）+ 团队板转发行（必需）+ 包裹文本入流或入会话文件（必需）；原 send_user_message/会话文件积分证据被更强断言覆盖。⑤ README 中英命令表同步。
+
+**验证**：RPC 复现（修复后）激活 1 次、包裹指令入流 2 次；phase21 绿；全量 `npm run smoke` 17 phase + 10 检查全绿；发布 v0.1.3 并移动 latest 分支后，PTY 端到端复测用户原命令——会话文件出现团队工具调用（修复前为零）。
