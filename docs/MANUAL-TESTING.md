@@ -17,9 +17,8 @@
 > extension and activates it).
 >
 > What remains is only the **irreducible** manual items — ordered by priority. Each one
-> comes with a **directly copy-pasteable command / prompt**; the detailed TUI rendering
-> checklist is in [TUI-VERIFICATION.md](TUI-VERIFICATION.md) (the content layer is
-> already asserted by phase15; only look-and-feel remains).
+> comes with a **directly copy-pasteable command / prompt**. The TUI rendering checklist
+> (look-and-feel only; the content layer is asserted by phase15) is §1 below.
 
 ## Status overview (2026-10-19)
 
@@ -42,7 +41,7 @@ All manual items run inside the sandbox (`./sandbox/run.sh`, isolated from the r
 |---|---|---|
 | Demo project | `sandbox/project/` (demo state with the seeded bug) | `bash sandbox/restore-project.sh` |
 | Runtime data | `sandbox/agent/{sessions,teams,plans,live-context}`, `sandbox/project/data/` (all gitignored) | Optional full reset, see below |
-| Session logs | `sandbox/session-log-*.md` (generated on demand; the prompt is in [TUI-VERIFICATION.md](TUI-VERIFICATION.md) §3) | `restore-project.sh` deletes them automatically |
+| Session logs | `sandbox/logs/session-log-*.md` (generated on demand; the prompt is in [sandbox/README.md](../sandbox/README.md#session-log)) | `restore-project.sh` deletes them automatically |
 
 **Quick restore (required after every test round)**:
 
@@ -67,10 +66,28 @@ colors/layout are pleasing, toast dwell time, the actual `ctrl+o` keypress, and 
 refresh rhythm of streaming progress. One pass in a sandbox interactive session is
 enough; there is no need to verify specific text.
 
-**Action**: follow the [TUI-VERIFICATION.md](TUI-VERIFICATION.md) checklist and
-copy-paste the prompts step by step (environment setup, the 11-step prompts, and the
-closing restore are all in that document), and tick the boxes after checking the look
-and feel.
+**Environment**: see [TESTING.md](TESTING.md) §0 (checkout path, the
+`sandbox/TEST-KEY.md` key, `./sandbox/run.sh`); from step 5 onward a key is required.
+
+**How to use**: each step below is **a single copy-pasteable prompt line** — once the
+leader model receives it, it calls the matching team tool on its own, and all you have
+to do is check that the rendering matches the "Expected render" column. Paste them in
+order; between steps, wait for the previous render to finish before pasting the next
+one. Step 6 is a key press, not a prompt.
+
+| # | Copy-paste | Expected render | Result |
+|---|---|---|---|
+| 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | Activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
+| 2 | `/topo` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/effort) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
+| 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … effort=high` | ☐ |
+| 4 | `Create another member with the worker role, named worker1` | Same as step 3: `+worker1 (worker)` / `✓ worker1 (worker) [idle]` (provides the second member for step 7's pipeline topology) | ☐ |
+| 5 | `Ask scout1 to introduce himself in one sentence` | renderCall: `team → scout1` + message preview (≤70 chars); during a long run onUpdate streams updates (first "(member is working...)", then interim text); renderResult: usage row (`1 turn, $x.xxxx`) + the reply body (collapsed to 3 lines by default, with "(ctrl+o to expand)") | ☐ |
+| 6 | *(key press, not a prompt)* Press `ctrl+o` on step 5's result | The full body expands; press again to collapse it | ☐ |
+| 7 | `Set the messaging topology to pipeline, then have scout1 say hi to worker1` | renderCall: `team topology pipeline` (a named shape passes no edges, so there is no edge count; if the model explicitly passes edges, ` N edge(s)` is appended); renderResult header: `pipeline · 1 edge(s)` (scout1→worker1); then `team → scout1` dispatches successfully (allowed in the pipeline direction) | ☐ |
+| 8 | `Create a task: count the source files in this project, assign it to scout1, then start it` | renderCall: `team task create T1 count the source files in this project` → `team task start T1`; renderResult: `T1 [done] @scout1 count the source files in this project` + the reply body | ☐ |
+| 9 | `Report the team's current status` | One line per member (icon + name + role + usage), tasks line by line (id [status] title, 50-char preview) | ☐ |
+| 10 | `Disband worker1` | renderCall: `team −worker1`; renderResult: `worker1` | ☐ |
+| 11 | *(exit)* Press `Ctrl+C` twice or `/quit` to leave the sandbox session | No orphan member processes: `pgrep -f 'team-.*-scout1'` is empty | ☐ |
 
 **Verification record (2026-10-19, ✅ passed)**: the user completed the interactive
 walkthrough per the checklist and **found no rendering issues**; this checklist only

@@ -41,7 +41,7 @@ gitignored) accumulates as tests run and should be cleaned when needed:
 | Demo project | `sandbox/project/` (modified by members, e.g. fixing a seeded bug) | `bash sandbox/restore-project.sh` restores it to the seeded state |
 | Sessions / teams / plans / live-context | `sandbox/agent/{sessions,teams,plans,live-context}` | `rm -rf` then re-run (fresh sandbox) |
 | Demo project runtime data | `sandbox/project/data/` | `restore-project.sh` clears it automatically |
-| Session logs | `sandbox/session-log-*.md` (generated on demand by verification sessions; prompt in [TUI-VERIFICATION.md](TUI-VERIFICATION.md) §3) | `restore-project.sh` deletes them automatically |
+| Session logs | `sandbox/logs/session-log-*.md` (generated on demand by verification sessions; prompt in [../sandbox/README.md](../sandbox/README.md#session-log)) | `restore-project.sh` deletes them automatically |
 | Per-fixture runtime state | `sandbox/cfg-*/{sessions,teams,teams-*,live-context}` | Same as above, clean when needed |
 
 ```bash
@@ -54,9 +54,8 @@ rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
 bash sandbox/restore-project.sh
 ```
 
-Manual verification in the interactive TUI (including copy-paste prompts) is in
-[TUI-VERIFICATION.md](TUI-VERIFICATION.md); the full manual testing checklist
-(including the restore commands) is in
+Manual verification in the interactive TUI (including copy-paste prompts) and the
+full manual testing checklist (including the restore commands) are in
 [MANUAL-TESTING.md](MANUAL-TESTING.md).
 
 ## 1. Layer A — unit tests (no LLM, no processes)
@@ -147,10 +146,10 @@ deleted), and scale (8-member cap / 999-task cap / 50KB per-task detail).
 
 TUI rendering (renderCall/renderResult, the `/topo` panel, streaming
 progress, activation notify) only takes effect in the interactive TUI and is not
-covered by probes; verify it manually per
-[TUI-VERIFICATION.md](TUI-VERIFICATION.md). The full manual testing checklist
-(real install, project-config trust flow, LLM compliance, sandbox demo scenarios,
-cost guardrails, etc.) is in [MANUAL-TESTING.md](MANUAL-TESTING.md).
+covered by probes; verify it manually per [MANUAL-TESTING.md](MANUAL-TESTING.md)
+§1 — which also holds the full manual testing checklist (real install,
+project-config trust flow, LLM compliance, sandbox demo scenarios, cost
+guardrails, etc.).
 
 ## 5. Fix and re-run rules
 

@@ -28,7 +28,7 @@ LLM 层测试前，把 key 写入 `sandbox/TEST-KEY.md`（gitignored，首行 `S
 | 演示项目 | `sandbox/project/`（会被成员改动，如修复种子 bug） | `bash sandbox/restore-project.sh` 还原为种子态 |
 | 会话 / 团队 / 计划 / live-context | `sandbox/agent/{sessions,teams,plans,live-context}` | `rm -rf` 后重跑（全新沙箱） |
 | 演示项目运行数据 | `sandbox/project/data/` | `restore-project.sh` 自动清除 |
-| 会话日志 | `sandbox/session-log-*.md`（验证会话按需生成，prompt 见 [TUI-VERIFICATION.md](TUI-VERIFICATION_CN.md) §3） | `restore-project.sh` 自动删除 |
+| 会话日志 | `sandbox/logs/session-log-*.md`（验证会话按需生成，prompt 见 [../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)） | `restore-project.sh` 自动删除 |
 | 各 fixture 的运行时状态 | `sandbox/cfg-*/{sessions,teams,teams-*,live-context}` | 同上，按需清理 |
 
 ```bash
@@ -41,8 +41,7 @@ rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
 bash sandbox/restore-project.sh
 ```
 
-交互 TUI 的人工验证（含可复制粘贴的 prompt）见
-[TUI-VERIFICATION.md](TUI-VERIFICATION_CN.md)；完整手动测试清单（含各项还原命令）见
+交互 TUI 的人工验证（含可复制粘贴的 prompt）与完整手动测试清单（含各项还原命令）均见
 [MANUAL-TESTING.md](MANUAL-TESTING_CN.md)。
 
 ## 1. A 层 — 单元测试（无 LLM，无进程）
@@ -124,9 +123,8 @@ prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](
 单任务 detail 50KB）。
 
 TUI 渲染（renderCall/renderResult、`/topo` 面板、流式进度、激活 notify）只在交互 TUI
-生效，探针覆盖不到，按 [TUI-VERIFICATION.md](TUI-VERIFICATION_CN.md) 人工验证；完整的手动测试
-清单（真实安装、项目配置信任流、LLM 遵循度、沙箱演示剧本、成本护栏等）见
-[MANUAL-TESTING.md](MANUAL-TESTING_CN.md)。
+生效，探针覆盖不到，按 [MANUAL-TESTING.md](MANUAL-TESTING_CN.md) 第 1 节人工验证——该文档
+同时包含完整的手动测试清单（真实安装、项目配置信任流、LLM 遵循度、沙箱演示剧本、成本护栏等）。
 
 ## 5. 修复与复跑规则
 

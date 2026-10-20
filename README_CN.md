@@ -257,7 +257,7 @@ extensions/    index.ts（接线）· config.ts · activation.ts · rpc-client.t
 bin/           stepcode-team.mjs（成员侧 CLI shim；手动/外部路径）
 agents/        角色预设（scout · planner · worker · reviewer）
 docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · ROLES · TESTING ·
-               TUI-VERIFICATION · MANUAL-TESTING 参考文档
+               MANUAL-TESTING 参考文档
 test/          smoke/ 零 token 探针 + run-smoke.sh（npm run smoke）
 sandbox/       隔离开发环境（随仓库分发；运行时状态在 gitignore）
                └── step/  Step Code 源码 submodule（钉住跟踪的版本）

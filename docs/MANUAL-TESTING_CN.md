@@ -12,8 +12,7 @@
 > 扩展并激活）。
 >
 > 以下仅剩**不可约**的人工项——按优先级排列。每项都给了**可直接复制粘贴的命令 /
-> prompt**；TUI 渲染的细化清单见 [TUI-VERIFICATION.md](TUI-VERIFICATION_CN.md)（内容层已被
-> phase15 断言，只剩观感）。
+> prompt**。TUI 渲染清单（只剩观感；内容层已被 phase15 断言）见下方第 1 节。
 
 ## 状态总览（2026-10-19）
 
@@ -36,7 +35,7 @@
 |---|---|---|
 | 演示项目 | `sandbox/project/`（含种子 bug 的演示态） | `bash sandbox/restore-project.sh` |
 | 运行时数据 | `sandbox/agent/{sessions,teams,plans,live-context}`、`sandbox/project/data/`（全部 gitignored） | 可选彻底清场，见下 |
-| 会话日志 | `sandbox/session-log-*.md`（按需生成，prompt 见 [TUI-VERIFICATION.md](TUI-VERIFICATION_CN.md) §3） | `restore-project.sh` 自动删除 |
+| 会话日志 | `sandbox/logs/session-log-*.md`（按需生成，prompt 见 [sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)） | `restore-project.sh` 自动删除 |
 
 **快速还原（每轮测试后必做）**：
 
@@ -59,8 +58,26 @@ bash sandbox/restore-project.sh
 颜色/布局是否顺眼、toast 停留时间、`ctrl+o` 实际按键、流式进度的刷新节奏。
 在沙箱交互会话里过一遍即可，无需核对具体文本。
 
-**操作**：按 [TUI-VERIFICATION.md](TUI-VERIFICATION_CN.md) 的清单逐步复制粘贴 prompt
-（环境准备、11 步 prompt、收尾还原都在该文档内），核对观感后打勾。
+**环境准备**：见 [TESTING_CN.md](TESTING_CN.md) §0（检出路径、`sandbox/TEST-KEY.md`
+密钥、`./sandbox/run.sh`）；第 5 步起需要 key。
+
+**使用方式**：下方每一步都是**一整行可直接复制粘贴的 prompt**——队长模型收到后会
+自行调用对应的团队工具，你要做的只是核对渲染效果是否符合「预期」列。按顺序粘贴
+即可；每步之间等上一步渲染完成再粘下一步。第 6 步是按键操作，不是 prompt。
+
+| # | 复制粘贴 | 预期渲染 | 结果 |
+|---|---|---|---|
+| 1 | `我想用智能体小队功能熟悉一下这个沙箱项目` | 激活 notify：「Agent team plugin activated (explicit plugin mention). Team tools are now available.」；团队工具从此对模型可见 | ☐ |
+| 2 | `/topo` | 团队板 notify：`Team "<id>"` + 成员行（○/●/✗ 图标 + role + status + model/effort）+ 任务行（含 blockedBy）+ `spend: $x.xxxx`；空队时提示用 team_create_member | ☐ |
+| 3 | `创建一个 scout 角色的成员，名字叫 scout1` | renderCall：`team +scout1 (scout)`；renderResult：`✓ scout1 (scout) [idle] … effort=high` | ☐ |
+| 4 | `再创建一个 worker 角色的成员，名字叫 worker1` | 同第 3 步的 `+worker1 (worker)` / `✓ worker1 (worker) [idle]`（为第 7 步的 pipeline 拓扑提供第二个成员） | ☐ |
+| 5 | `让 scout1 用一句话介绍他自己` | renderCall：`team → scout1` + 消息预览（≤70 字符）；长 run 期间 onUpdate 流式刷新（先 "(member is working...)"，随后 interim 文本）；renderResult：用量行（`1 turn, $x.xxxx`）+ 回复正文（默认折叠 3 行，附 "(ctrl+o to expand)"） | ☐ |
+| 6 | *（按键操作，非 prompt）* 在第 5 步的结果上按 `ctrl+o` | 完整正文展开；再按一次折叠回去 | ☐ |
+| 7 | `把通信拓扑设置为 pipeline，然后让 scout1 跟 worker1 问个好` | renderCall：`team topology pipeline`（命名形状不传 edges，故无边数；若模型显式传了 edges 则附 ` N edge(s)`）；renderResult 头：`pipeline · 1 edge(s)`（scout1→worker1）；随后 `team → scout1` 派活成功（pipeline 方向允许） | ☐ |
+| 8 | `创建一个任务：统计这个项目的源文件数量，指派给 scout1，然后启动它` | renderCall：`team task create T1 统计这个项目的源文件数量` → `team task start T1`；renderResult：`T1 [done] @scout1 统计这个项目的源文件数量` + 回复正文 | ☐ |
+| 9 | `汇报一下团队当前状态` | 每成员一行（图标 + name + role + 用量），任务逐行（id [status] title，50 字符预览） | ☐ |
+| 10 | `解散 worker1` | renderCall：`team −worker1`；renderResult：`worker1` | ☐ |
+| 11 | *（退出）* `Ctrl+C` 两次或 `/quit` 退出沙箱会话 | 无孤儿成员进程：`pgrep -f 'team-.*-scout1'` 为空 | ☐ |
 
 **实测记录（2026-10-19，✅ 已通过）**：用户按清单完成交互走查，**渲染方面未发现问题**；
 后续仅当 `render.ts` 变更时需要重走此清单。

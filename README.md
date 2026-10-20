@@ -295,7 +295,7 @@ extensions/    index.ts (wiring) · config.ts · activation.ts · rpc-client.ts 
 bin/           stepcode-team.mjs (member-side CLI shim; manual/external path)
 agents/        role presets (scout · planner · worker · reviewer)
 docs/          ARCHITECTURE · PROTOCOL · CONFIGURATION · ROLES · TESTING ·
-               TUI-VERIFICATION · MANUAL-TESTING references
+               MANUAL-TESTING references
 test/          smoke/ zero-token probes + run-smoke.sh (npm run smoke)
 sandbox/       isolated dev environment (ships with the repo; runtime state gitignored)
                └── step/  Step Code source submodule (pinned revision)
