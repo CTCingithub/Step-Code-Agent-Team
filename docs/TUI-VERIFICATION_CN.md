@@ -14,8 +14,8 @@
 ## 0. 环境准备（复制粘贴）
 
 ```bash
-cd <本仓库的检出路径>          # 例如 cd ~/GitProjects/Step-Code-Agent-Team
-export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' local/test-api-key.md | cut -d= -f2)"
+cd ~/GitProjects/Step-Code-Agent-Team
+export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' sandbox/TEST-KEY.md | cut -d= -f2)"
 ./sandbox/run.sh               # 在 sandbox/project 中启动 step，已加载本扩展
 ```
 
@@ -47,11 +47,7 @@ export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' local/test-api-key.md | cut -d=
 
 ## 3. 收尾：会话日志（可选）与沙箱还原
 
-想留下本次验证的过程记录时，先粘贴下面这条 prompt 让队长生成日志：
-
-```text
-请在仓库的 sandbox/ 目录（不是 sandbox/project）中创建日志文件 session-log-<今天日期>.md，记录本 session 的用户 prompt、你的工作记录与各成员的回复内容
-```
+想留下本次验证的过程记录时，粘贴沙箱 README（[sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）「会话日志」一节的 prompt 让队长生成日志——写入 `sandbox/logs/session-log-<日期>.md`。
 
 随后还原沙箱。演示/验证会改动 `sandbox/project/`（成员可能修复种子 bug）并产生会话、团队注册表等
 运行时状态。按需选择：

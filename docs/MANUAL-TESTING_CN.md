@@ -71,12 +71,12 @@ bash sandbox/restore-project.sh
 （不拷贝、只记录路径，按 manifest 声明加载资源），直接安装检出副本即可：
 
 ```bash
-step install <仓库绝对路径>
+step install ~/GitProjects/Step-Code-Agent-Team
 ```
 
 **预期**：安装后新会话可激活、成员可 spawn；包只分发扩展资源（无 skill 或提示词
 模板——编排协议经请求本地注入，评审工作流是 `/topo review` 命令）；
-`step remove <同一路径>` 可卸载。
+`step remove ~/GitProjects/Step-Code-Agent-Team` 可卸载。
 
 **验证安装生效**（安装后开一个普通会话，粘贴）：
 
@@ -84,7 +84,7 @@ step install <仓库绝对路径>
 用智能体小队功能介绍一下你自己
 ```
 
-**卸载验证**：`step remove <仓库绝对路径>`，再开会话确认团队工具不再出现。
+**卸载验证**：`step remove ~/GitProjects/Step-Code-Agent-Team`，再开会话确认团队工具不再出现。
 
 ## 3. 信任提示的交互 UX
 

@@ -21,8 +21,8 @@
 ## 0. Environment setup (copy-paste)
 
 ```bash
-cd <path to this repo checkout>      # e.g. cd ~/GitProjects/Step-Code-Agent-Team
-export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' local/test-api-key.md | cut -d= -f2)"
+cd ~/GitProjects/Step-Code-Agent-Team
+export STEP_API_KEY="$(grep -m1 '^STEP_API_KEY=' sandbox/TEST-KEY.md | cut -d= -f2)"
 ./sandbox/run.sh                     # starts step inside sandbox/project, with this extension loaded
 ```
 
@@ -57,12 +57,10 @@ pasting the next one. Step 6 is a key press, not a prompt.
 
 ## 3. Wrap-up: session log (optional) and sandbox restore
 
-To keep a process record of this verification run, first paste the prompt below
-and let the leader generate the log:
-
-```text
-In the repo's sandbox/ directory (not sandbox/project), create a log file session-log-<today's date>.md recording this session's user prompts, your work log, and each member's replies
-```
+To keep a process record of this verification run, paste the **Session log**
+prompt from the sandbox README
+([sandbox/README.md](../sandbox/README.md#session-log)) and let the leader
+generate the log — it writes `sandbox/logs/session-log-<date>.md`.
 
 Then restore the sandbox. Demos/verification change `sandbox/project/` (a member
 may fix the seeded bug) and produce runtime state such as sessions and team

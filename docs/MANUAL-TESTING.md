@@ -83,13 +83,13 @@ needs a re-run when `render.ts` changes.
 manifest), so installing the checkout directly is fine:
 
 ```bash
-step install <absolute path to the repo>
+step install ~/GitProjects/Step-Code-Agent-Team
 ```
 
 **Expected**: after install, a new session can activate and members can spawn;
 the package ships its extension resource only (no skills or prompt templates —
 the orchestration protocol is injected request-locally and the review workflow
-is the `/topo review` command); `step remove <same path>` uninstalls.
+is the `/topo review` command); `step remove ~/GitProjects/Step-Code-Agent-Team` uninstalls.
 
 **Verify the install works** (open a normal session after installing, paste):
 
@@ -97,7 +97,7 @@ is the `/topo review` command); `step remove <same path>` uninstalls.
 Use the topo team feature to introduce yourself
 ```
 
-**Uninstall verification**: `step remove <absolute path to the repo>`, then start
+**Uninstall verification**: `step remove ~/GitProjects/Step-Code-Agent-Team`, then start
 a session and confirm the team tools no longer appear.
 
 ## 3. Trust prompt interactive UX

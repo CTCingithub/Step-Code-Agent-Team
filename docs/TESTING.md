@@ -26,8 +26,9 @@ export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 export STEP_CODING_AGENT_SESSION_DIR="$PWD/sandbox/agent/sessions"
 ```
 
-Before LLM-layer tests, `export STEP_API_KEY=<your own key>` (passed through the
-environment, never written to any file).
+Before LLM-layer tests, put the key in `sandbox/TEST-KEY.md` (gitignored, one
+`STEP_API_KEY=<key>` line) or export `STEP_API_KEY` — the runner scripts read it
+automatically (the environment wins; the key is never written to any file).
 
 ### Sandbox runtime state and restore
 
@@ -133,7 +134,7 @@ processes after abort; onUpdate is called at least once; >50KB output is
 truncated and `details.fullText` holds the full text.
 
 After a manual sandbox round, have the agent record the session into
-`sandbox/SESSION-LOG.md` — the pasteable prompt is in the sandbox README's
+`sandbox/logs/session-log-<date>.md` — the pasteable prompt is in the sandbox README's
 [Session log](../sandbox/README.md#session-log) section.
 
 ## 4. Layer D — robustness and boundaries

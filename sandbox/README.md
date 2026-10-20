@@ -24,7 +24,7 @@ agent team.
 |---|---|
 | `run.sh` | Sandbox launcher: isolates agentDir/session/plan, cwd points at `project/` |
 | `probe.sh` | Zero-token protocol probe (expects `PROBE OK`) |
-| `restore-project.sh` | Restores the sandbox test environment: resets `project/` to its initial seeded state (including the off-by-one seeded bug), clears runtime data and session logs (`session-log-*.md`, `SESSION-LOG.md`) |
+| `restore-project.sh` | Restores the sandbox test environment: resets `project/` to its initial seeded state (including the off-by-one seeded bug), clears runtime data and session logs (`session-log-*.md`, `logs/`) |
 | `project/` | Demo project: zero-dependency Node.js task manager (`npm test`: 12 tests, 11 pass with the seeded bug in place) |
 | `project-pristine/` | Initial snapshot of the demo project (the source for restore; do not modify) |
 | `smoke-phase4/10/11/12.ts` | LLM-layer regression probes (need a key; see docs/TESTING.md for how to run) |
@@ -84,12 +84,12 @@ path-protection guardrail (members must not read or exfiltrate it).
 ## Session log
 
 After each sandbox test round, have the agent write the process to
-`sandbox/SESSION-LOG.md` (gitignored, kept locally; cleared together with the
-seeded state by `restore-project.sh`). Paste this prompt into the session (or
-hand it to the leader at the end of the round):
+`sandbox/logs/session-log-<date>.md` (gitignored, kept locally; cleared
+together with the seeded state by `restore-project.sh`). Paste this prompt
+into the session (or hand it to the leader at the end of the round):
 
 ```text
-Record this session's team collaboration into sandbox/SESSION-LOG.md with
+Record this session's team collaboration into sandbox/logs/session-log-<today's date>.md with
 this structure: (1) header — date, main model, working directory, team
 framework, security-guardrail compliance; (2) the user prompts, verbatim;
 (3) the roster table — member / role / duty / tools / effort; (4) each phase

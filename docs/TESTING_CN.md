@@ -16,7 +16,7 @@ export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 export STEP_CODING_AGENT_SESSION_DIR="$PWD/sandbox/agent/sessions"
 ```
 
-LLM 层测试前 `export STEP_API_KEY=<你自己的 key>`（经环境变量传递，绝不写入任何文件）。
+LLM 层测试前，把 key 写入 `sandbox/TEST-KEY.md`（gitignored，首行 `STEP_API_KEY=<key>`）或 export `STEP_API_KEY`——各runner 脚本会自动读取（环境变量优先；key 绝不落盘）。
 
 ### 沙箱运行时状态与还原
 
@@ -113,7 +113,7 @@ oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记�
 `STEPCODE_TEAM_COST_WARN=0.0001` 触发告警、设为 0 禁用；abort 后无孤儿进程；
 onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。
 
-每轮人工沙箱演练结束后，让 agent 把过程记录到 `sandbox/SESSION-LOG.md`——可粘贴的
+每轮人工沙箱演练结束后，让 agent 把过程记录到 `sandbox/logs/session-log-<日期>.md`——可粘贴的
 prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
 ## 4. D 层 — 鲁棒性与边界
