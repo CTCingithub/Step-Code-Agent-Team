@@ -75,8 +75,8 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Members run as isolated `step --mode rpc` processes with their own context window,",
 			"model, and tool allowlist. Idempotent: an existing member name is resumed, not duplicated,",
 			"and on resume the passed role/tools/model/effort/systemPrompt are ignored — disband and",
-			"recreate the member to change its configuration. Members need bash in their tool allowlist",
-			"to use the member-to-member messaging channel (read-only presets cannot).",
+			"recreate the member to change its configuration. Members message teammates through the built-in",
+			"topo_team_msg tool (no bash needed — read-only presets can use their topology edges too).",
 			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
 			"Keep teams small (2-4 members) and give each member a distinct focus.",
 		].join(" "),
@@ -351,6 +351,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Shapes: star (default — everything routes through you, no direct member messaging),",
 			"pipeline (ordered handoffs in member creation order), mesh (everyone may message everyone),",
 			"ring (each member may message the next), custom (explicit edges).",
+			"Pass members to scope pipeline/mesh/ring to a subset of the current members (default: all).",
 			"Match the shape to the task: parallel independent work needs only star; sequential refinement fits",
 			"pipeline; cross-checking peers fit mesh or a few custom edges. Members message teammates through",
 			"the built-in topo_team_msg tool (no bash required — read-only presets can use their edges too); a",
@@ -372,6 +373,11 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 					{ description: 'Explicit edges; required for shape "custom"' },
 				),
 			),
+			members: Type.Optional(
+				Type.Array(Type.String({ description: "Member name" }), {
+					description: "Scope pipeline/mesh/ring to a subset of the current members (default: all)",
+				}),
+			),
 		}),
 		renderCall: renderTeamCall("team_set_topology"),
 		renderResult: renderTeamResult("team_set_topology"),
@@ -379,7 +385,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			const manager = getManager(ctx);
 			assertActive();
 			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
-			const topology = manager.setTopology(params.shape, edges);
+			const topology = manager.setTopology(params.shape, edges, params.members);
 			const lines = ["Topology set:", manager.describeTopology()];
 			return {
 				content: [{ type: "text", text: lines.join("\n") }],

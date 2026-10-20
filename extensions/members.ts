@@ -699,7 +699,7 @@ export class TeamManager {
 		const task = this.reg.tasks.find((t) => t.id === id);
 		if (!task) {
 			const available = this.reg.tasks.map((t) => t.id).join(", ") || "none";
-			throw new Error(`Unknown task "${id}". Existing tasks: ${available}.`);
+			throw new Error(`Unknown task "${id}". Existing tasks: ${available}. Hint: these are team-board task IDs (created with team_task), not your session-plan task IDs.`);
 		}
 		return task;
 	}
@@ -818,10 +818,27 @@ export class TeamManager {
 	 * Declares the member-to-member communication topology. Edges are validated
 	 * against the current member list; unknown members and self-loops throw.
 	 */
-	setTopology(shape: TopologyShape, edges?: TopologyEdge[]): TopologyData {
-		const members = this.reg.members.map((m) => m.name);
+	setTopology(shape: TopologyShape, edges?: TopologyEdge[], membersScope?: string[]): TopologyData {
+		const all = this.reg.members.map((m) => m.name);
+		// Optional scope: build pipeline/mesh/ring over a subset. A session that
+		// accumulated members across phases would otherwise sweep them all into
+		// the shape (observed 2026-10-20: a requested 3-member ring came out as a
+		// 10-member ring). Members outside the scope simply get no edges.
+		let members = all;
+		if (membersScope && membersScope.length > 0) {
+			const unknown = membersScope.filter((n) => !all.includes(n));
+			if (unknown.length > 0) {
+				throw new TopologyError(
+					`Topology scope references unknown member(s): ${unknown.join(", ")}. Known members: ${all.join(", ")}.`,
+				);
+			}
+			if (shape !== "star" && shape !== "custom" && membersScope.length < 2) {
+				throw new TopologyError(`Topology shape "${shape}" needs at least 2 members in scope.`);
+			}
+			members = [...new Set(membersScope)];
+		}
 		const data = normalizeTopology(buildTopology({ shape, members, edges }));
-		validateTopology(data, members);
+		validateTopology(data, all);
 		this.reg.topology = data;
 		this.topologyDeclared = true;
 		this.save();

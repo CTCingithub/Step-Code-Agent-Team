@@ -8,8 +8,8 @@
  *    (previously dead records kept consuming the limit forever).
  * 2. Resuming an existing member tells the caller which create params were
  *    ignored instead of silently keeping the old configuration.
- * 3. Members whose tool allowlist has no bash cannot run the messaging shim;
- *    team_set_topology must warn for edges touching such members.
+ * 3. Member messaging needs no bash: every spawned member gets the
+ *    topo_team_msg tool, so read-only presets can use topology edges.
  *
  * Config: the probe stages members.max=2 into the throwaway agent dir before
  * the first getConfig() call in this extension's module graph.

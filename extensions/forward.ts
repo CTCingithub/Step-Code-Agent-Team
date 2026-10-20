@@ -97,7 +97,7 @@ export function teamReviewInstruction(focus: string, lang: Lang): string {
 		"2. Dispatch in parallel with team_send, each reviewing only its own focus area;",
 		"3. team_task create a dependency-free merge task T1 assigned to a worker: deduplicate, resolve conflicts, and give a conclusion per finding;",
 		"4. The leader attributes each finding to its reviewer and emits a single report;",
-		"5. Finish with team_disband. Topology: star; reviewers have no bash and cannot message each other — the leader relays.",
+		"5. Finish with team_disband. Topology: star (the leader relays; reviewers could also message each other directly via topo_team_msg if the topology declared edges).",
 	].join("\n");
 }
 

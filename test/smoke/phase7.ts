@@ -143,6 +143,26 @@ export default function (pi: ExtensionAPI) {
 			check("unknown member throws", throwsTopologyError(() => manager.setTopology("custom", [["a", "ghost"]])));
 			check("self-loop throws", throwsTopologyError(() => manager.setTopology("custom", [["a", "a"]])));
 
+			// 7b. scoped shapes: pipeline/mesh/ring over a subset; everyone else
+			// gets no edges (2026-10-20 session: a requested 3-member ring inside
+			// a 10-member team swept in all members before this parameter existed).
+			manager.setTopology("ring", undefined, ["a", "b"]);
+			check("scoped ring: a→b", manager.mayMessage("a", "b"));
+			check("scoped ring: b→a (wrap)", manager.mayMessage("b", "a"));
+			check("scoped ring: c isolated (a→c denied)", !manager.mayMessage("a", "c"));
+			check("scoped ring: c isolated (c→a denied)", !manager.mayMessage("c", "a"));
+			check("scoped ring: c isolated (c→b denied)", !manager.mayMessage("c", "b"));
+			check("scoped ring: 2 edges only", manager.getTopology().edges.length === 2, `edges=${manager.getTopology().edges.length}`);
+			check(
+				"scoped ring: unknown member in scope throws",
+				throwsTopologyError(() => manager.setTopology("ring", undefined, ["a", "ghost"])),
+			);
+			check("scoped ring: single-member scope throws", throwsTopologyError(() => manager.setTopology("ring", undefined, ["a"])));
+			manager.setTopology("pipeline", undefined, ["b", "c"]);
+			check("scoped pipeline: b→c", manager.mayMessage("b", "c"));
+			check("scoped pipeline: a→b denied", !manager.mayMessage("a", "b"));
+			check("scoped pipeline: c→a denied", !manager.mayMessage("c", "a"));
+
 			// 8. registry persistence + legacy-registry compatibility
 			manager.setTopology("mesh");
 			const persisted = loadRegistry(manager.teamId);
