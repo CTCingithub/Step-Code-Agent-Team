@@ -125,7 +125,7 @@ strategy). The review target is the `sandbox/project` demo code (not the plugin 
 
 ## V. 0.2.0 round (2026-10-19)
 
-New surface to verify: the `/topo` command (tiers / picker / review / off), plugin-specific keywords + forced migration, the three-layer false-trigger guard, verbatim forwarding with request-local instruction injection, `team_msg` member messaging (no bash), custom roles, effort presets.
+New surface to verify: the `/topo` command (tiers / picker / review / off), plugin-specific keywords + forced migration, the three-layer false-trigger guard, verbatim forwarding with request-local instruction injection, `topo_team_msg` member messaging (no bash), custom roles, effort presets.
 
 ### Automatable without a key
 
@@ -144,10 +144,10 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; the chosen tier's instruction reaches the model |
 | K3 | `plan.tier` pinned mode | config `tier="fast"` | no picker; the tier applies on every activation (command and keyword paths) |
 | K4 | `/topo review <target>` | sandbox session | three reviewers + worker merge protocol executed |
-| K5 | team_msg success dispatch | two members + a declared edge; the upstream messages the downstream | the reply returns over the socket — the E2E gap left by the topology fix |
+| K5 | topo_team_msg success dispatch | two members + a declared edge; the upstream messages the downstream | the reply returns over the socket — the E2E gap left by the topology fix |
 | K6 | Custom roles | `<agentDir>/agents/quickfix.md`; project-level in a trusted project | `team_create_member(role="quickfix")` applies the prompt / tools / effort |
 | K7 | Keyword migration notice | config carrying old keywords | activation strips them and notifies once |
-| K8 | phase4/10/11/12 LLM probes | `sandbox/smoke-phase4/10/11/12.ts` | full-path regression with the new spawn args (team_msg in the allowlist) |
+| K8 | phase4/10/11/12 LLM probes | `sandbox/smoke-phase4/10/11/12.ts` | full-path regression with the new spawn args (topo_team_msg in the allowlist) |
 
 ### Must be manual (real TUI / install / UX)
 

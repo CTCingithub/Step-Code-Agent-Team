@@ -8,7 +8,7 @@
  * topology edges at all: every edge touching them degraded to leader
  * relay (extra leader round-trips, more leader context, more latency).
  *
- * This extension registers a single `team_msg` tool that speaks the same
+ * This extension registers a single `topo_team_msg` tool that speaks the same
  * JSONL protocol over the socket directly (node:net) — no shell, no bash.
  * Read-only postures stay intact and topology edges become usable for
  * every role. The CLI shim remains available for manual/external use.
@@ -40,7 +40,7 @@ export default function (pi: ExtensionAPI) {
 	if (!socketPath || !sender) return; // not a team member — inert
 
 	pi.registerTool({
-		name: "team_msg",
+		name: "topo_team_msg",
 		label: "Message Teammate",
 		description: [
 			"Send a message to a teammate and wait for their reply.",
@@ -107,7 +107,7 @@ export default function (pi: ExtensionAPI) {
 				? "\nDo NOT investigate the tooling — proceed with your task and note the failure in your final report."
 				: "";
 			return {
-				content: [{ type: "text", text: `team_msg to "${params.to}" failed: ${res.error ?? "unknown error"}.${guidance}` }],
+				content: [{ type: "text", text: `topo_team_msg to "${params.to}" failed: ${res.error ?? "unknown error"}.${guidance}` }],
 				isError: true,
 			};
 		},

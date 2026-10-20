@@ -126,7 +126,7 @@
 
 ## V. 0.2.0 轮次（2026-10-19）
 
-待验证新面：`/topo` 命令（档位 / 选单 / review / off）、插件专属关键词 + 强制迁移、三层防误触护栏、逐字转发与请求本地指令注入、`team_msg` 成员间消息（无需 bash）、自定义角色、effort 预设。
+待验证新面：`/topo` 命令（档位 / 选单 / review / off）、插件专属关键词 + 强制迁移、三层防误触护栏、逐字转发与请求本地指令注入、`topo_team_msg` 成员间消息（无需 bash）、自定义角色、effort 预设。
 
 ### 无 key 可自动化
 
@@ -145,10 +145,10 @@
 | K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo` | 选单显示 4 档 + 自定义；所选档位指令抵达模型 |
 | K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档 |
 | K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
-| K5 | team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
+| K5 | topo_team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
 | K6 | 自定义角色 | `<agentDir>/agents/quickfix.md`；受信任项目中的项目级 | `team_create_member(role="quickfix")` 应用提示词/工具/effort |
 | K7 | 关键词迁移提示 | 配置含旧关键词 | 激活时剥离并提示一次 |
-| K8 | phase4/10/11/12 LLM 探针 | `sandbox/smoke-phase4/10/11/12.ts` | 新 spawn 参数（allowlist 含 team_msg）下的全路径回归 |
+| K8 | phase4/10/11/12 LLM 探针 | `sandbox/smoke-phase4/10/11/12.ts` | 新 spawn 参数（allowlist 含 topo_team_msg）下的全路径回归 |
 
 ### 必须人工（真实 TUI / 安装 / UX）
 

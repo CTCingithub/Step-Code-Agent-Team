@@ -23,15 +23,15 @@ Leader session (step, loads this extension)
 ├── extensions/topology.ts   five-shape topology construction/validation/parsing
 ├── extensions/registry.ts   team state persistence (atomic write, storage.dir, legacy compatibility)
 ├── extensions/presets.ts    preset loading (bundled + user/project agents/ dirs), extension entry path, shim path
-├── extensions/member-messaging.ts member-side team_msg tool (direct socket, no bash)
+├── extensions/member-messaging.ts member-side topo_team_msg tool (direct socket, no bash)
 ├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │
-├── bin/stepcode-team.mjs    member-side CLI shim (msg / status; manual/external path — members normally use the team_msg tool)
+├── bin/stepcode-team.mjs    member-side CLI shim (msg / status; manual/external path — members normally use the topo_team_msg tool)
 └── agents/                  bundled role presets (scout · planner · worker · reviewer; custom roles: <agentDir>/agents/, <project>/.stepcode/agents/)
 ```
 
 Members are independent `step --mode rpc` subprocesses that do not load this extension (unless granted a sub-team, see §4),
-and can only reach the socket inside the leader process via the team_msg tool (or the CLI shim) — this is the natural chokepoint for topology enforcement.
+and can only reach the socket inside the leader process via the topo_team_msg tool (or the CLI shim) — this is the natural chokepoint for topology enforcement.
 
 ## 2. Data flow
 
@@ -50,7 +50,7 @@ Task board: `team_task create` (validateGraph rejects cycles/unknown dependencie
 `start` (only `ready` can be dispatched, assignee required, retries `dispatch.retries` times) →
 on success `completeTask` (unlocks downstream), and on exhausted retries `failTask`.
 
-Member-to-member messaging: member `team_msg` tool → socket → server checks topology edge A→B →
+Member-to-member messaging: member `topo_team_msg` tool → socket → server checks topology edge A→B →
 `manager.sendMessage(B, msg, {nested:true})` → the reply returns over the same connection. The tool is
 registered by the member-side messaging extension (extensions/member-messaging.ts) and speaks the same
 JSONL protocol as the `stepcode-team` CLI shim — without a shell, so read-only presets keep their

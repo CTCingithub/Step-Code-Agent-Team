@@ -20,14 +20,14 @@ flowchart TD
     Registry[("TeamRegistry registry.json")]
     A["成员 A（step --mode rpc）"]
     B["成员 B（step --mode rpc）"]
-    MsgTool["team_msg 工具（成员侧扩展）"]
+    MsgTool["topo_team_msg 工具（成员侧扩展）"]
     Server["团队服务（队长进程内）"]
 
     Leader -->|"team_create_member / team_send / team_task"| Registry
     Registry --- A
     Registry --- B
-    A -->|"team_msg"| MsgTool
-    B -->|"team_msg"| MsgTool
+    A -->|"topo_team_msg"| MsgTool
+    B -->|"topo_team_msg"| MsgTool
     MsgTool -->|"Unix socket JSONL"| Server
     Server -->|"按拓扑强制派发"| A
     Server -->|"按拓扑强制派发"| B
@@ -35,7 +35,7 @@ flowchart TD
 
 - **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
 - **任务板是 DAG**：`blockedBy` 全部完成的任务才 `ready`；成环的依赖在创建时即被拒绝。
-- **成员间消息**：成员通过内置 `team_msg` 工具连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。该工具不需要 shell——只读预设（`scout`/`planner`/`reviewer`）保持原状，其拓扑边始终可用。`stepcode-team` CLI shim 保留作手动/外部路径。
+- **成员间消息**：成员通过内置 `topo_team_msg` 工具连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。该工具不需要 shell——只读预设（`scout`/`planner`/`reviewer`）保持原状，其拓扑边始终可用。`stepcode-team` CLI shim 保留作手动/外部路径。
 - **护栏**：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
 
 ## 环境要求
@@ -146,7 +146,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 
 除非拓扑允许，成员之间的直达消息会被**拒绝**。队长在创建成员后、派活前，用 `team_set_topology` 按任务结构设计拓扑；默认为星型——全部经由队长中转。
 
-> **只读角色与拓扑边：** 所有成员——包括只读预设（scout/planner/reviewer）与不含 `bash` 的自定义角色——均经内置 `team_msg` 工具直达通信，拓扑边对所有角色可用。依赖关系请用任务板的 `blockedBy` 表达；`stepcode-team` CLI shim 保留作手动使用。
+> **只读角色与拓扑边：** 所有成员——包括只读预设（scout/planner/reviewer）与不含 `bash` 的自定义角色——均经内置 `topo_team_msg` 工具直达通信，拓扑边对所有角色可用。依赖关系请用任务板的 `blockedBy` 表达；`stepcode-team` CLI shim 保留作手动使用。
 
 | 形状 | 边 | 适用 |
 |---|---|---|
@@ -203,7 +203,7 @@ flowchart LR
     C2["m2"] --> C3
 ```
 
-强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居（`team_msg` 被拒时会列出；`stepcode-team status` 亦可查询）。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。
+强制点在团队服务：每条消息携带发送方身份（spawn 时注入）并对照声明的边检查；越界会被拒绝并告知可用邻居（`topo_team_msg` 被拒时会列出；`stepcode-team status` 亦可查询）。环形拓扑下每转发一次消息链长 +1；下一跳会使链长超过 `topology.maxLoopCount`（默认 2，0 = 无上限）时该消息被拒绝，发送方转为向队长汇报——同时避免环形巡游死锁。配置 `topology.requireDeclaration: true` 后，未显式声明拓扑前禁止任何派活——字面落实“先设计再开工”。完整参考：[docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md)。
 
 ## 角色预设（`agents/` + 自定义角色）
 
@@ -353,8 +353,8 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 
 - **命令与激活**：`/topo`（含方案档位、`/topo review [目标]`、`/topo off`）；插件专属激活关键词 + 旧词强制迁移；三层防误触护栏。
 - **团队方案**（默认关）：经济 / 快速 / 均衡 / 性能四档策略提示词 + 自定义引导流程；`plan.tier` 可固定档位（默认 `"always ask"`）。
-- **成员间消息**：成员经内置 `team_msg` 工具直达通信——无需 bash，拓扑边对所有角色可用。
-- **协议层**（零 token 冒烟探针 `test/smoke/phase*.ts`）：spawn、握手、注册表持久化、任务图、socket 往返、预设与自定义角色加载、team_msg 工具协议。
+- **成员间消息**：成员经内置 `topo_team_msg` 工具直达通信——无需 bash，拓扑边对所有角色可用。
+- **协议层**（零 token 冒烟探针 `test/smoke/phase*.ts`）：spawn、握手、注册表持久化、任务图、socket 往返、预设与自定义角色加载、topo_team_msg 工具协议。
 - **涉模型路径**（沙箱内用测试 key 验证）：成员回复、同进程上下文记忆、按 session-id 重启恢复、成员间直达消息、队长工具调用端到端链路。
 
 以下命令可供人工复验：
@@ -379,6 +379,6 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 
 # 3. 成员间消息（双成员协作，验证拓扑边）：
 #    创建 scout 与 worker，声明 pipeline 拓扑（scout → worker），
-#    让 scout 用 team_msg 工具联系 worker（to = "worker"）
-#    → 验证 team_msg → socket → server → 成员 的完整直达消息链路
+#    让 scout 用 topo_team_msg 工具联系 worker（to = "worker"）
+#    → 验证 topo_team_msg → socket → server → 成员 的完整直达消息链路
 ```

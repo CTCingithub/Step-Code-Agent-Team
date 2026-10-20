@@ -101,16 +101,16 @@ export default function (pi: ExtensionAPI) {
 			log("member model:", member.model, "tools:", member.tools?.join(","));
 			log(
 				"prompt has coordination section:",
-				promptBody.includes("Team messaging") && promptBody.includes("team_msg"),
+				promptBody.includes("Team messaging") && promptBody.includes("topo_team_msg"),
 			);
-			if (member.model !== preset.model || !promptBody.includes("Team messaging") || !promptBody.includes("team_msg")) {
+			if (member.model !== preset.model || !promptBody.includes("Team messaging") || !promptBody.includes("topo_team_msg")) {
 				fail("preset wiring broken");
 				await manager.disband();
 				server.stop();
 				return;
 			}
 
-			// 5: the member-side team_msg tool (0.2.x) — registered only inside a
+			// 5: the member-side topo_team_msg tool (0.2.x) — registered only inside a
 			// member process (env-driven), speaks the socket protocol directly
 			// (no bash), and surfaces topology denials.
 			const savedSock = process.env.STEPCODE_TEAM_SOCK;
@@ -135,19 +135,19 @@ export default function (pi: ExtensionAPI) {
 			delete process.env.STEPCODE_TEAM_MEMBER;
 			const inertTools = loadMsgTools();
 			if (inertTools.length !== 0) {
-				fail(`team_msg must stay inert outside a member process (got ${inertTools.length} tools)`);
+				fail(`topo_team_msg must stay inert outside a member process (got ${inertTools.length} tools)`);
 			} else {
-				log("team_msg: inert without member env: OK");
+				log("topo_team_msg: inert without member env: OK");
 			}
 
 			process.env.STEPCODE_TEAM_SOCK = sock;
 			process.env.STEPCODE_TEAM_MEMBER = "rev1";
 			const msgTools = loadMsgTools();
 			const msgTool = msgTools[0];
-			if (msgTools.length !== 1 || !msgTool || msgTool.name !== "team_msg") {
-				fail("team_msg tool not registered inside a member process");
+			if (msgTools.length !== 1 || !msgTool || msgTool.name !== "topo_team_msg") {
+				fail("topo_team_msg tool not registered inside a member process");
 			} else {
-				log("team_msg: registered inside a member process: OK");
+				log("topo_team_msg: registered inside a member process: OK");
 				const params = msgTool.parameters as { type?: string; properties?: Record<string, unknown>; required?: string[] };
 				if (
 					params?.type !== "object" ||
@@ -156,14 +156,14 @@ export default function (pi: ExtensionAPI) {
 					!(params.required ?? []).includes("to") ||
 					!(params.required ?? []).includes("message")
 				) {
-					fail("team_msg schema must require to + message");
+					fail("topo_team_msg schema must require to + message");
 				} else {
-					log("team_msg: schema requires to + message: OK");
+					log("topo_team_msg: schema requires to + message: OK");
 				}
 				if (!(msgTool.description ?? "").includes("topology")) {
-					fail("team_msg description must mention the topology gate");
+					fail("topo_team_msg description must mention the topology gate");
 				} else {
-					log("team_msg: description mentions the topology gate: OK");
+					log("topo_team_msg: description mentions the topology gate: OK");
 				}
 				// Socket round-trip: star topology (no edges) → the server denies
 				// and lists the allowed teammates. Proves connect + write + parse +
@@ -175,9 +175,9 @@ export default function (pi: ExtensionAPI) {
 					};
 					const text = res.content?.map((c) => c.text ?? "").join("\n") ?? "";
 					if (res.isError !== true || !/topology denies|Allowed teammates/i.test(text)) {
-						fail(`team_msg socket round-trip broken: ${text.slice(0, 160)}`);
+						fail(`topo_team_msg socket round-trip broken: ${text.slice(0, 160)}`);
 					} else {
-						log("team_msg: topology denial surfaces with the allowed list: OK");
+						log("topo_team_msg: topology denial surfaces with the allowed list: OK");
 					}
 				}
 			}

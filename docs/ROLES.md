@@ -38,7 +38,7 @@ anything.
 |---|---|---|
 | `name` | yes | The role name used in `team_create_member(role=...)` |
 | `description` | yes | One line; also surfaced in tool results |
-| `tools` | no | Comma-separated allowlist; omit = all tools. Member-to-member messaging uses the built-in `team_msg` tool (no `bash` required) |
+| `tools` | no | Comma-separated allowlist; omit = all tools. Member-to-member messaging uses the built-in `topo_team_msg` tool (no `bash` required) |
 | `model` | no | Member model; honored only while `models.autonomousSelection` is on (otherwise members follow the conversation model) |
 | `effort` | no | Default effort: `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`; invalid values are ignored |
 
@@ -110,4 +110,4 @@ smallest change that satisfies the task and report it briefly.
 - Project-level roles load only when the project is trusted.
 - A role file's body becomes the member's system prompt (plus the plugin's
   coordination section).
-- Read-only roles can use their topology edges: the built-in `team_msg` tool needs no shell, so no `bash` is required.
+- Read-only roles can use their topology edges: the built-in `topo_team_msg` tool needs no shell, so no `bash` is required.

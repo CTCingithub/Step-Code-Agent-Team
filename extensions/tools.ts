@@ -10,8 +10,6 @@ import { Type } from "typebox";
 import { StringEnum } from "@step-harness/providers";
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
 import {
-	memberCanMessage,
-	messagingWarnings,
 	resumeIgnoredParams,
 	type SendOptions,
 	type TeamManager,
@@ -138,11 +136,6 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 						`Note: "${member.name}" already existed and was resumed; the passed ${ignored.join(", ")} ${ignored.length > 1 ? "were" : "was"} ignored (existing configuration kept). Disband the member and recreate it to change its configuration.`,
 					);
 				}
-			}
-			if (!memberCanMessage(member.tools)) {
-				lines.push(
-					`Note: "${member.name}" has no bash tool, so it cannot use the member-to-member messaging channel; topology edges touching it are unusable — the leader can still relay messages to it.`,
-				);
 			}
 			return {
 				content: [
@@ -360,7 +353,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"ring (each member may message the next), custom (explicit edges).",
 			"Match the shape to the task: parallel independent work needs only star; sequential refinement fits",
 			"pipeline; cross-checking peers fit mesh or a few custom edges. Members message teammates through",
-			"the built-in team_msg tool (no bash required — read-only presets can use their edges too); a",
+			"the built-in topo_team_msg tool (no bash required — read-only presets can use their edges too); a",
 			"rejection tells the sender its allowed neighbors.",
 		].join(" "),
 		promptGuidelines: [
@@ -387,9 +380,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			assertActive();
 			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
 			const topology = manager.setTopology(params.shape, edges);
-			// Warn about edges whose endpoints cannot message at all (no bash, no team_msg).
 			const lines = ["Topology set:", manager.describeTopology()];
-			lines.push(...messagingWarnings(manager.snapshot().members, topology.edges));
 			return {
 				content: [{ type: "text", text: lines.join("\n") }],
 				details: { teamId: manager.teamId, topology },

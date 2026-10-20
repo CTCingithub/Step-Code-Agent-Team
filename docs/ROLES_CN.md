@@ -35,7 +35,7 @@ anything.
 |---|---|---|
 | `name` | 是 | 角色名，用于 `team_create_member(role=...)` |
 | `description` | 是 | 一句话描述，亦出现在工具结果中 |
-| `tools` | 否 | 逗号分隔的工具白名单；省略 = 全部工具。成员间消息使用内置 `team_msg` 工具（无需 `bash`） |
+| `tools` | 否 | 逗号分隔的工具白名单；省略 = 全部工具。成员间消息使用内置 `topo_team_msg` 工具（无需 `bash`） |
 | `model` | 否 | 成员模型；仅 `models.autonomousSelection` 开启时生效（否则成员跟随对话当前模型） |
 | `effort` | 否 | 默认 effort：`off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`；非法值忽略 |
 
@@ -105,4 +105,4 @@ smallest change that satisfies the task and report it briefly.
 
 - 项目级角色仅在项目被信任时加载。
 - 角色文件正文即成员的系统提示词（另加插件的团队协作段）。
-- 只读角色同样可用其拓扑边：内置 `team_msg` 工具不需要 shell，无需 `bash`。
+- 只读角色同样可用其拓扑边：内置 `topo_team_msg` 工具不需要 shell，无需 `bash`。

@@ -77,11 +77,11 @@ export default function (pi: ExtensionAPI) {
 			check("spawn: depth env = 1", env.STEPCODE_TEAM_DEPTH === "1", `got ${env.STEPCODE_TEAM_DEPTH}`);
 			check("spawn: member identity env", env.STEPCODE_TEAM_MEMBER === "m1", `got ${env.STEPCODE_TEAM_MEMBER}`);
 			check("spawn: sock env points at the team server", (env.STEPCODE_TEAM_SOCK ?? "").endsWith("/sock"), `got ${env.STEPCODE_TEAM_SOCK}`);
-			// team_msg is team infrastructure: present in the --tools allowlist for
+			// topo_team_msg is team infrastructure: present in the --tools allowlist for
 			// every member (no bash needed, so read-only presets can message too).
 			const toolsIdx = cmdline.indexOf("--tools");
 			const allowlist = toolsIdx >= 0 ? (cmdline[toolsIdx + 1] ?? "").split(",") : [];
-			check("spawn: team_msg in the tools allowlist", allowlist.includes("team_msg"), `got ${allowlist.join(",")}`);
+			check("spawn: topo_team_msg in the tools allowlist", allowlist.includes("topo_team_msg"), `got ${allowlist.join(",")}`);
 
 			if (canOrchestrate) {
 				// Depth grant: the extension is loaded and auto-activated in the member.
@@ -105,7 +105,7 @@ export default function (pi: ExtensionAPI) {
 				// Depth 1: the member stays isolated.
 				check("depth 1: member isolated (--no-extensions)", cmdline.includes("--no-extensions"), cmdline.join(" ").slice(0, 200));
 				check("depth 1: no auto-activate env", env.STEPCODE_TEAM_AUTOACTIVATE === undefined, `got ${env.STEPCODE_TEAM_AUTOACTIVATE}`);
-				// Depth 1: only the member-side messaging extension loads (team_msg);
+				// Depth 1: only the member-side messaging extension loads (topo_team_msg);
 				// the team extension itself stays out (no recursive teams).
 				check(
 					"depth 1: only the messaging extension loads",

@@ -101,17 +101,6 @@ function debugNote(message: string): void {
 }
 
 /**
- * Whether a member can message teammates: either bash (the CLI shim, which
- * runs through a shell) or the team_msg extension tool (direct socket, no
- * shell). Every spawned member receives team_msg, so read-only presets can
- * use their topology edges too. An undefined or empty allowlist means
- * "all tools".
- */
-export function memberCanMessage(tools: readonly string[] | undefined): boolean {
-	return !tools || tools.length === 0 || tools.includes("bash") || tools.includes("team_msg");
-}
-
-/**
  * Create params that a resume silently ignores (the existing record wins).
  * Empty when nothing conflicting was passed — used to tell the leader LLM
  * instead of letting it believe a reconfiguration happened.
@@ -126,28 +115,6 @@ export function resumeIgnoredParams(params: CreateMemberParams, member: MemberRe
 	if (params.effort && params.effort !== member.effort) ignored.push("effort");
 	if (params.systemPrompt && params.systemPrompt.trim().length > 0) ignored.push("systemPrompt");
 	return ignored;
-}
-
-/**
- * Warnings for topology edges whose endpoints cannot message at all (no bash
- * and no team_msg). One warning per flagged member, deduplicated. Since every
- * spawned member receives team_msg, this is a defensive backstop.
- */
-export function messagingWarnings(
-	members: ReadonlyArray<Pick<MemberRecord, "name" | "tools">>,
-	edges: readonly TopologyEdge[],
-): string[] {
-	const flagged = new Set<string>();
-	for (const [from, to] of edges) {
-		for (const endpoint of [from, to]) {
-			const m = members.find((x) => x.name === endpoint);
-			if (m && !memberCanMessage(m.tools)) flagged.add(endpoint);
-		}
-	}
-	return [...flagged].map(
-		(name) =>
-			`Warning: member "${name}" has no bash tool and cannot use the member-to-member messaging channel; edges touching it are unusable — relay through the leader, or recreate the member with bash in its tools.`,
-	);
 }
 
 /**
@@ -184,6 +151,14 @@ export function currentDepth(): number {
 function sanitizeTeamId(sessionId: string): string {
 	const cleaned = sessionId.replace(/[^\w.-]+/g, "_").slice(0, 48);
 	return cleaned || `team-${Date.now().toString(36)}`;
+}
+
+/** Team id a session file maps to (null for ephemeral sessions without a file). */
+export function teamIdForSession(sessionFile: string | null): string | null {
+	if (!sessionFile) return null;
+	const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
+	// Session files are named "<timestamp>_<sessionId>.jsonl"; strip the ts prefix.
+	return sanitizeTeamId(base.replace(/^\d{4}-\d{2}-\d{2}T[\d+-]+Z_/, ""));
 }
 
 /** Walks the wait-for graph; true when `to` (transitively) waits on `from`. */
@@ -483,7 +458,7 @@ export class TeamManager {
 
 	/**
 	 * Writes the member's system prompt file, appending a coordination section
-	 * that tells the member how to reach teammates through the team_msg tool.
+	 * that tells the member how to reach teammates through the topo_team_msg tool.
 	 * The file is persisted (not tmp): respawns need the same
 	 * --append-system-prompt file to resume with identical configuration.
 	 */
@@ -496,9 +471,9 @@ export class TeamManager {
 			"## Team messaging",
 			`You are member "${member.name}" of an agent team coordinated by a leader.`,
 			"Direct member-to-member messaging is gated by the team topology.",
-			"Use the team_msg tool to message an allowed teammate (to = their name).",
+			"Use the topo_team_msg tool to message an allowed teammate (to = their name).",
 			"A rejection lists the teammates you may message. If none of them fits, state the need in your final report instead — the leader will relay it.",
-			"If team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
+			"If topo_team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
 		].join("\n");
 		fs.writeFileSync(file, `${basePrompt}\n${coordination}\n`, { encoding: "utf-8", mode: 0o600 });
@@ -510,7 +485,7 @@ export class TeamManager {
 	 * depth is below maxRecursionDepth it is granted its own sub-team: this
 	 * extension is loaded and auto-activated. Otherwise the member stays
 	 * isolated (--no-extensions, no recursive teams) except for the member-side
-	 * messaging extension, which only registers the team_msg tool.
+	 * messaging extension, which only registers the topo_team_msg tool.
 	 */
 	private buildSpawnArgs(member: MemberRecord): { args: string[]; env: Record<string, string> } {
 		const childDepth = currentDepth() + 1;
@@ -537,7 +512,7 @@ export class TeamManager {
 		} else {
 			// Isolation: members must not load package extensions (no recursive
 			// teams). The member-side messaging extension is the single explicit
-			// exception — it only registers the team_msg tool (no orchestration
+			// exception — it only registers the topo_team_msg tool (no orchestration
 			// capability), so read-only roles can use their topology edges
 			// without bash. `--no-extensions -e <path>` is a supported combo.
 			args.push("--no-extensions", "-e", memberMessagingEntryPath());
@@ -546,10 +521,10 @@ export class TeamManager {
 		// `--thinking` is the host CLI's own flag name; our terminology is "effort".
 		if (member.effort) args.push("--thinking", member.effort);
 		if (member.tools && member.tools.length > 0) {
-			// --tools is an allowlist over built-in AND extension tools. team_msg
+			// --tools is an allowlist over built-in AND extension tools. topo_team_msg
 			// is team infrastructure (no bash needed) and the sub-leader team
 			// tools are added on top of the preset/explicit allowlist.
-			const allow = [...new Set([...member.tools, "team_msg", ...(canOrchestrate ? TEAM_TOOL_NAMES : [])])];
+			const allow = [...new Set([...member.tools, "topo_team_msg", ...(canOrchestrate ? TEAM_TOOL_NAMES : [])])];
 			args.push("--tools", allow.join(","));
 		}
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
