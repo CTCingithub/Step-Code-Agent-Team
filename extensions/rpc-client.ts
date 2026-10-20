@@ -188,7 +188,10 @@ export class MemberRpc {
 					}
 					for (const part of msg.content ?? []) {
 						const p = part as { type?: string; text?: string };
-						if (p.type === "text" && p.text) {
+						// The host substitutes "No result provided" for a turn that
+						// ends without assistant text; capturing it would surface the
+						// placeholder to senders/leaders as if it were a real reply.
+						if (p.type === "text" && p.text && p.text !== "No result provided") {
 							this.lastAssistantText = p.text;
 							for (const listener of this.interimListeners) listener(p.text);
 						}

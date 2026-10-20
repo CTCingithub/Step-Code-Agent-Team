@@ -1,11 +1,13 @@
 /**
  * Guardrail helpers probe (plan-25). Zero-token, standalone (see
- * STANDALONE_PHASES in run-smoke.sh): asserts the cost-warning text and the
- * output truncation contract that used to need eyeballing in a live session.
+ * STANDALONE_PHASES in run-smoke.sh): asserts the cost-warning text, the
+ * output truncation contract, and the topo_team_msg reply formatting that
+ * used to need eyeballing in a live session.
  */
 
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { costWarning, truncateOutput } from "../../extensions/tools.ts";
+import { formatTeammateReply } from "../../extensions/member-messaging.ts";
 import { defaultConfig } from "../../extensions/config.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -48,6 +50,23 @@ export default function (pi: ExtensionAPI) {
 				`tail=${JSON.stringify(cutEmoji.slice(-12))}`,
 			);
 			check("truncate: emoji case reports 4 bytes omitted", cutEmoji.includes("4 bytes omitted"), cutEmoji.slice(-80));
+
+			// ---- formatTeammateReply (topo_team_msg reply contract) ----
+			// Delivery is guaranteed; the reply is best-effort. A teammate whose
+			// turn ends without text (empty, or the host's "No result provided"
+			// placeholder) must yield an explicit delivery acknowledgment, never a
+			// silent empty result — otherwise ring pass-along flows break quietly.
+			check("msg: real reply passes through", formatTeammateReply("r2", "here are my findings") === "here are my findings");
+			const ack = formatTeammateReply("r2", "");
+			check("msg: empty reply → delivery ack", /^Delivered to r2\./.test(ack), ack.slice(0, 60));
+			check("msg: host placeholder → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "No result provided")), "");
+			check("msg: undefined reply → delivery ack", /^Delivered to r3\./.test(formatTeammateReply("r3", undefined)), "");
+			check("msg: whitespace-only reply → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "   \n  ")), "");
+			check(
+				"msg: ack points at the final report + leader collection",
+				ack.includes("final report") && ack.includes("team_send") && ack.includes("team_task"),
+				ack.slice(0, 120),
+			);
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE16 DONE (all passed)" : `SMOKE16 DONE (${failed}/${results.length} failed)`);

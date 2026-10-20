@@ -179,3 +179,9 @@
 - **改名**：成员间消息工具 `team_msg` → `topo_team_msg`（与 `/topo` 命令族同前缀；规避未来官方智能体团队功能撞名）。
 - **移除**：`team_create_member` 结果中"无 bash 不可消息"的误导提示（每个成员都注入 `topo_team_msg`，只读预设的拓扑边可用），以及失效的 `messagingWarnings` 辅助函数。
 - **手动流程**（2026-10-20 会话交付）：`/topo` 基础 → L1/L2 护栏 → 组队 + topo_team_msg E2E → 方案选单（需 `sandbox/config.toml` 配 `plan.enabled=true`）→ 固定 `plan.tier` → `/topo review` → effort/自定义角色 → 迁移提示 → C 层探针 → 真实安装 → 信任弹窗 → 译文审阅。
+
+### 2026-10-20 沙箱会话发现（第二轮：整合后的 MANUAL-TESTING 清单）
+
+- **Bug（已修复）**：`topo_team_msg` 的回复契约断裂——发送方收到宿主对「无 assistant 文本回合」的占位符 `No result provided`（经 `res.reply` 回流），环上传递静默失效：发送方无法区分「已投递」与「回复丢失」，只能退回队长代收（本轮实测两次：r1→r2 与 r2→r3；接收方实际均已处理消息）。修复：member-messaging.ts 新增 `formatTeammateReply()`——空回复或占位符一律转为明确的投递回执（指引把结论写入最终报告并经队长收集）；rpc-client.ts 不再把该占位符捕获为 assistant 文本；phase16 探针覆盖契约（真实回复透传；空/占位符/undefined/纯空白均得回执）。
+- **观察（护栏按设计工作）**：高 effort 多文件审查超过 180s 默认 `dispatch.timeoutMs`，队长派发触发 "timeout waiting for member to settle" 并被 fail-fast 杀死；r3 四次尝试均未完成一次完整审查（上下文保留可 resume）。该超时可配——长审查应调高 `dispatch.timeoutMs`，或按本轮做法经 respawn 收割（r1/r2 即如此收回）。
+- **验证通过**：拓扑成员作用域参数（`team_set_topology` 带 `members`）在累积了旧成员的团队中精确产出 3 边环（r1→r2→r3→r1），旧成员被隔离（无直连边）而非被圈入环。
