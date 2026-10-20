@@ -80,15 +80,15 @@ export default function (pi: ExtensionAPI) {
 			await manager.disband();
 			const { member: s1, created: s1Created } = await manager.createMember({ name: "s1", role: "scout" });
 			check("scout preset: created with read-only tools", s1Created && (s1.tools ?? []).includes("read") && !(s1.tools ?? []).includes("bash"), `tools=${(s1.tools ?? []).join(",")}`);
-			check("scout preset: thinking default low", s1.thinking === "low", `got ${s1.thinking}`);
+			check("scout preset: effort default low", s1.effort === "low", `got ${s1.effort}`);
 
 			const resumeDiff = resumeIgnoredParams(
-				{ name: "s1", role: "worker", tools: ["read", "bash"], model: "other-model", thinking: "high", systemPrompt: "x" },
+				{ name: "s1", role: "worker", tools: ["read", "bash"], model: "other-model", effort: "high", systemPrompt: "x" },
 				s1,
 			);
 			check(
 				"resume: conflicting params all reported",
-				["role", "tools", "model", "thinking", "systemPrompt"].every((p) => resumeDiff.includes(p)),
+				["role", "tools", "model", "effort", "systemPrompt"].every((p) => resumeDiff.includes(p)),
 				`got ${resumeDiff.join(",")}`,
 			);
 			check("resume: no params passed → nothing ignored", resumeIgnoredParams({ name: "s1" }, s1).length === 0);

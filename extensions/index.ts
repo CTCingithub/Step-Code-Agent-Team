@@ -60,7 +60,7 @@ import {
 	type CustomPicks,
 	type TeamTier,
 } from "./plan.ts";
-import { VALID_THINKING } from "./config.ts";
+import { VALID_EFFORT } from "./config.ts";
 import type { TopologyShape } from "./topology.ts";
 import { VALID_TOPOLOGY_SHAPES } from "./topology.ts";
 
@@ -274,10 +274,10 @@ export default function (pi: ExtensionAPI) {
 		const shape = (VALID_TOPOLOGY_SHAPES as readonly string[]).includes(shapeToken)
 			? (shapeToken as TopologyShape)
 			: "star";
-		const effortOptions = [...VALID_THINKING.slice(1, 5)];
+		const effortOptions = [...VALID_EFFORT.slice(1, 5)];
 		const effortChoice = await pick(lang === "zh" ? "思考强度" : "Effort level", effortOptions, "medium");
-		const effort = (VALID_THINKING as readonly string[]).includes(effortChoice)
-			? (effortChoice as (typeof VALID_THINKING)[number])
+		const effort = (VALID_EFFORT as readonly string[]).includes(effortChoice)
+			? (effortChoice as (typeof VALID_EFFORT)[number])
 			: "medium";
 		return {
 			choice: { kind: "custom", requirements: requirements.trim(), picks: { size, shape, effort } },
@@ -409,8 +409,8 @@ export default function (pi: ExtensionAPI) {
 			for (const m of reg.members) {
 				const icon = m.status === "idle" ? "○" : m.status === "running" ? "●" : "✗";
 				const model = m.model ? ` ${m.model}` : "";
-				const thinking = m.thinking ? ` thinking=${m.thinking}` : "";
-				lines.push(`  ${icon} ${m.name} (${m.role}) [${m.status}]${model}${thinking}`);
+				const effort = m.effort ? ` effort=${m.effort}` : "";
+				lines.push(`  ${icon} ${m.name} (${m.role}) [${m.status}]${model}${effort}`);
 			}
 		}
 		for (const t of reg.tasks) {

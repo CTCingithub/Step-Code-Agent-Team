@@ -30,7 +30,7 @@ headlessAutoActivate = true          # L3: headless/RPC activates on keyword hit
 [stepcodeAgentTeam.models]
 available = ["step-5-preview"]       # member model pool
 autonomousSelection = false          # true = the leader picks a model per member
-autonomousThinking = false           # true = the leader picks the thinking effort per member
+autonomousEffort = false              # true = the leader picks the effort per member
 
 [stepcodeAgentTeam.members]
 max = 8                              # live-member cap (1–64)
@@ -68,7 +68,7 @@ tier = "always ask"                  # always ask = picker every time; a pinned 
 
 [stepcodeAgentTeam.presets.effort]
 scout = "low"                        # per-role effort overrides (custom roles: set effort in their own frontmatter)
-planner = "medium"                   # ignored while models.autonomousThinking is on (the leader picks)
+planner = "medium"                   # ignored while models.autonomousEffort is on (the leader picks)
 worker = "medium"
 reviewer = "high"
 
@@ -81,7 +81,7 @@ debug = false                        # debug logging
 | Section | Controls |
 |---|---|
 | `activation` | Default-off gate: the `/topo` command (`/topo off` deactivates and re-hides the tools) or a keyword mention (case-insensitive) activates the plugin; sticky for the session. With `enabled: false` neither trigger works and the command reports the config disable. Deprecated keywords (the old "agent team" / "智能体团队" style terms) are stripped from the effective list on load — forced migration, reported once on activation. `guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` layer the false-trigger guard — slash commands bypass it |
-| `models` | Member model pool. `autonomousSelection` off (default) pins every member to the conversation model (preset/explicit `model` ignored); on, resolution is explicit `model` → preset → conversation model (unknown explicit model errors with the available list; unknown preset model falls back to `available[0]`). `autonomousThinking` off resolves effort as: explicit param → `presets.effort` override → preset frontmatter `effort` → `high`; on lets the leader choose per member (all preset efforts inert) |
+| `models` | Member model pool. `autonomousSelection` off (default) pins every member to the conversation model (preset/explicit `model` ignored); on, resolution is explicit `model` → preset → conversation model (unknown explicit model errors with the available list; unknown preset model falls back to `available[0]`). `autonomousEffort` off resolves effort as: explicit param → `presets.effort` override → preset frontmatter `effort` → `high`; on lets the leader choose per member (all preset efforts inert) |
 | `members` | `max` counts **live** members only (dead records stay resumable without occupying a slot). `maxRecursionDepth`: 1 = members cannot spawn sub-teams (fully inert in their sessions); 2+ grants sub-leaders their own independent team (registry + socket), bounded at 4 |
 | `dispatch` | `maxConcurrent` gates **before process start** (queue-before-start); oneshot dispatches share the budget; nested member-to-member relays bypass the global gate to avoid chain deadlock |
 | `oneshot` | Timeout for stateless `mode: "oneshot"` dispatches |
@@ -90,7 +90,7 @@ debug = false                        # debug logging
 | `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams` |
 | `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender reports to the leader — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
 | `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). A tier is a strategy prompt with a non-binding example — the model decides members, roles, topology, and effort. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths); `/topo <tier>` overrides per invocation. Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |
-| `presets.effort` | Per-role effort overrides (built-in role names shown; custom roles set `effort` in their own frontmatter). Resolution: explicit `thinking` param → this config → preset frontmatter → `high`. Inert while `models.autonomousThinking` is on. Custom roles load from `<agentDir>/agents/` and `<project>/.stepcode/agents/` — see [docs/ROLES.md](docs/ROLES.md) |
+| `presets.effort` | Per-role effort overrides (built-in role names shown; custom roles set `effort` in their own frontmatter). Resolution: explicit `effort` param → this config → preset frontmatter → `high`. Inert while `models.autonomousEffort` is on. Custom roles load from `<agentDir>/agents/` and `<project>/.stepcode/agents/` — see [docs/ROLES.md](docs/ROLES.md) |
 | `debug` | Diagnostic logging to stderr |
 
 Topology shapes (declared with `team_set_topology` after creating members, before dispatching):

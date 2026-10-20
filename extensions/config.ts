@@ -43,9 +43,9 @@ export const SETTINGS_FILE_NAME = "settings.json";
 /** Our configuration section inside settings.json. */
 export const CONFIG_SECTION = "stepcodeAgentTeam";
 
-/** Thinking levels accepted by `step --thinking`. */
-export const VALID_THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-export type ThinkingLevel = (typeof VALID_THINKING)[number];
+/** Effort levels accepted by `step --thinking`. */
+export const VALID_EFFORT = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type EffortLevel = (typeof VALID_EFFORT)[number];
 
 /**
  * Keywords retired in 0.2.0. They named the plugin in generic "agent team"
@@ -76,8 +76,8 @@ export function consumeKeywordMigration(): string[] {
 	return out;
 }
 
-/** Member thinking level when the caller does not specify one. */
-export const DEFAULT_MEMBER_THINKING: ThinkingLevel = "high";
+/** Member effort level when the caller does not specify one. */
+export const DEFAULT_EFFORT: EffortLevel = "high";
 
 export interface ActivationConfig {
 	enabled: boolean;
@@ -122,7 +122,7 @@ export interface PresetsConfig {
 export interface ModelsConfig {
 	available: string[];
 	autonomousSelection: boolean;
-	autonomousThinking: boolean;
+	autonomousEffort: boolean;
 }
 
 export interface MembersConfig {
@@ -286,7 +286,7 @@ function seedBlock(): string {
 		"# [stepcodeAgentTeam.models]",
 		line(`available = [${models}]`, "member model pool"),
 		line(`autonomousSelection = ${d.models.autonomousSelection}`, "the leader picks a model per member"),
-		line(`autonomousThinking = ${d.models.autonomousThinking}`, "the leader picks the thinking effort per member"),
+		line(`autonomousEffort = ${d.models.autonomousEffort}`, "the leader picks the effort per member"),
 		"#",
 		"# [stepcodeAgentTeam.members]",
 		line(`max = ${d.members.max}`, "live-member cap (1-64)"),
@@ -324,7 +324,7 @@ function seedBlock(): string {
 		"#",
 		"# [stepcodeAgentTeam.presets.effort]",
 		'# scout = "low"       # per-role effort overrides (custom roles: set effort in their own frontmatter)',
-		'# planner = "medium"  # ignored while models.autonomousThinking is on (the leader picks)',
+		'# planner = "medium"  # ignored while models.autonomousEffort is on (the leader picks)',
 		'# worker = "medium"',
 		'# reviewer = "high"',
 		"#",
@@ -389,7 +389,7 @@ export function defaultConfig(): PluginConfig {
 		models: {
 			available: ["step-5-preview"],
 			autonomousSelection: false,
-			autonomousThinking: false,
+			autonomousEffort: false,
 		},
 		members: { max: 8, defaultRole: "worker", defaultTools: null, maxRecursionDepth: 1 },
 		dispatch: { maxConcurrent: 5, timeoutMs: 180_000, handshakeTimeoutMs: 15_000, retries: 1 },
@@ -649,7 +649,7 @@ function validate(config: PluginConfig): string[] {
 		}
 	}
 	expectBoolean(asRecord(config.models), "autonomousSelection", d.models.autonomousSelection, warnings);
-	expectBoolean(asRecord(config.models), "autonomousThinking", d.models.autonomousThinking, warnings);
+	expectBoolean(asRecord(config.models), "autonomousEffort", d.models.autonomousEffort, warnings);
 
 	expectIntRange(asRecord(config.members), "max", d.members.max, 1, 64, warnings);
 	expectIntRange(asRecord(config.members), "maxRecursionDepth", d.members.maxRecursionDepth, 1, 4, warnings);
@@ -692,7 +692,7 @@ function validate(config: PluginConfig): string[] {
 		warnings.push("presets.effort");
 	} else {
 		for (const [role, level] of Object.entries(config.presets.effort)) {
-			if (typeof level !== "string" || !(VALID_THINKING as readonly string[]).includes(level)) {
+			if (typeof level !== "string" || !(VALID_EFFORT as readonly string[]).includes(level)) {
 				delete config.presets.effort[role];
 				warnings.push(`presets.effort.${role}`);
 			}

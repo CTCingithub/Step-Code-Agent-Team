@@ -90,7 +90,7 @@ Rules:
       "name": "scout1",                    // ^[a-z][a-z0-9_-]{0,31}$
       "role": "scout",
       "model": "step-5-preview",           // optional
-      "thinking": "high",                  // optional
+      "effort": "high",                  // optional
       "tools": ["read", "grep"],           // optional; default = all tools
       "sessionId": "team-<teamId>-scout1", // key for resuming the conversation on restart
       "systemPromptFile": "<teamDir>/prompts/scout1.md",
@@ -124,7 +124,7 @@ Calling any team tool before activation throws "not active" (belt-and-suspenders
 
 | Tool | Key parameters | Behavior |
 |---|---|---|
-| `team_create_member` | `name` required; `role`/`model`/`thinking`/`tools`/`systemPrompt` optional | Idempotent create/resume; a role hits the `agents/<role>.md` preset; explicit arguments take precedence over the preset; model resolution is in CONFIGURATION.md's `models` section; **config arguments passed on resume are ignored, and the result text lists them item by item**; when a member has no `bash` the result appends a message-channel-unavailable notice |
+| `team_create_member` | `name` required; `role`/`model`/`effort`/`tools`/`systemPrompt` optional | Idempotent create/resume; a role hits the `agents/<role>.md` preset; explicit arguments take precedence over the preset; model resolution is in CONFIGURATION.md's `models` section; **config arguments passed on resume are ignored, and the result text lists them item by item**; when a member has no `bash` the result appends a message-channel-unavailable notice |
 | `team_send` | `member`, `message` required; `taskId` or `mode` optional | Wait for the full reply; same member serialized, cross-member parallel; `taskId` dispatches as a task (running→done, retries `dispatch.retries` times on failure); `mode:"oneshot"` is a stateless one-off process; passing `taskId` and oneshot together throws; `dispatch.timeoutMs` covers the entire nested relay chain, and the timeout error notes that the relay may still be in flight and lists the member roster |
 | `team_task` | `action` (create/start/complete/fail/list) + `id`/`title`/`blockedBy`/`assignee`/`result`/`reason` | DAG task board; terminal-state tasks can no longer be completed/failed |
 | `team_set_topology` | `shape` (star/pipeline/mesh/ring/custom) + `edges` (required for custom) | Declare the topology after creating members and before dispatching; unknown members/self-loops throw; every member gets the built-in `team_msg` tool (no bash needed), so edges are usable for every role — a denial lists the sender's allowed teammates |

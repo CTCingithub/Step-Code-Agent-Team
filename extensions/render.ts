@@ -90,7 +90,7 @@ export function renderTeamCall(tool: TeamToolName) {
 
 interface TeamResultDetails {
 	created?: boolean;
-	member?: { name: string; role: string; status: string; model?: string; thinking?: string; usage?: MemberUsage };
+	member?: { name: string; role: string; status: string; model?: string; effort?: string; usage?: MemberUsage };
 	usage?: MemberUsage;
 	task?: { id: string; status: string; title?: string; assignee?: string };
 	topology?: { shape?: string; edges?: Array<[string, string]> };
@@ -116,7 +116,7 @@ export function renderTeamResult(tool: TeamToolName) {
 				const m = details.member;
 				if (m) {
 					header.push(
-						`${details.created ? theme.fg("success", "✓") : theme.fg("accent", "↺")} ${theme.fg("toolTitle", theme.bold(m.name))}${theme.fg("muted", ` (${m.role})`)} [${m.status}]${m.model ? theme.fg("dim", ` ${m.model}`) : ""}${m.thinking ? theme.fg("dim", ` thinking=${m.thinking}`) : ""}`,
+						`${details.created ? theme.fg("success", "✓") : theme.fg("accent", "↺")} ${theme.fg("toolTitle", theme.bold(m.name))}${theme.fg("muted", ` (${m.role})`)} [${m.status}]${m.model ? theme.fg("dim", ` ${m.model}`) : ""}${m.effort ? theme.fg("dim", ` effort=${m.effort}`) : ""}`,
 					);
 				}
 				break;

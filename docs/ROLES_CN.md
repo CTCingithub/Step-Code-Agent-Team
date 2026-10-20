@@ -41,7 +41,7 @@ anything.
 
 ## effort 解析规则
 
-`team_create_member` 显式传 `thinking` 时始终优先。否则按序：
+`team_create_member` 显式传 `effort` 时始终优先。否则按序：
 
 1. `[stepcodeAgentTeam.presets.effort]` 配置覆盖——仅对随配置内置的四个角色名
    （`scout` / `planner` / `worker` / `reviewer`）生效；

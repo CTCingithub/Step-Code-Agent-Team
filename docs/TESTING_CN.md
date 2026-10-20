@@ -63,12 +63,13 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
 phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY` 时 runner 显式 SKIP
-而非失败；设置后（密钥见 `local/test-api-key.md`，只经环境变量传递）即纳入回归。
+而非失败。密钥来自环境变量，或 `sandbox/TEST-KEY.md`（gitignored）首个非注释行——
+任一就绪即纳入回归。
 
 | 探针 | 覆盖 | 成本 |
 |---|---|---|
@@ -76,7 +77,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase2 | 任务板状态机（DAG/环/ready-set/持久化） | 零 token |
 | phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
 | phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token（无 key 时 SKIP） |
-| phase6 | 默认关闭激活 + 配置纯函数 + 模型/思考解析 | 零 token |
+| phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
 | phase9 | 配置边界（storage.dir/项目级/非法回退） | 零 token |
@@ -88,13 +89,15 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + 拓扑 bash 警告/消息能力提示 + dispatch 失败上下文（超时/中止提示接力在途与成员名册） | 零 token |
 | phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、优先级、非法 TOML 容忍、env 仍胜出） | 零 token |
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
+| phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议） | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
 
 ## 3. C 层 — LLM 路径测试（测试 key，沙箱内，每条成本极小）
 
 ```bash
-sleep 300 | step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase4.ts" \
+sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
+  -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
 ```
 

@@ -228,7 +228,7 @@ summary report back along the reply chain.
 
 **Known runtime behavior (nested chain timeout)**: the leader-side `team_send` wait
 timeout (`dispatch.timeoutMs`, default 180s) covers the **entire nested relay chain** —
-when a chain of three high-thinking reviewers exceeds 180s, the leader-side timeout
+when a chain of three high-effort reviewers exceeds 180s, the leader-side timeout
 returns while the relay continues on the server side (the dispatched members are reaped
 per the kill-on-failure semantics; the error message indicates the relay may still be
 in flight and lists member status). Recovery path: use `team_status` to see who is

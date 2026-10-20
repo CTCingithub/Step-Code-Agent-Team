@@ -78,14 +78,14 @@ throwaway temporary agentDir (mktemp), so they do not pollute `~/.stepcode` or
 the gitignored `sandbox/`:
 
 ```bash
-npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17)
+npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21)
 bash test/run-smoke.sh 9 13   # run only the given phases
 ```
 
 phase5 makes one real model call (1 token): when `STEP_API_KEY` is unset the
-runner explicitly SKIPs instead of failing; once it is set (the key is in
-`local/test-api-key.md`, passed only through the environment) phase5 is part of
-the regression run.
+runner explicitly SKIPs instead of failing. The key comes from the environment,
+or from the first non-comment line of `sandbox/TEST-KEY.md` (gitignored) — with
+either set, phase5 is part of the regression run.
 
 | Probe | Coverage | Cost |
 |---|---|---|
@@ -93,7 +93,7 @@ the regression run.
 | phase2 | Task board state machine (DAG / cycles / ready set / persistence) | zero token |
 | phase3 | Messaging service + shim status round-trip + preset loading | zero token |
 | phase5 | Concurrent creation races / fail-fast kill / state machine / socket 0600 / abort / shutdown | 1 token (SKIP without a key) |
-| phase6 | Default-off activation + config pure functions + model/thinking resolution | zero token |
+| phase6 | Default-off activation + config pure functions + model/effort resolution | zero token |
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero token |
 | phase8 | Recursion depth /proc inspection + sub-team self-bootstrap + concurrent defaults | zero token |
 | phase9 | Config boundaries (storage.dir / project-level / invalid fallback) | zero token |
@@ -105,6 +105,7 @@ the regression run.
 | phase18 | Slot counting (disband frees a slot) + resume argument ignored notice + topology bash warning / messaging capability notice + dispatch failure context (the timeout/abort notice relays in-flight messages and the member roster) | zero token |
 | phase19 | Unified config tiers (global/project config.toml, trust gating, precedence, invalid-TOML tolerance, env still wins) | zero token |
 | phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
+| phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) | zero token |
 
 The LLM-path probes (phase4/10/11/12) need a test key and still live in the
 gitignored `sandbox/` (see Layer C).
@@ -112,7 +113,8 @@ gitignored `sandbox/` (see Layer C).
 ## 3. Layer C — LLM-path tests (test key, inside the sandbox, minimal cost per probe)
 
 ```bash
-sleep 300 | step -e "$PWD/extensions/index.ts" -e "$PWD/sandbox/smoke-phase4.ts" \
+sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
+  -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
 ```
 

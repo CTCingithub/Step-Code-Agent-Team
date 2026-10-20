@@ -74,12 +74,12 @@ export default function (pi: ExtensionAPI) {
 				renderTeamResult("team_create_member")(
 					{
 						content: [{ type: "text", text: "Created" }],
-						details: { created: true, member: { name: "scout1", role: "scout", status: "idle", model: "step-5-preview", thinking: "high" } },
+						details: { created: true, member: { name: "scout1", role: "scout", status: "idle", model: "step-5-preview", effort: "high" } },
 					},
 					{ expanded: false },
 					theme,
 				),
-				"✓ scout1 (scout) [idle] step-5-preview thinking=high",
+				"✓ scout1 (scout) [idle] step-5-preview effort=high",
 			);
 			has(
 				"result: create_member resumed icon",

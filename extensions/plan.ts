@@ -18,7 +18,7 @@
  *   choice — guidance mentions effort levels only.
  */
 
-import type { ThinkingLevel } from "./config.ts";
+import type { EffortLevel } from "./config.ts";
 import type { TopologyShape } from "./topology.ts";
 
 export const PLAN_TIER_IDS = ["economic", "fast", "balanced", "performance"] as const;
@@ -132,5 +132,5 @@ export function matchTierToken(token: string): PlanTierId | null {
 export interface CustomPicks {
 	size?: number;
 	shape?: TopologyShape;
-	effort?: ThinkingLevel;
+	effort?: EffortLevel;
 }

@@ -18,7 +18,7 @@ import {
 } from "./members.ts";
 import type { MemberUsage } from "./registry.ts";
 import type { PluginConfig } from "./config.ts";
-import { VALID_THINKING } from "./config.ts";
+import { VALID_EFFORT } from "./config.ts";
 import { isActive } from "./activation.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
 
@@ -76,7 +76,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Create (or resume) a member agent in the current team.",
 			"Members run as isolated `step --mode rpc` processes with their own context window,",
 			"model, and tool allowlist. Idempotent: an existing member name is resumed, not duplicated,",
-			"and on resume the passed role/tools/model/thinking/systemPrompt are ignored — disband and",
+			"and on resume the passed role/tools/model/effort/systemPrompt are ignored — disband and",
 			"recreate the member to change its configuration. Members need bash in their tool allowlist",
 			"to use the member-to-member messaging channel (read-only presets cannot).",
 			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
@@ -97,10 +97,10 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 						: "Ignored while autonomous model selection is disabled — members use the conversation's current model",
 				}),
 			),
-			thinking: Type.Optional(
-				StringEnum(VALID_THINKING, {
-					description: config.models.autonomousThinking
-						? `Effort level for the member — choose per task: ${VALID_THINKING.join(", ")}`
+			effort: Type.Optional(
+				StringEnum(VALID_EFFORT, {
+					description: config.models.autonomousEffort
+						? `Effort level for the member — choose per task: ${VALID_EFFORT.join(", ")}`
 						: "Effort level for the member (default: presets.effort override → preset effort → high)",
 				}),
 			),
@@ -118,7 +118,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 					name: params.name,
 					role: params.role,
 					model: params.model,
-					thinking: params.thinking,
+					effort: params.effort,
 					tools: params.tools,
 					systemPrompt: params.systemPrompt,
 				},
@@ -126,7 +126,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			);
 			const lines = [
 				`${created ? "Created" : "Resumed"} member "${member.name}" (role: ${member.role}).`,
-				`Model: ${member.model ?? "leader default"}; thinking: ${member.thinking ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
+				`Model: ${member.model ?? "leader default"}; effort: ${member.effort ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
 				`Status: ${member.status}. Use team_send to give it work.`,
 			];
 			if (!created) {

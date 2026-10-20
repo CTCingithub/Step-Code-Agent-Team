@@ -60,7 +60,7 @@ export default function (pi: ExtensionAPI) {
 				if (raw.models) {
 					expect("models.available", cfg.models.available, raw.models.available);
 					expect("models.autonomousSelection", cfg.models.autonomousSelection, raw.models.autonomousSelection);
-					expect("models.autonomousThinking", cfg.models.autonomousThinking, raw.models.autonomousThinking);
+					expect("models.autonomousEffort", cfg.models.autonomousEffort, raw.models.autonomousEffort);
 				}
 				if (raw.members) {
 					expect("members.max", cfg.members.max, raw.members.max);

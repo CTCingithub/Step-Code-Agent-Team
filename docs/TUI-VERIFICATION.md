@@ -44,8 +44,8 @@ pasting the next one. Step 6 is a key press, not a prompt.
 | # | Copy-paste | Expected render | Result |
 |---|---|---|---|
 | 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | Activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
-| 2 | `/topo` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/thinking) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
-| 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … thinking=high` | ☐ |
+| 2 | `/topo` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/effort) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
+| 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … effort=high` | ☐ |
 | 4 | `Create another member with the worker role, named worker1` | Same as step 3: `+worker1 (worker)` / `✓ worker1 (worker) [idle]` (provides the second member for step 7's pipeline topology) | ☐ |
 | 5 | `Ask scout1 to introduce himself in one sentence` | renderCall: `team → scout1` + message preview (≤70 chars); during a long run onUpdate streams updates (first "(member is working...)", then interim text); renderResult: usage row (`1 turn, $x.xxxx`) + the reply body (collapsed to 3 lines by default, with "(ctrl+o to expand)") | ☐ |
 | 6 | *(key press, not a prompt)* Press `ctrl+o` on step 5's result | The full body expands; press again to collapse it | ☐ |

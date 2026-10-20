@@ -2,11 +2,11 @@
  * Default-off activation + config file regression probe (plan v2).
  *
  * Zero-token: no LLM calls. Member spawns happen (handshake only) for the
- * model/thinking resolution checks; each member is disbanded immediately.
+ * model/effort resolution checks; each member is disbanded immediately.
  *
  * Run with three configs:
  *   default (no file)         → off-paths + activation + off-mode resolution
- *   autonomous on             → on-mode model/thinking resolution
+ *   autonomous on             → on-mode model/effort resolution
  *   activation.enabled=false  → activation refused, tools stay hidden
  */
 
@@ -58,7 +58,7 @@ export default function (pi: ExtensionAPI) {
 			check("config defaults: models.available", d.models.available.join(",") === "step-5-preview");
 			check(
 				"config defaults: autonomous flags off",
-				d.models.autonomousSelection === false && d.models.autonomousThinking === false,
+				d.models.autonomousSelection === false && d.models.autonomousEffort === false,
 			);
 			check("config defaults: dispatch.retries", d.dispatch.retries === defaults.dispatch.retries);
 
@@ -67,7 +67,7 @@ export default function (pi: ExtensionAPI) {
 				JSON.stringify({
 					stepcodeAgentTeam: {
 						activation: { keywords: ["magic word"], notifyOnActivate: false },
-						models: { available: ["m1", "m2"], autonomousSelection: true, autonomousThinking: true },
+						models: { available: ["m1", "m2"], autonomousSelection: true, autonomousEffort: true },
 						members: { max: 3 },
 						cost: { warnThreshold: 0 },
 						bogusSection: { x: 1 },
@@ -199,14 +199,14 @@ export default function (pi: ExtensionAPI) {
 				check("activation: fresh call true", activate("probe") === true);
 				check("activation: idempotent", activate("probe again") === false);
 
-				// 5. model / thinking resolution (spawn + disband per case)
+				// 5. model / effort resolution (spawn + disband per case)
 				if (!cfg.models.autonomousSelection) {
 					const r1 = await manager.createMember({ name: "res1", role: "worker", model: "some-other-model" }, LEADER_MODEL);
 					check("resolution: off → conversation model", r1.member.model === LEADER_MODEL, `got ${r1.member.model}`);
-					check("resolution: thinking from preset (worker=medium)", r1.member.thinking === "medium", `got ${r1.member.thinking}`);
+					check("resolution: effort from preset (worker=medium)", r1.member.effort === "medium", `got ${r1.member.effort}`);
 					await manager.disband("res1");
-					const r2 = await manager.createMember({ name: "res2", role: "worker", thinking: "low" }, LEADER_MODEL);
-					check("resolution: explicit thinking honored", r2.member.thinking === "low", `got ${r2.member.thinking}`);
+					const r2 = await manager.createMember({ name: "res2", role: "worker", effort: "low" }, LEADER_MODEL);
+					check("resolution: explicit effort honored", r2.member.effort === "low", `got ${r2.member.effort}`);
 					await manager.disband("res2");
 				} else {
 					const r1 = await manager.createMember({ name: "res1", role: "worker", model: "step-5-preview" }, LEADER_MODEL);
@@ -219,12 +219,12 @@ export default function (pi: ExtensionAPI) {
 						bogusThrew = /available models/.test(err instanceof Error ? err.message : "");
 					}
 					check("resolution: on → invalid model throws with list", bogusThrew);
-					const r3 = await manager.createMember({ name: "res3", role: "worker", thinking: "xhigh" }, LEADER_MODEL);
-					check("resolution: on → explicit thinking honored", r3.member.thinking === "xhigh", `got ${r3.member.thinking}`);
+					const r3 = await manager.createMember({ name: "res3", role: "worker", effort: "xhigh" }, LEADER_MODEL);
+					check("resolution: on → explicit effort honored", r3.member.effort === "xhigh", `got ${r3.member.effort}`);
 					await manager.disband("res3");
 					const r4 = await manager.createMember({ name: "res4", role: "worker" }, LEADER_MODEL);
 					check("resolution: on + no model → conversation model", r4.member.model === LEADER_MODEL, `got ${r4.member.model}`);
-					check("resolution: on + no thinking → preset medium", r4.member.thinking === "medium", `got ${r4.member.thinking}`);
+					check("resolution: on + no effort → preset medium", r4.member.effort === "medium", `got ${r4.member.effort}`);
 					await manager.disband("res4");
 				}
 			} else {
@@ -243,7 +243,7 @@ export default function (pi: ExtensionAPI) {
 				);
 				resetConfigCache();
 				const r5 = await manager.createMember({ name: "res5", role: "worker" }, LEADER_MODEL);
-				check("presets.effort: config overrides preset effort", r5.member.thinking === "xhigh", `got ${r5.member.thinking}`);
+				check("presets.effort: config overrides preset effort", r5.member.effort === "xhigh", `got ${r5.member.effort}`);
 				await manager.disband("res5");
 				fs.rmSync(path.join(agentDir6, "settings.json"));
 				resetConfigCache();

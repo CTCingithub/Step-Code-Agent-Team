@@ -31,10 +31,10 @@ import {
 import { type AgentPreset, extensionEntryPath, loadPreset, memberMessagingEntryPath } from "./presets.ts";
 import { nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
 import {
-	DEFAULT_MEMBER_THINKING,
+	DEFAULT_EFFORT,
 	type PluginConfig,
-	type ThinkingLevel,
-	VALID_THINKING,
+	type EffortLevel,
+	VALID_EFFORT,
 	getConfig,
 } from "./config.ts";
 import {
@@ -56,7 +56,7 @@ export interface CreateMemberParams {
 	name: string;
 	role?: string;
 	model?: string;
-	thinking?: string;
+	effort?: string;
 	tools?: string[];
 	systemPrompt?: string;
 }
@@ -123,7 +123,7 @@ export function resumeIgnoredParams(params: CreateMemberParams, member: MemberRe
 		ignored.push("tools");
 	}
 	if (params.model && params.model !== member.model) ignored.push("model");
-	if (params.thinking && params.thinking !== member.thinking) ignored.push("thinking");
+	if (params.effort && params.effort !== member.effort) ignored.push("effort");
 	if (params.systemPrompt && params.systemPrompt.trim().length > 0) ignored.push("systemPrompt");
 	return ignored;
 }
@@ -395,7 +395,7 @@ export class TeamManager {
 			name,
 			role,
 			model: this.resolveMemberModel(name, params.model, preset, leaderModel, config),
-			thinking: this.resolveThinking(params.thinking, preset?.effort, role),
+			effort: this.resolveEffort(params.effort, preset?.effort, role),
 			tools:
 				(params.tools && params.tools.length > 0 ? [...params.tools] : undefined) ??
 				preset?.tools ??
@@ -457,28 +457,28 @@ export class TeamManager {
 
 	/**
 	 * Member effort resolution: an explicit, valid level always wins. With
-	 * models.autonomousThinking on, the leader is expected to choose per
+	 * models.autonomousEffort on, the leader is expected to choose per
 	 * member, so preset efforts (frontmatter and presets.effort config) are
 	 * inert. Otherwise: presets.effort[role] config override → preset
 	 * frontmatter effort → the default (high).
 	 */
-	private resolveThinking(requested: string | undefined, presetEffort?: string, role?: string): ThinkingLevel {
+	private resolveEffort(requested: string | undefined, presetEffort?: string, role?: string): EffortLevel {
 		if (requested) {
-			if (!(VALID_THINKING as readonly string[]).includes(requested)) {
-				throw new Error(`Invalid thinking level "${requested}". Valid levels: ${VALID_THINKING.join(", ")}.`);
+			if (!(VALID_EFFORT as readonly string[]).includes(requested)) {
+				throw new Error(`Invalid effort level "${requested}". Valid levels: ${VALID_EFFORT.join(", ")}.`);
 			}
-			return requested as ThinkingLevel;
+			return requested as EffortLevel;
 		}
 		const config = getConfig();
-		if (config.models.autonomousThinking) return DEFAULT_MEMBER_THINKING;
+		if (config.models.autonomousEffort) return DEFAULT_EFFORT;
 		const configured = role ? config.presets.effort[role] : undefined;
-		if (configured && (VALID_THINKING as readonly string[]).includes(configured)) {
-			return configured as ThinkingLevel;
+		if (configured && (VALID_EFFORT as readonly string[]).includes(configured)) {
+			return configured as EffortLevel;
 		}
-		if (presetEffort && (VALID_THINKING as readonly string[]).includes(presetEffort)) {
-			return presetEffort as ThinkingLevel;
+		if (presetEffort && (VALID_EFFORT as readonly string[]).includes(presetEffort)) {
+			return presetEffort as EffortLevel;
 		}
-		return DEFAULT_MEMBER_THINKING;
+		return DEFAULT_EFFORT;
 	}
 
 	/**
@@ -543,7 +543,8 @@ export class TeamManager {
 			args.push("--no-extensions", "-e", memberMessagingEntryPath());
 		}
 		if (member.model) args.push("--model", member.model);
-		if (member.thinking) args.push("--thinking", member.thinking);
+		// `--thinking` is the host CLI's own flag name; our terminology is "effort".
+		if (member.effort) args.push("--thinking", member.effort);
 		if (member.tools && member.tools.length > 0) {
 			// --tools is an allowlist over built-in AND extension tools. team_msg
 			// is team infrastructure (no bash needed) and the sub-leader team
@@ -912,7 +913,7 @@ export class TeamManager {
 		this.assertTopologyDeclared();
 		const args = ["-p", "--mode", "json", "--no-session", "--no-extensions"];
 		if (member.model) args.push("--model", member.model);
-		if (member.thinking) args.push("--thinking", member.thinking);
+		if (member.effort) args.push("--thinking", member.effort);
 		if (member.tools && member.tools.length > 0) args.push("--tools", member.tools.join(","));
 		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
 		args.push(message);

@@ -19,7 +19,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { VALID_THINKING, agentDir, type ThinkingLevel } from "./config.ts";
+import { VALID_EFFORT, agentDir, type EffortLevel } from "./config.ts";
 
 export interface AgentPreset {
 	name: string;
@@ -27,7 +27,7 @@ export interface AgentPreset {
 	tools?: string[];
 	model?: string;
 	/** Default effort level for the role (invalid values are ignored). */
-	effort?: ThinkingLevel;
+	effort?: EffortLevel;
 	systemPrompt: string;
 }
 
@@ -95,10 +95,10 @@ function parseToolList(value: string | undefined): string[] | undefined {
 	return tools.length > 0 ? tools : undefined;
 }
 
-function parseEffort(value: string | undefined): ThinkingLevel | undefined {
+function parseEffort(value: string | undefined): EffortLevel | undefined {
 	if (!value) return undefined;
 	const v = value.trim().toLowerCase();
-	return (VALID_THINKING as readonly string[]).includes(v) ? (v as ThinkingLevel) : undefined;
+	return (VALID_EFFORT as readonly string[]).includes(v) ? (v as EffortLevel) : undefined;
 }
 
 /**

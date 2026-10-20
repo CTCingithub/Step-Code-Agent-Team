@@ -44,7 +44,7 @@ anything.
 
 ## Effort resolution
 
-An explicit `thinking` argument to `team_create_member` always wins. Otherwise:
+An explicit `effort` argument to `team_create_member` always wins. Otherwise:
 
 1. the `[stepcodeAgentTeam.presets.effort]` config override — applies to the
    built-in role names it ships with (`scout` / `planner` / `worker` /

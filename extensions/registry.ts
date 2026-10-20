@@ -28,7 +28,7 @@ export interface MemberRecord {
 	name: string;
 	role: string;
 	model?: string;
-	thinking?: string;
+	effort?: string;
 	tools?: string[];
 	sessionId: string;
 	systemPromptFile?: string;
@@ -132,6 +132,12 @@ export function loadRegistry(teamId: string): TeamRegistry | null {
 		if (!Array.isArray(reg.members) || !Array.isArray(reg.tasks)) return null;
 		// Registries written before the topology field degrade to star.
 		reg.topology = parseTopology(reg.topology);
+		// 0.2.0 renamed the member field thinking → effort: read the legacy
+		// field so teams created by older versions keep their effort on respawn.
+		for (const m of reg.members) {
+			const legacy = (m as unknown as { thinking?: string }).thinking;
+			if (m.effort === undefined && typeof legacy === "string") m.effort = legacy;
+		}
 		return reg;
 	} catch {
 		return null;
