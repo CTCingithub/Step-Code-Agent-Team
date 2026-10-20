@@ -33,8 +33,9 @@ node src/cli.js remove 1          # 删除任务
   跑 `npm test` 转绿 → reviewer 审查改动。
 - **star 并行审查**：三个 reviewer 分头审查正确性 / 风格 / 安全，队长汇总。
 - **ring 巡回审查**：ring 拓扑下成员沿环传递审查意见；观察
-  `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应转为向队长
-  汇报（错误信息会明确提示）。
+  `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应把结论写入
+  最终报告交回队长（错误信息会明确提示；leader 不是消息目标，无法被
+  `topo_team_msg` 直达）。
 
 ## 还原
 

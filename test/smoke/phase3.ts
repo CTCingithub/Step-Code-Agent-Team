@@ -101,9 +101,16 @@ export default function (pi: ExtensionAPI) {
 			log("member model:", member.model, "tools:", member.tools?.join(","));
 			log(
 				"prompt has coordination section:",
-				promptBody.includes("Team messaging") && promptBody.includes("topo_team_msg"),
+				promptBody.includes("Team messaging") &&
+					promptBody.includes("topo_team_msg") &&
+					promptBody.includes("not a messaging target"),
 			);
-			if (member.model !== preset.model || !promptBody.includes("Team messaging") || !promptBody.includes("topo_team_msg")) {
+			if (
+				member.model !== preset.model ||
+				!promptBody.includes("Team messaging") ||
+				!promptBody.includes("topo_team_msg") ||
+				!promptBody.includes("not a messaging target")
+			) {
 				fail("preset wiring broken");
 				await manager.disband();
 				server.stop();
@@ -178,6 +185,24 @@ export default function (pi: ExtensionAPI) {
 						fail(`topo_team_msg socket round-trip broken: ${text.slice(0, 160)}`);
 					} else {
 						log("topo_team_msg: topology denial surfaces with the allowed list: OK");
+					}
+					// The leader is not a topology node and has no inbox: a
+					// member→leader attempt must be denied with the final-report
+					// guidance (2026-10-20 sandbox session: ring/pipeline terminal
+					// members hit this and previously got a confusing neighbor list).
+					const leaderRes = (await msgTool.execute("probe", { to: "leader", message: "final list" })) as {
+						content?: Array<{ text?: string }>;
+						isError?: boolean;
+					};
+					const leaderText = leaderRes.content?.map((c) => c.text ?? "").join("\n") ?? "";
+					if (
+						leaderRes.isError !== true ||
+						!/not a messaging target/i.test(leaderText) ||
+						!/final report/i.test(leaderText)
+					) {
+						fail(`topo_team_msg leader target must explain the final-report path: ${leaderText.slice(0, 160)}`);
+					} else {
+						log("topo_team_msg: leader target denied with final-report guidance: OK");
 					}
 				}
 			}

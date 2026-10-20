@@ -472,6 +472,7 @@ export class TeamManager {
 			`You are member "${member.name}" of an agent team coordinated by a leader.`,
 			"Direct member-to-member messaging is gated by the team topology.",
 			"Use the topo_team_msg tool to message an allowed teammate (to = their name).",
+			"The leader is not a messaging target — it is not part of the topology and has no inbox; everything you report reaches the leader through your final report (task result / reply to its dispatch).",
 			"A rejection lists the teammates you may message. If none of them fits, state the need in your final report instead — the leader will relay it.",
 			"If topo_team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
@@ -858,7 +859,7 @@ export class TeamManager {
 		if (limit > 0 && chainLength > limit) {
 			throw new TopologyError(
 				`Message chain length ${chainLength} exceeds the ring loop limit (${limit}). ` +
-					"Report the need to the leader instead of forwarding further.",
+					"State the need in your final report instead of forwarding further — the leader is not a messaging target.",
 			);
 		}
 	}

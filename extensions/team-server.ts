@@ -128,13 +128,26 @@ export class TeamServer {
 					});
 					return;
 				}
+				// The leader is not a topology node and has no async inbox: a
+				// member→leader message has no delivery channel, so answer it
+				// precisely instead of listing topology neighbors. Everything a
+				// member reports reaches the leader through its final report.
+				if (req.to.trim().toLowerCase() === "leader") {
+					this.reply(conn, {
+						ok: false,
+						error:
+							"the leader is not a messaging target — it is not part of the topology and has no message inbox. " +
+							"Put this in your final report instead: the leader reads task results and your replies to its dispatches.",
+					});
+					return;
+				}
 				// Topology enforcement: A may message B only when edge A→B exists.
 				if (!manager.mayMessage(from, req.to)) {
 					const allowed = manager.outboundTargets(from);
 					this.reply(conn, {
 						ok: false,
 						error: `topology denies ${from} → ${req.to}. Allowed teammates: ${
-							allowed.length > 0 ? allowed.join(", ") : "(none — route everything through the leader)"
+							allowed.length > 0 ? allowed.join(", ") : "(none — report it in your final report)"
 						}.`,
 					});
 					return;
@@ -147,7 +160,7 @@ export class TeamServer {
 						ok: false,
 						error:
 							`message chain would reach ${nextLength} hops, over the ring loop limit (${limit}). ` +
-							"Report the need to the leader instead of forwarding further.",
+							"State the need in your final report instead of forwarding further — the leader is not a messaging target.",
 					});
 					return;
 				}
@@ -159,7 +172,7 @@ export class TeamServer {
 						ok: false,
 						error:
 							`messaging cycle detected: ${from} → ${req.to} would close a wait loop. ` +
-							"Report the need to the leader instead of forwarding further.",
+							"State the need in your final report instead of forwarding further — the leader is not a messaging target.",
 					});
 					return;
 				}
