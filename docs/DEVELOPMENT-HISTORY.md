@@ -300,3 +300,69 @@
 **工作**：① `extensions/config.ts`：`seedBlock()` 改为从 `defaultConfig()` 生成（值不再硬写，杜绝与默认值漂移），覆盖全部 10 节/所有键；keywords 行用完整默认列表；null 默认键（`members.defaultTools`、`storage.dir`）以示例值 + "omit for null" 注释呈现。② `test/smoke/phase20.ts`：补「全节齐全」与「keywords 完整列表」断言（先红后绿）。③ 历史同步 + 全量回归 + 发布 v0.1.4（main + 附注标签 + latest 分支）。
 
 **验证**：键位差异经源码逐节核实（defaultConfig 10 节 vs 种子块 5 节 12 键）；keywords 内置默认 15 个经 config.ts 确认；phase20 补断言先红（缺 5 个节 + keywords 仅示例）后绿；全量 `npm run smoke` 17 phase + 10 检查全绿；种子块生成结果经肉眼核验（10 节齐全、keywords 完整列表、注释对齐）；发布 v0.1.4（main + 附注标签 + latest 分支）。
+
+### 29. 0.2.0 大版本：/topo 命令、团队方案选单、防误触护栏、逐字转发（plan-64）
+
+**用户 prompt**：「我希望做一次大更新到0.2.0版本……1.斜杠命令和触发关键词修改，防止和后续官方的智能体团队功能重复……2.我希望添加一个默认关闭的智能体团队设计方案选择功能，我希望有经济、快速、均衡、性能四个档位……」
+
+**思路**：两项已确认改动分别定性——改名是防撞名（官方未来大概率推「智能体团队/agent teams」，插件须让出裸词）；选单是默认关闭的成本敏感功能（成员是完整进程，N 成员≈N 倍成本）。命名候选按冲突风险/记忆度/输入成本三维评估；档位设计受 autonomousSelection 默认关闭约束（不得以模型差异为必要条件）。
+
+**工作**：① `extensions/index.ts`：注册 `/topo`（原 agent-team 暂留 deprecated 别名，plan-65 硬切）；handler 重写（激活→团队板→档位解析→摘要→confirm→转发）。② `extensions/plan.ts`（新增）：四档数据 + getTier/allTiers/matchTierToken。③ `extensions/config.ts`：`[stepcodeAgentTeam.plan]` 节（enabled=false、defaultTier）。④ `extensions/activation.ts`：ACTIVATION_COMMANDS 加 topo；三层防护配置项（guardEnabled/confirmBeforeActivate/headlessAutoActivate）。⑤ `extensions/forward.ts`（新增）：wrapTeamRequest（CJK 检测选指令行）。⑥ 文档 _ZH→_CN 重命名（10 文件 git mv + 41 处引用 + package.json files 数组）。⑦ 测试：phase6/20/21 与 run-smoke.sh live 检查同步。
+
+**验证**：全量 `npm run smoke` 17 phase + manifest + 6 live 全绿；提交 8fddd56/95c9f40/9729062。
+
+### 30. 0.2.0 修订：档位提示词化、plan.tier、别名硬切、旧词强制迁移、effort 预设、自定义角色（plan-65）
+
+**用户 prompt**：「1. 四个选项不要写倍率信息，而且要根据用户的语言表示……2. 添加一个默认 always ask 的选项……3.命令名定为/topo；4. headless自动激活，旧关键词强制迁移，别名不要保留；5. 同意预设思考强度（不要写 thinking，改为 effort）……6. 接受退化，但要在文档中说明；7. 添加人工设置新增内置角色的功能，并更新或新建文档」
+
+**思路**：七项意见逐项评估——倍率是预估值、写入选单像承诺（去除）；语言本地化降低选择成本；always ask 作为默认常驻项；别名硬切（live 断言同版本爆炸的成本高于用户习惯成本）；旧词强制迁移采用「生效层剥离+激活提示」而非改写用户文件（守 additive-only）；档位从固定阵容改为策略提示词（示例非绑定，模型自主决定成员/拓扑）；自定义角色参照 Claude Code/Gemini CLI 的 agents 目录惯例。
+
+**工作**：① `extensions/plan.ts` 重写：四档 = guidance+example（双语标签，示例明示非绑定）；tierPickerOptions/matchTierToken。② `extensions/config.ts`：plan.tier（always ask/四档）；DEPRECATED_KEYWORDS（10 个旧词）+ consumeKeywordMigration（加载剥离、激活提示、不改写用户文件）；presets.effort 按角色配置。③ `extensions/presets.ts`：AgentPreset.effort 字段；agents/*.md frontmatter thinking→effort；多目录加载（内置 < agentDir/agents < 项目 .stepcode/agents，按角色名覆盖）。④ `extensions/activation.ts`：ACTIVATION_COMMANDS 只留 topo（硬切，live 检查同步改 /topo）。⑤ `docs/ROLES(_CN).md` 新建（自定义角色参考）。⑥ TEST-PLAN(_CN) 增 0.2.0 轮次（A 无 key / K 需 key / M 人工三表）。
+
+**验证**：全量 smoke 全绿；提交 9972c91。
+
+### 31. skill/prompt 资源代码化（plan-66）
+
+**用户 prompt**：「我希望可以尽量使用代码或者mcp等方式来实现功能，避免skill等方式占用上下文。请再次检查，并进行优化」
+
+**思路**：审计确认占用上下文的随包资源仅 skills/team-orchestration 与 prompts/team-review 两个。MCP 评估后不采用：成员间消息 shim 改 MCP 需每个成员进程配客户端，且 shim 本就不占队长上下文，替换无收益；改走代码路径——编排协议浓缩为激活时请求本地注入，评审剧本改为 /topo review 命令。
+
+**工作**：① `extensions/forward.ts` 重写：teamActivationInstruction（组队协议浓缩）/ tierInstruction / teamReviewInstruction（原 team-review.md 剧本代码化）。② `extensions/index.ts`：/topo review 命令 + getArgumentCompletions。③ 删除 skills/ 与 prompts/；package.json pi manifest 只留 extensions；run-smoke.sh manifest-check 改为只校验 extensions。④ 文档同步（README/ARCHITECTURE/TESTING/MANUAL-TESTING/SKILL 移除 skill/prompt 表述，补 /topo review 与「协议经请求本地注入」说明）。
+
+**验证**：全量 smoke 17 phase + manifest + 6 live（含新增 live-review）全绿；提交 2fb43c2/9fe20e6。
+
+### 32. 拓扑退化修复：成员侧 topo_team_msg 工具（plan-67）
+
+**用户 prompt**：「请给我检查之前的拓扑性能下降问题，找到原因，并尝试修改优化」
+
+**思路**：退化根因——成员间消息唯一通道是经 shell 启动的 CLI shim，只读预设（scout/planner/reviewer）无 bash，指向它们的拓扑边全部退化为队长中转。服务端对连接来源零假设（身份仅取自 JSON 的 from 字段），故可写成员侧扩展经 node:net 直连同一 socket、说相同协议。
+
+**工作**：① `extensions/member-messaging.ts`（新增）：注册 topo_team_msg 工具，连接 STEPCODE_TEAM_SOCK、发送与 shim 相同的 JSONL、180s 超时；env 缺失时惰性不注册。② `extensions/members.ts`：spawn 时 -e 加载（非 sub-leader 用 `--no-extensions -e` 组合——step 文档确认合法）+ team_msg 加入 allowlist 作为团队基础设施；coordination 提示词改用工具。③ 移除 memberCanMessage/messagingWarnings 及 team_create_member 的误导提示（每个成员都注入工具，边对所有角色可用）。④ 测试：phase3（工具注册/schema/socket 往返被拒路径）、phase8（spawn 参数与 allowlist）、phase18（移除失效断言）；文档双语同步。
+
+**验证**：全量 smoke 全绿；提交 95bd487/6240161。E2E 成功派发路径留待用户手动验证（零 token 只覆盖被拒路径）。
+
+### 33. 0.2.0 定稿轮：版本、effort 破坏性改名、沙箱卫生与测试密钥（plan-68）
+
+**用户 prompt**：「1. 本轮修改是0.2.0大版本的，修改完以后等待我同意会放版；2. 确认参数全面改用effort，允许破坏；3.确认防护默认值；4. 允许修改文档漂移；5. 同意修改沙箱孤儿，同意沙箱demo卫生的相关修改，沙箱中新增一个不会被同步到远端的文档，用于存放测试用API key，并修改相关测试脚本；6. 同意其余两项。」
+
+**工作**：① `package.json` 0.1.4→0.2.0（**未打 tag、未发布**，等用户同意放版）；README(_CN) 安装示例 @v0.1.2→@v0.2.0、Status 节重写为 0.2.0 功能集、CN 复验脚本改用 topo_team_msg 与 TEST-KEY 约定。② effort 全面破坏性改名：team_create_member 参数 thinking→effort、VALID_THINKING→VALID_EFFORT、ThinkingLevel→EffortLevel、autonomousThinking→autonomousEffort；registry 加载保留旧 thinking 字段回退；spawn 的 `--thinking` 宿主 flag 名不变（调用点加注说明）。③ docs/TESTING(_CN) phase 清单漂移修复（内联注释补 18-21、覆盖表补 phase21 行、phase6 行旧术语）。④ 沙箱 demo 卫生：store 数据目录注入（`new TaskStore({dataDir})`/`TASKS_DATA_DIR`，测试不再 rmSync 真实 data/——M5）；load() 区分 ENOENT 与损坏 JSON（H1 显式报错并指明文件）；title 控制字符/换行净化；套件 8→12 条（修复态 12/12、种子态 11/12 均实证）；project-pristine 同步。⑤ `sandbox/TEST-KEY.md`（gitignored）+ `sandbox/with-test-key.sh` + run-smoke.sh 密钥回退（STEP_API_KEY 未设时读取；提取逻辑经两次迭代修掉"说明文字被当 key export"的 bug——改用 `STEP_API_KEY=` 标记行）。⑥ cfg-deep 孤儿 fixture 删除（被 cfg-deep2 取代）。⑦ TEST-PLAN(_CN) 执行记录与验证计数更新。
+
+**验证**：全量 smoke 全绿；demo 修复态 12/12 实证（临时修种子 bug 后经 restore 复位）；提交 c72d426/226c219/c3878e7。
+
+### 34. 沙箱测试问题修复：工具自愈 + topo_team_msg 改名（plan-69）
+
+**用户 prompt**：「1. 我已经在sandbox中未修改config.toml进行了测试，请阅读测试日志，定位问题然后修改；2. team_msg请改名为topo_team_msg」
+
+**思路**：会话 JSONL 实证团队工具在会话中段整体变为 "tool not found"（00:54–00:55 正常、00:57:56 起失效），无 /topo off、无 reload、无会话重启，且 step 源码确认不监听扩展文件变更；日志所称「disband 导致工具集注销」经 JSONL 证实为模型追忆时的臆造（会话中无任何 disband 调用记录）。定位为宿主侧重置隐藏工具且插件无恢复路径，采自愈式修复（不依赖精确根因）。
+
+**工作**：① `extensions/activation.ts`：新增 `ensureToolsAvailable()`——插件激活期间每次用户输入都幂等重断言工具可用（输入钩子兜底）。② `extensions/members.ts`：新增导出 `teamIdForSession()`；`extensions/index.ts` session_start 发现本会话团队注册表已存在时自动重激活（覆盖会话恢复与扩展重初始化）。③ topo_team_msg 全量改名（代码/测试/文档/TEST-PLAN；gitignored 的会话日志除外）。④ 移除 team_create_member 的误导提示与 messagingWarnings 死代码；phase18 同步；TESTING/PROTOCOL 双语契约行更新。
+
+**验证**：全量 smoke 全绿（17 phase + manifest + 6 live + orphan-check）；RPC 探针实证三条修复路径行为符合设计（/topo off、L2 确认框、固定档摘要）；提交 50df038/601e6f8。
+
+### 35. 文档整合：TEST-PLAN 迁入 docs/、沙箱只留 README（plan-70）
+
+**用户 prompt**：「请给我修改更新所有文档，尤其是沙箱测试相关的」+「不要在 sandox/ 里写测试计划，sandbox/ 中的文档应该只有README。测试计划改到docs/ 路径中或修改docs/中的文档。请继续」
+
+**工作**：① TEST-PLAN(_CN).md `git mv` 至 `docs/`（沙箱目录此后只保留 README 与脚本）；全部引用更新——sandbox README(_CN)（Contents 表改条目 + 表后指引）、TESTING(_CN)（4 处路径）、MANUAL-TESTING(_CN)（4 处路径 + 计数 8/8→12/12、7/8→11/12）、demo 项目 README（project/ 与 project-pristine/ 同步）、README(_CN) 文档表格新增 TEST-PLAN 入口。② 沙箱 README(_CN)：Quick start 改 TEST-KEY.md 密钥机制、Contents 表补 TEST-KEY.md/with-test-key.sh、演示项目条目更新 12 条基线、跑测试节补密钥回退。③ TEST-PLAN(_CN) 内容：补 2026-10-20 会话发现（工具消失 bug 与自愈修复、改名、误导提示移除）与完整手动测试流程记录。④ 全文档链接一致性验证（抽取全部相对链接逐一核验存在性）。
+
+**验证**：链接检查全部通过；`sandbox/TEST-PLAN` 路径引用在主仓库文档清零（仅存 DEVELOPMENT-HISTORY 历史档案）；project 与 pristine 的 README 经 diff 确认同步；提交 4f37337。
