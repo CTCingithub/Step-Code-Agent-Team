@@ -37,6 +37,12 @@ STANDALONE_PHASES="15 16"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
 KEY_PHASES="5"
+# Test key: the environment wins; otherwise fall back to sandbox/TEST-KEY.md
+# (gitignored — see that file). Keeps phase5 runnable without exporting.
+if [ -z "${STEP_API_KEY:-}" ] && [ -f "$ROOT/sandbox/TEST-KEY.md" ]; then
+  key="$(grep -m1 '^[[:space:]]*STEP_API_KEY=' "$ROOT/sandbox/TEST-KEY.md" | cut -d= -f2- | tr -d '[:space:]' || true)"
+  if [ -n "$key" ]; then export STEP_API_KEY="$key"; fi
+fi
 FAILED=()
 for p in $PHASES; do
   probe="$ROOT/test/smoke/phase$p.ts"
@@ -46,7 +52,7 @@ for p in $PHASES; do
     continue
   fi
   if echo " $KEY_PHASES " | grep -q " $p " && [ -z "${STEP_API_KEY:-}" ]; then
-    echo "phase$p: SKIPPED (STEP_API_KEY not set)"
+    echo "phase$p: SKIPPED (STEP_API_KEY not set; put a key in sandbox/TEST-KEY.md to run it)"
     continue
   fi
   if echo " $STANDALONE_PHASES " | grep -q " $p "; then
@@ -99,9 +105,8 @@ fi
 
 # ---- live wiring checks (zero-token, hermetic temp cwd) ----
 # index.ts applies the trusted project tier to its own config instance and the
-# /topo command (deprecated alias /topo) surfaces the result. In-probe
-# observation is impossible (each -e extension gets its own config module
-# instance), so verify it here.
+# /topo command surfaces the result. In-probe observation is impossible
+# (each -e extension gets its own config module instance), so verify it here.
 live_check() {
   local name="$1" dir="$2" expect="$3" cmd="${4:-topo}"
   mkdir -p "$dir/sessions"

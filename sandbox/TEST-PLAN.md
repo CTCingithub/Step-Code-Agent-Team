@@ -119,6 +119,55 @@ strategy). The review target is the `sandbox/project` demo code (not the plugin 
 - "The project lacks a .gitignore, so `data/tasks.json` risks being committed": the root repo's .gitignore already ignores `sandbox/project/data/` — the member only saw the project dir, not the repo root, hence the misjudgment;
 - "`secret-sample.txt` being tracked by git is a bad pattern": **intentional design** — the fake-secret guardrail sample called out in the README, kept tracked so that "members must not read/exfiltrate secrets" can be verified;
 
-**Suggested follow-ups (optional, not implemented)**: H1 distinguishes ENOENT from corrupt JSON (explicit error on corruption instead of a silent reset); sanitize control characters/newlines in title (guards against list output injection); isolate the test data directory (M5).
+**Follow-ups (implemented in the 0.2.0 hygiene round)**: H1 now distinguishes ENOENT from corrupt JSON (explicit error on corruption instead of a silent reset); title control characters/newlines are sanitized (guards against list output injection); the test data directory is isolated (M5 — tests use throwaway dirs via `new TaskStore({ dataDir })` / `TASKS_DATA_DIR`, so the real `data/` is never touched).
 
-**Verification**: fixed state `npm test` 8/8; M1 reproduction paths (`add ""` / `done 99`) all exit cleanly with code 2; M2 reproduction paths (`{}` / `{"tasks":[]}`) all fall back to an empty list; the post-restore 7/8 baseline (seeded failure) unchanged; project and project-pristine file-for-file identical.
+**Verification**: fixed state `npm test` 12/12; M1 reproduction paths (`add ""` / `done 99`) all exit cleanly with code 2; M2 reproduction paths (`{}` / `{"tasks":[]}`) all fall back to an empty list; the post-restore 11/12 baseline (seeded failure) unchanged; project and project-pristine file-for-file identical.
+
+## V. 0.2.0 round (2026-10-19)
+
+New surface to verify: the `/topo` command (tiers / picker / review / off), plugin-specific keywords + forced migration, the three-layer false-trigger guard, verbatim forwarding with request-local instruction injection, `team_msg` member messaging (no bash), custom roles, effort presets.
+
+### Automatable without a key
+
+| # | Check | Command / probe | Expected |
+|---|---|---|---|
+| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 6 live checks + orphan-check) |
+| A2 | Protocol probe | `bash sandbox/probe.sh` | `PROBE OK` |
+| A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
+| A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |
+
+### Needs STEP_API_KEY (user-only until a key is provided)
+
+| # | Check | Probe | Gap |
+|---|---|---|---|
+| K1 | `/topo <request>` end-to-end | RPC prompt with the command | the verbatim request lands in the session log; the leader forms a team (no solo completion) |
+| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; the chosen tier's instruction reaches the model |
+| K3 | `plan.tier` pinned mode | config `tier="fast"` | no picker; the tier applies on every activation (command and keyword paths) |
+| K4 | `/topo review <target>` | sandbox session | three reviewers + worker merge protocol executed |
+| K5 | team_msg success dispatch | two members + a declared edge; the upstream messages the downstream | the reply returns over the socket — the E2E gap left by the topology fix |
+| K6 | Custom roles | `<agentDir>/agents/quickfix.md`; project-level in a trusted project | `team_create_member(role="quickfix")` applies the prompt / tools / effort |
+| K7 | Keyword migration notice | config carrying old keywords | activation strips them and notifies once |
+| K8 | phase4/10/11/12 LLM probes | `sandbox/smoke-phase4/10/11/12.ts` | full-path regression with the new spawn args (team_msg in the allowlist) |
+
+### Must be manual (real TUI / install / UX)
+
+| # | Item | Why |
+|---|---|---|
+| M1 | Real install: `step install` from a clean export, activate, `step remove` | the `step install` command UX + uninstall; live-package-install only covers the config-packages load path |
+| M2 | Trust dialog UX | the project-level config trust popup is interactive |
+| M3 | TUI picker / confirm rendering | `ctx.ui.select`/`confirm` visuals, the 30s timeout countdown |
+| M4 | TUI rendering观感 (render.ts) | phase15 asserts content strings, not pixels |
+| M5 | English translation review | docs bilingual accuracy |
+| M6 | 8-member performance (subjective, optional) | qualitative |
+
+### Execution record
+
+| # | Result | Notes |
+|---|---|---|
+| A1 | ✅ all phases passed | 17 phases + manifest + 6 live checks (incl. live-review) + orphan-check |
+| A2 | ✅ PROBE OK | zero-token protocol probe |
+| A3 | ✅ restored | seeded bug back in place; `data/` and `session-log-*.md` cleared |
+| A3b | ✅ 7/8 baseline | the restored project fails exactly the seeded test |
+| A4 | ✅ (via A1) | live-clean-export loads and activates the archived extension |
+
+Remaining: K1–K8 need `STEP_API_KEY`; M1–M6 are manual (see the tables above).

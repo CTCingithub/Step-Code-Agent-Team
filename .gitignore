@@ -15,6 +15,8 @@ sandbox/project/data/
 sandbox/session-log-*.md
 # Local build of the pinned Step-Code submodule (see sandbox/build-step.sh)
 sandbox/step-build/
+# Sandbox test API key (see sandbox/TEST-KEY.md — never commit)
+sandbox/TEST-KEY.md
 
 # Local agent state (session plans, local config)
 .stepcode/

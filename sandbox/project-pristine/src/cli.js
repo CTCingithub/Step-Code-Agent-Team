@@ -7,12 +7,14 @@
  *   node src/cli.js list            # list tasks
  *   node src/cli.js done <id>       # mark a task done
  *   node src/cli.js remove <id>     # remove a task
+ *
+ * Tasks live in <project>/data/tasks.json; set TASKS_DATA_DIR to point the
+ * store at another directory.
  */
 
 const { TaskStore } = require("./tasks.js");
 
 const [, , command, ...args] = process.argv;
-const store = new TaskStore();
 
 /**
  * Store calls throw business errors (empty title, task not found, ...).
@@ -27,6 +29,10 @@ function run(fn) {
 		process.exit(2);
 	}
 }
+
+// Opening the store can fail too (unreadable or corrupt data file), and that
+// is a data problem worth reporting plainly rather than as a stack trace.
+const store = run(() => new TaskStore());
 
 switch (command) {
 	case "add": {

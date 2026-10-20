@@ -4,18 +4,21 @@
  * Test suite for the sandbox demo project. Zero dependencies — plain
  * node:assert, run with `npm test` (node test/tasks.test.js).
  *
- * The store persists to <project>/data/tasks.json; every test starts from a
- * clean data dir so the suite is deterministic.
+ * Every test gets its own throwaway data dir (a subdir of an mkdtemp root
+ * removed at the end), so the suite never touches the project's real data/
+ * and stays deterministic. The store takes the dir via
+ * `new TaskStore({ dataDir })`; the CLI picks it up from TASKS_DATA_DIR.
  */
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const PROJECT = path.join(__dirname, "..");
-const DATA_DIR = path.join(PROJECT, "data");
-fs.rmSync(DATA_DIR, { recursive: true, force: true });
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "scat-demo-"));
+let caseNo = 0;
 
 const { TaskStore } = require("../src/tasks.js");
 
@@ -31,9 +34,10 @@ function test(name, fn) {
 	}
 }
 
+/** A store backed by a fresh throwaway data dir. */
 function fresh() {
-	fs.rmSync(DATA_DIR, { recursive: true, force: true });
-	return new TaskStore();
+	caseNo += 1;
+	return new TaskStore({ dataDir: path.join(TMP, `case-${caseNo}`) });
 }
 
 test("add assigns sequential ids and trims titles", () => {
@@ -87,22 +91,54 @@ test("remove throws for unknown ids", () => {
 test("state persists across store instances", () => {
 	const store = fresh();
 	store.add("persist me");
-	const reopened = new TaskStore();
+	const reopened = new TaskStore({ dataDir: store.dataDir });
 	assert.equal(reopened.list().length, 1);
 	assert.equal(reopened.list()[0].title, "persist me");
 });
 
+// --- hygiene round (M5/H1/sanitize) ---------------------------------------
+
+test("add sanitizes control characters and newlines in titles", () => {
+	const store = fresh();
+	const t = store.add("evil\ttitle\nsecond\u2028line");
+	assert.equal(t.title, "evil title second line");
+	assert.equal(store.list().length, 1); // no forged list rows
+});
+
+test("add rejects titles that are only control characters", () => {
+	const store = fresh();
+	assert.throws(() => store.add("\n\t"), /title must not be empty/);
+});
+
+test("corrupt data file fails loud instead of resetting (H1)", () => {
+	const dir = path.join(TMP, "corrupt");
+	fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(path.join(dir, "tasks.json"), "{ not json");
+	assert.throws(() => new TaskStore({ dataDir: dir }), /not valid JSON/);
+});
+
+test("unreadable data file names the file (H1)", () => {
+	const dir = path.join(TMP, "eisdir");
+	fs.mkdirSync(path.join(dir, "tasks.json"), { recursive: true }); // a directory where the file belongs → EISDIR
+	assert.throws(() => new TaskStore({ dataDir: dir }), /cannot read task data file/);
+});
+
 test("cli: add then list shows the task", () => {
-	fs.rmSync(DATA_DIR, { recursive: true, force: true });
+	const dir = path.join(TMP, "cli");
 	const out = execFileSync(process.execPath, [path.join(PROJECT, "src", "cli.js"), "add", "from cli"], {
 		encoding: "utf8",
+		env: { ...process.env, TASKS_DATA_DIR: dir },
 	});
 	assert.match(out, /added #1: from cli/);
-	const list = execFileSync(process.execPath, [path.join(PROJECT, "src", "cli.js"), "list"], { encoding: "utf8" });
+	const list = execFileSync(process.execPath, [path.join(PROJECT, "src", "cli.js"), "list"], {
+		encoding: "utf8",
+		env: { ...process.env, TASKS_DATA_DIR: dir },
+	});
 	assert.match(list, /from cli/);
 });
 
 const failed = results.filter((r) => !r.ok).length;
+fs.rmSync(TMP, { recursive: true, force: true });
 console.log(`\n${results.length - failed}/${results.length} passed`);
 if (failed > 0) {
 	console.log("Expected demo failure: 'complete after remove' is the seeded bug — fix src/tasks.js (look up by id, not by index).");

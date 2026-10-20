@@ -120,6 +120,55 @@
 - 「项目缺 .gitignore，`data/tasks.json` 有被提交风险」：根仓库 .gitignore 已忽略 `sandbox/project/data/`——成员只见项目目录、不见仓库根，误判；
 - 「`secret-sample.txt` 被 git 跟踪属不良模式」：**有意设计**——README 明示的假密钥护栏样本，供「成员不得读取/外传密钥」验证，保持跟踪；
 
-**建议后续（可选，未实施）**：H1 区分 ENOENT 与损坏 JSON（损坏时显式报错而非静默重置）；title 控制字符/换行净化（防 list 输出注入）；测试数据目录隔离（M5）。
+**后续项（0.2.0 卫生轮已实施）**：H1 已区分 ENOENT 与损坏 JSON（损坏时显式报错而非静默重置）；title 控制字符/换行已净化（防 list 输出注入）；测试数据目录已隔离（M5——测试经 `new TaskStore({ dataDir })` / `TASKS_DATA_DIR` 使用一次性目录，不再触碰真实 `data/`）。
 
-**验证**：修复态 `npm test` 8/8；M1 复现路径（`add ""` / `done 99`）均为干净 exit 2；M2 复现路径（`{}` / `{"tasks":[]}`）均回退为空列表；restore 后 7/8 基线（种子失败）不变；project 与 project-pristine 逐文件一致。
+**验证**：修复态 `npm test` 12/12；M1 复现路径（`add ""` / `done 99`）均为干净 exit 2；M2 复现路径（`{}` / `{"tasks":[]}`）均回退为空列表；restore 后 11/12 基线（种子失败）不变；project 与 project-pristine 逐文件一致。
+
+## V. 0.2.0 轮次（2026-10-19）
+
+待验证新面：`/topo` 命令（档位 / 选单 / review / off）、插件专属关键词 + 强制迁移、三层防误触护栏、逐字转发与请求本地指令注入、`team_msg` 成员间消息（无需 bash）、自定义角色、effort 预设。
+
+### 无 key 可自动化
+
+| # | 检查项 | 命令 / 探针 | 预期 |
+|---|---|---|---|
+| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（17 phase + manifest + 6 live + orphan-check） |
+| A2 | 协议探针 | `bash sandbox/probe.sh` | `PROBE OK` |
+| A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
+| A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |
+
+### 需 STEP_API_KEY（提供 key 前仅用户可跑）
+
+| # | 检查项 | 探针 | 缺口 |
+|---|---|---|---|
+| K1 | `/topo <请求>` 端到端 | RPC prompt 带命令 | 逐字请求落入会话日志；队长组建团队（不独自完成） |
+| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo` | 选单显示 4 档 + 自定义；所选档位指令抵达模型 |
+| K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档 |
+| K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
+| K5 | team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
+| K6 | 自定义角色 | `<agentDir>/agents/quickfix.md`；受信任项目中的项目级 | `team_create_member(role="quickfix")` 应用提示词/工具/effort |
+| K7 | 关键词迁移提示 | 配置含旧关键词 | 激活时剥离并提示一次 |
+| K8 | phase4/10/11/12 LLM 探针 | `sandbox/smoke-phase4/10/11/12.ts` | 新 spawn 参数（allowlist 含 team_msg）下的全路径回归 |
+
+### 必须人工（真实 TUI / 安装 / UX）
+
+| # | 项目 | 原因 |
+|---|---|---|
+| M1 | 真实安装：干净导出物 `step install`、激活、`step remove` | `step install` 命令 UX + 卸载；live-package-install 只覆盖 config packages 加载路径 |
+| M2 | 信任弹窗 UX | 项目级配置信任弹窗是交互式的 |
+| M3 | TUI 选单/确认框渲染 | `ctx.ui.select`/`confirm` 观感、30s 超时倒计时 |
+| M4 | TUI 渲染观感（render.ts） | phase15 只断言内容字符串，不覆盖像素 |
+| M5 | 英文译文审阅 | 文档双语准确性 |
+| M6 | 8 成员性能（主观，可选） | 定性 |
+
+### 执行记录
+
+| # | 结果 | 说明 |
+|---|---|---|
+| A1 | ✅ all phases passed | 17 phase + manifest + 6 live（含 live-review）+ orphan-check |
+| A2 | ✅ PROBE OK | 零 token 协议探针 |
+| A3 | ✅ 已还原 | 种子 bug 复现；`data/` 与 `session-log-*.md` 已清除 |
+| A3b | ✅ 7/8 基线 | 还原后的项目恰好只挂种子测试 |
+| A4 | ✅（经 A1） | live-clean-export 加载并激活归档导出物的扩展 |
+
+剩余：K1–K8 需 `STEP_API_KEY`；M1–M6 为人工项（见上表）。
