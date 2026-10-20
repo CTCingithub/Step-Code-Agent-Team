@@ -366,3 +366,43 @@
 **工作**：① TEST-PLAN(_CN).md `git mv` 至 `docs/`（沙箱目录此后只保留 README 与脚本）；全部引用更新——sandbox README(_CN)（Contents 表改条目 + 表后指引）、TESTING(_CN)（4 处路径）、MANUAL-TESTING(_CN)（4 处路径 + 计数 8/8→12/12、7/8→11/12）、demo 项目 README（project/ 与 project-pristine/ 同步）、README(_CN) 文档表格新增 TEST-PLAN 入口。② 沙箱 README(_CN)：Quick start 改 TEST-KEY.md 密钥机制、Contents 表补 TEST-KEY.md/with-test-key.sh、演示项目条目更新 12 条基线、跑测试节补密钥回退。③ TEST-PLAN(_CN) 内容：补 2026-10-20 会话发现（工具消失 bug 与自愈修复、改名、误导提示移除）与完整手动测试流程记录。④ 全文档链接一致性验证（抽取全部相对链接逐一核验存在性）。
 
 **验证**：链接检查全部通过；`sandbox/TEST-PLAN` 路径引用在主仓库文档清零（仅存 DEVELOPMENT-HISTORY 历史档案）；project 与 pristine 的 README 经 diff 确认同步；提交 4f37337。
+
+### 36. 沙箱会话问题修复：leader 非消息目标 + prompt 可复制粘贴（plan-71）
+
+**用户 prompt**：「1. 我已经在sandbox中未修改config.toml进行了测试，请阅读测试日志，定位问题然后修改；2. 请整理并优化所有文档，删除过时内容，简化表达，特别是sandbox测试相关的文档，要把所有的prompt都变为可以让我直接复制粘帖的形式」
+
+**思路**：首轮沙箱日志（pipeline/ring）显示末站成员向 leader 回传被拓扑拒绝，且错误文案自相矛盾（一边拒绝发给 leader 的消息、一边提示"report to the leader"）。架构上 leader 不是拓扑节点、扩展 API 也没有向队长会话异步投递的通道，故修法是对齐契约而非新建通道：精确拒绝 + 成员提示词 + 文档三方一致。文档侧把沙箱测试相关 prompt 全部改成可直接复制粘贴的形式。
+
+**工作**：① `team-server.ts`：新增 `to="leader"` 精确拒绝分支（指引把结论写入最终报告）；无出边提示与 loop 上限/死循环报错文案全部对齐。② `members.ts`：协调提示词明确"leader 不是消息目标"；`assertLoopBound` 文案对齐。③ demo README（project/pristine）ring 剧本改为"把结论写入最终报告交回队长"。④ `phase3` 增加 leader 目标拒绝探针。⑤ 文档：TUI-VERIFICATION 双语环境块具体化 + TEST-KEY.md 密钥机制（弃用废弃的 local/test-api-key.md）、MANUAL-TESTING 双语 `step install/remove` 具体路径、TESTING 双语密钥说明去占位符；弱日志 prompt 改为指向沙箱 README 的规范化 prompt。⑥ `.gitignore` 与 restore 脚本纳入会话日志清理；演示项目恢复种子态。
+
+**验证**：全量冒烟 21 phase + manifest + 6 live + orphan-check 全绿；提交 2262e42 / 4f2f6b6。
+
+### 37. 护栏配置化审计与沙箱测试文档整合（plan-72）
+
+**用户 prompt**：「1. README中的护栏都是写死的数字，请检查实现的时候是否是写死的，还是按照我希望的配置文件决定；2. 现在沙箱测试的相关内容在多个文档中，如 docs/MANUAL-TESTING.md、docs/TUI-VERIFICATION_CN.md、@sandbox/README.md 等，请整理并优化」
+
+**思路**：护栏审计结论——README 广告的 9 项护栏本就全部经 config.toml 的 `[stepcodeAgentTeam]` 表配置驱动，仅 2 项内部常量写死（999 任务板容量、50KB 单任务输出截断），按用户期望配置化。文档侧按单一职责重组：sandbox README = 入口 + 日志 prompt；TESTING = 自动化各层跑法；MANUAL-TESTING = 全部人工执行项（吸收 TUI-VERIFICATION 清单）；TEST-PLAN = 覆盖矩阵与执行记录。
+
+**工作**：① 新增 `[stepcodeAgentTeam.tasks]` 节（`max` 默认 999 范围 1–10000、`outputCapBytes` 默认 51200 范围 1KiB–10MiB，含校验与种子块）；`nextTaskId`/`truncateOutput` 改读配置；README 双语护栏行改「默认值、每项均可配置」并链接 CONFIGURATION；CONFIGURATION 双语补 tasks 节并修复既有 ROLES 断链。② `team_set_topology` 新增 `members` 作用域参数（修复 ring 圈入全部历史成员——实测 3 成员环变 10 成员环；phase7 增加 12 个作用域探针）；清除 3 处过时 no-bash 表述（`team_create_member` 描述——JSONL 曾证实队长推理被此句误导、/topo review 指令、phase18 文件头）；`findTask` 报错补"团队任务板 ID 非会话计划 ID"提示。③ TUI-VERIFICATION 双语文档删除，11 步清单并入 MANUAL-TESTING §1（双语）；全部引用改指向；环境准备以 TESTING §0 为唯一规范副本。
+
+**验证**：全量冒烟全绿（21 phase + manifest + 6 live + orphan-check）；TUI-VERIFICATION 引用在历史档案外清零、6 个受影响文档链接全部可达；提交 8feca72 / 11e84df / a236869 / e94cf5c。
+
+### 38. 沙箱会话二轮修复：topo_team_msg 投递回执（plan-73）
+
+**用户 prompt**：「1. 我已经在sandbox中未修改config.toml进行了测试，请阅读测试日志 sandbox/logs/session-log-2026-10-20.md，定位问题然后修改；2. 请在 docs/MANUAL-TESTING.md 和 docs/MANUAL-TESTING_CN.md 中，也添加 README 末尾提到的日志生成prompt」
+
+**思路**：二轮日志（跑整合后的 MANUAL-TESTING §1 清单）显示 `topo_team_msg` 回复契约断裂：发送方收到宿主对「无 assistant 文本回合」的占位符 `No result provided`（经 `res.reply` 静默回流），环上"传递+回收"静默失效。经成员会话文件证实投递正常（接收方实际已处理消息），仅是回复文本为空被宿主占位——修法是把空/占位符回复转为明确投递回执，而非新建投递通道。
+
+**工作**：① `member-messaging.ts`：新增 `formatTeammateReply()`——空/占位符/undefined/纯空白一律转为明确投递回执（结论写入最终报告、队长经 `team_send`/`team_task` 收集）；工具描述同步为「投递保证、回复尽力」。② `rpc-client.ts`：不再把宿主占位符捕获为 assistant 文本（队长侧空回合显示 `(no output)`）。③ `phase16` 增加 6 个契约探针。④ TEST-PLAN 双语补二轮发现（含 180s 默认超时 vs 长审查的观察、拓扑作用域参数验证通过）。⑤ MANUAL-TESTING 双语新增 §7「会话日志」，内含可复制粘贴的规范化日志生成 prompt（与沙箱 README 同源互链）。
+
+**验证**：全量冒烟全绿（21 phase + manifest + 6 live + orphan-check）；提交 eb4665d / 98bf5b4。
+
+### 39. v0.2.0-preview 发布与 develop 分支约定（plan-74）
+
+**用户 prompt**：「请发布为v0.2.0-preview。然后做：1.更新HANDOFF和DEVELOPMENT HISTORY文档；2.安装时latest依旧指向v0.1.14；3.在文档中约定，后续版本开发时，会先创建develop分支，在该branch上开发」
+
+**思路**：0.2.0 功能集早已就绪但一直未发版；以预览标签发布可让用户实测而不影响稳定安装线。`latest` 分支保持 v0.1.4（稳定线最新版；无 v0.1.14 标签），预览经 `@v0.2.0-preview` 标签安装；npm 上无此包（E404），发布走 git 渠道。同时把「新版本开发先建 develop 分支」写入开发约定与发布流程。
+
+**工作**：① `package.json` 0.2.0 → 0.2.0-preview；README 双语安装示例改 `@v0.2.0-preview` 并注明 latest 停留稳定线。② 提交 `chore: release v0.2.0-preview`，打附注标签并推送 main + 标签；latest 分支未移动（仍 698a698 = v0.1.4）。③ hermetic 验证：临时 agentDir 中 `step install git:...@v0.2.0-preview` 安装成功且 `/topo` 激活探针 OK，验证后清理。④ HANDOFF 刷新至发布后状态；README 双语 Development 节与 HANDOFF §7 增加 develop 分支约定（新版本开发在 develop 上进行，稳定后合并 main 发版；正式版才移动 latest，preview 不动）。
+
+**验证**：发布前全量冒烟全绿；标签安装与激活验证通过；latest 指向经 `git ls-remote` 确认未变。

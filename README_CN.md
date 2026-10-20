@@ -314,6 +314,14 @@ LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，�
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 
+### 分支约定
+
+后续版本开发先创建 `develop` 分支：从 `main` 切出（`git checkout main && git checkout -b develop`），
+该版本的开发提交都在 develop 上进行。功能稳定、冒烟全绿后合并回 `main`
+（`git checkout main && git merge develop`）并在 main 上发版——`main` 始终代表已发布状态，
+`develop` 是下一版本的进行曲工作分支。仅正式版移动 `latest` 分支；预览标签
+（如 `v0.2.0-preview`）不移动 latest，latest 保持稳定线。
+
 ## 文档
 
 | 文档 | 内容 |

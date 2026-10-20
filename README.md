@@ -373,6 +373,16 @@ need a test key; see [docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
 > workspace unless a permission preset is configured. For unattended runs, add
 > `--approval-mode auto` (or `--non-interactive-approval allow`).
 
+### Branching
+
+New versions are developed on a `develop` branch: create it from `main`
+(`git checkout main && git checkout -b develop`) and keep that version's
+development commits on it. Once the version is stable and the smoke suite is
+green, merge back to `main` (`git checkout main && git merge develop`) and cut
+the release there — `main` always reflects the released state while `develop`
+is the work branch for the next version. Only final releases move the `latest`
+branch; preview tags (e.g. `v0.2.0-preview`) leave `latest` on the stable line.
+
 ## Documentation
 
 | Document | Contents |
