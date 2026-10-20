@@ -137,7 +137,7 @@
 | A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
 | A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |
 
-### 需 STEP_API_KEY（提供 key 前仅用户可跑）
+### 需 STEP_API_KEY（密钥放入 sandbox/TEST-KEY.md；环境变量优先）
 
 | # | 检查项 | 探针 | 缺口 |
 |---|---|---|---|
@@ -168,7 +168,14 @@
 | A1 | ✅ all phases passed | 17 phase + manifest + 6 live（含 live-review）+ orphan-check |
 | A2 | ✅ PROBE OK | 零 token 协议探针 |
 | A3 | ✅ 已还原 | 种子 bug 复现；`data/` 与 `session-log-*.md` 已清除 |
-| A3b | ✅ 7/8 基线 | 还原后的项目恰好只挂种子测试 |
+| A3b | ✅ 11/12 基线 | 还原后的项目恰好只挂种子测试（套件已在卫生轮扩至 12 条） |
 | A4 | ✅（经 A1） | live-clean-export 加载并激活归档导出物的扩展 |
 
-剩余：K1–K8 需 `STEP_API_KEY`；M1–M6 为人工项（见上表）。
+剩余：K1–K8 需 `STEP_API_KEY`（写入 `sandbox/TEST-KEY.md`——gitignored，或 export 环境变量）；M1–M6 为人工项（见上表）。
+
+### 2026-10-20 沙箱会话发现
+
+- **Bug（已修复）**：团队工具在会话中段整体变为 "tool not found"（00:54–00:55 正常，00:57:56 起失效），无 `/topo off`、无 reload、无会话重启——宿主侧重置隐藏了工具且当时无恢复路径。修复：插件激活期间每次输入都经 `ensureToolsAvailable()` 重断言工具可用；`session_start` 发现本会话团队注册表已存在时自动重新激活（覆盖会话恢复与扩展重初始化）。提交 50df038 / 601e6f8。
+- **改名**：成员间消息工具 `team_msg` → `topo_team_msg`（与 `/topo` 命令族同前缀；规避未来官方智能体团队功能撞名）。
+- **移除**：`team_create_member` 结果中"无 bash 不可消息"的误导提示（每个成员都注入 `topo_team_msg`，只读预设的拓扑边可用），以及失效的 `messagingWarnings` 辅助函数。
+- **手动流程**（2026-10-20 会话交付）：`/topo` 基础 → L1/L2 护栏 → 组队 + topo_team_msg E2E → 方案选单（需 `sandbox/config.toml` 配 `plan.enabled=true`）→ 固定 `plan.tier` → `/topo review` → effort/自定义角色 → 迁移提示 → C 层探针 → 真实安装 → 信任弹窗 → 译文审阅。

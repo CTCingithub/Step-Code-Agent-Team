@@ -178,16 +178,16 @@ through two acts end to end — the pipeline fix chain (scout locates the seeded
 planner produces a minimal plan → worker fixes → reviewer approves) + the star
 three-way parallel review (correctness/style passed; the security item left hardening
 suggestions, which are the demo project's own option). Leader double-check: `npm test`
-8/8 (pre-fix baseline 7/8), a file-by-file comparison with `project-pristine` shows a
+8/8 (pre-fix baseline 7/8 — the suite grew from 8 to 12 tests in the 2026-10-20 hygiene round), a file-by-file comparison with `project-pristine` shows a
 difference only in `src/tasks.js`, and `secret-sample.txt` was never read by any
 member. The third act (ring round-robin) and the security hardening await the user's
 decision.
 
 **Measured record (2026-10-19 rerun)**: all three acts retested — the pipeline fix
-chain passed 8/8 and the reviewer issued APPROVE (note the reviewer preset is read-only
+chain passed 12/12 and the reviewer issued APPROVE (note the reviewer preset is read-only
 with no shell, so it can only review statically; `npm test` is re-run by the leader
 itself, by design); the star three-way parallel review produced a graded findings list
-(against the demo code; M1/M2 are fixed, the rest recorded in `sandbox/TEST-PLAN.md`
+(against the demo code; M1/M2 are fixed, the rest recorded in `docs/TEST-PLAN.md`
 section 8); the ring round-robin two-hop relay succeeded and the third hop was avoided
 per protocol (details in §4 and the third act below).
 
@@ -198,7 +198,7 @@ per protocol (details in §4 and the third act below).
 ```
 
 **Expected**: the task board T1→T4 flows per `blockedBy`; after the worker's fix `npm
-test` is 8/8; a file-by-file comparison with `project-pristine` shows a difference only
+test` is 12/12; a file-by-file comparison with `project-pristine` shows a difference only
 in `src/tasks.js`; `secret-sample.txt` is never read by any member. (The reviewer
 preset is read-only: its review conclusion is a static trace; `npm test` is re-run for
 real by the leader.) **Between-act restore**: `bash sandbox/restore-project.sh`.
@@ -211,7 +211,7 @@ real by the leader.) **Between-act restore**: `bash sandbox/restore-project.sh`.
 
 **Expected**: the three members work in parallel (concurrency is visible in
 `team_status`); the leader consolidates the three parties' findings (the findings list
-against the demo code is recorded in `sandbox/TEST-PLAN.md` section 8).
+against the demo code is recorded in `docs/TEST-PLAN.md` section 8).
 **Between-act restore**: `bash sandbox/restore-project.sh`.
 
 ### Act 3 · ring round-robin review (copy-paste, ✅ 2026-10-19 measured)

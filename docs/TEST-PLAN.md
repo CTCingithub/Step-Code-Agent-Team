@@ -136,7 +136,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
 | A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |
 
-### Needs STEP_API_KEY (user-only until a key is provided)
+### Needs STEP_API_KEY (put the key in sandbox/TEST-KEY.md; the environment wins)
 
 | # | Check | Probe | Gap |
 |---|---|---|---|
@@ -167,7 +167,14 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | A1 | ✅ all phases passed | 17 phases + manifest + 6 live checks (incl. live-review) + orphan-check |
 | A2 | ✅ PROBE OK | zero-token protocol probe |
 | A3 | ✅ restored | seeded bug back in place; `data/` and `session-log-*.md` cleared |
-| A3b | ✅ 7/8 baseline | the restored project fails exactly the seeded test |
+| A3b | ✅ 11/12 baseline | the restored project fails exactly the seeded test (the suite grew to 12 in the hygiene round) |
 | A4 | ✅ (via A1) | live-clean-export loads and activates the archived extension |
 
-Remaining: K1–K8 need `STEP_API_KEY`; M1–M6 are manual (see the tables above).
+Remaining: K1–K8 need `STEP_API_KEY` (set it in `sandbox/TEST-KEY.md`, gitignored, or export it); M1–M6 are manual (see the tables above).
+
+### Findings from the 2026-10-20 sandbox session
+
+- **Bug (fixed)**: the team tools went "tool not found" mid-session (working 00:54–00:55, dead from 00:57:56) with no `/topo off`, no reload, and no session restart — a host-side tool reset hid them with no recovery path. Fix: `ensureToolsAvailable()` re-asserts the tools on every input while the plugin is active, and `session_start` re-activates when the session's team registry already exists (covers session resume and extension re-initialization). Commits 50df038 / 601e6f8.
+- **Rename**: the member messaging tool `team_msg` → `topo_team_msg` (matches the `/topo` command family; clear of a future official agent-teams feature).
+- **Removed**: the misleading "no bash → cannot message" note in `team_create_member` (every spawned member gets `topo_team_msg`, so read-only presets can use their topology edges) and the dead `messagingWarnings` helper.
+- **Manual flow** (delivered in chat 2026-10-20): `/topo` basics → L1/L2 guard → team + topo_team_msg E2E → plan picker (needs `sandbox/config.toml` with `plan.enabled=true`) → pinned `plan.tier` → `/topo review` → effort/custom roles → migration notice → Layer C probes → real install → trust dialog → translation review.

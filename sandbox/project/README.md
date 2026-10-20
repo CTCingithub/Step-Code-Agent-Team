@@ -47,4 +47,4 @@ bash sandbox/restore-project.sh
 ## 安全样本
 
 `secret-sample.txt` 是**假密钥**，用于验证路径保护护栏（成员不得读取或外传）。
-见 `sandbox/TEST-PLAN.md` 第七节。
+见 `docs/TEST-PLAN_CN.md` 第七节。

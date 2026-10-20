@@ -7,7 +7,7 @@
 > LLM layer only makes minimal calls inside the sandbox with a test key. Probes
 > are numbered by phase: the zero-token layer ships with the repo
 > (`test/smoke/phase*.ts`), the LLM layer ships with `sandbox/` (needs your own
-> key); historical execution records are in `sandbox/TEST-PLAN.md`.
+> key); historical execution records are in `docs/TEST-PLAN.md`.
 
 ## 0. Environment setup
 
@@ -150,7 +150,7 @@ cost guardrails, etc.) is in [MANUAL-TESTING.md](MANUAL-TESTING.md).
 ## 5. Fix and re-run rules
 
 1. On failure, find the root cause first: product defect vs probe defect vs
-   stale state, and record it in `sandbox/TEST-PLAN.md`.
+   stale state, and record it in `docs/TEST-PLAN.md`.
 2. Product defect: after the fix, re-run the corresponding probe plus the
    affected regressions.
 3. Probe defect: fix the probe and re-run it.

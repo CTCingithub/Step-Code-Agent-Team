@@ -381,6 +381,7 @@ need a test key; see [docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Member RPC protocol, socket protocol, registry schema, tool contracts |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Config reference |
 | [docs/ROLES.md](docs/ROLES.md) | Custom roles: directories, frontmatter format, effort rules |
+| [docs/TEST-PLAN.md](docs/TEST-PLAN.md) | Sandbox test plan and execution history |
 | [docs/TESTING.md](docs/TESTING.md) | How to run the four test layers |
 
 ## Known limitations

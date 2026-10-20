@@ -3,7 +3,7 @@
 
 > 四层测试体系的操作化版本。原则：**先写可复现测试，再修复**；零 token 层优先，
 > LLM 层只在沙箱内用测试 key 做最小调用。探针按 phase 编号递增：零 token 层随仓库分发
-> （`test/smoke/phase*.ts`），LLM 层随 `sandbox/` 分发（需你自己的 key）；历史执行记录见 `sandbox/TEST-PLAN.md`。
+> （`test/smoke/phase*.ts`），LLM 层随 `sandbox/` 分发（需你自己的 key）；历史执行记录见 `docs/TEST-PLAN_CN.md`。
 
 ## 0. 环境准备
 
@@ -127,7 +127,7 @@ TUI 渲染（renderCall/renderResult、`/topo` 面板、流式进度、激活 no
 
 ## 5. 修复与复跑规则
 
-1. 失败先定位根因：产品缺陷 vs 探针缺陷 vs 陈旧状态，记录进 `sandbox/TEST-PLAN.md`。
+1. 失败先定位根因：产品缺陷 vs 探针缺陷 vs 陈旧状态，记录进 `docs/TEST-PLAN_CN.md`。
 2. 产品缺陷：修复后复跑对应探针 + 受影响回归。
 3. 探针缺陷：修探针后重跑。
 4. 全绿后提交推送（修复与文档分开，conventional commit）。

@@ -8,7 +8,8 @@
 ## 快速开始
 
 ```bash
-export STEP_API_KEY=<你自己的 key>   # 仅涉及模型调用时才需要；绝不落盘
+# 密钥（仅涉及模型调用时才需要；绝不落盘）：
+#   写入 sandbox/TEST-KEY.md（gitignored），或 export STEP_API_KEY=<你自己的 key>
 ./sandbox/run.sh                     # 在 sandbox/project 中启动 step（已加载本扩展）
 ```
 
@@ -21,14 +22,17 @@ export STEP_API_KEY=<你自己的 key>   # 仅涉及模型调用时才需要；�
 | `run.sh` | 沙箱启动器：隔离 agentDir/session/plan，cwd 指向 `project/` |
 | `probe.sh` | 零 token 协议探针（期望输出 `PROBE OK`） |
 | `restore-project.sh` | 还原沙箱测试环境：`project/` 复位为初始种子态（含 off-by-one 种子 bug），清除运行时数据与会话日志（`session-log-*.md`） |
-| `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`） |
+| `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`：12 条测试，种子 bug 在位时 11 条通过） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
 | `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效） |
-| `TEST-PLAN.md` | 测试计划与历史执行记录 |
+| `TEST-KEY.md` | 测试 API 密钥（gitignored——首行写 `STEP_API_KEY=<key>`；由 run-smoke.sh 与 with-test-key.sh 读取） |
+| `with-test-key.sh` | 以 TEST-KEY.md 中的密钥 export 后运行给定命令（用于 C 层 LLM 探针） |
 | `step/` | Step Code 源码 submodule（钉住本沙箱跟踪的版本） |
 | `step-bin.sh` | step 二进制解析器（被各脚本 source） |
 | `build-step.sh` | 可选：从子模块构建 step 到 `sandbox/step-build/` |
+
+沙箱目录只保留 README 与脚本；测试计划与执行历史见 [../docs/TEST-PLAN.md](../docs/TEST-PLAN_CN.md)。
 
 ## Step Code 源码（git submodule）
 
@@ -69,7 +73,7 @@ git submodule，钉住本沙箱跟踪的 Step Code 版本——step 升级时只
 
 ```bash
 npm run smoke            # 零 token 全量冒烟（无需 key）
-bash test/run-smoke.sh 5 # phase5 需 key
+bash test/run-smoke.sh 5 # phase5 需 key（来自环境变量或 sandbox/TEST-KEY.md）
 ```
 
 LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_CN.md)；

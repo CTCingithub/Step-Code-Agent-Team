@@ -322,6 +322,7 @@ LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，�
 | [docs/PROTOCOL.md](docs/PROTOCOL_CN.md) | 成员 RPC 协议、socket 协议、registry schema、工具契约 |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION_CN.md) | 配置参考 |
 | [docs/ROLES.md](docs/ROLES_CN.md) | 自定义角色：目录、frontmatter 格式、effort 规则 |
+| [docs/TEST-PLAN.md](docs/TEST-PLAN_CN.md) | 沙箱测试计划与执行历史 |
 | [docs/TESTING.md](docs/TESTING_CN.md) | 四层测试的运行方法 |
 
 ## 已知限制
