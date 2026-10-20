@@ -69,9 +69,9 @@ skill 或提示词模板资源；编排协议在激活时经请求本地注入�
 从 git 或 npm 安装——无需任何打包步骤，它就是标准 step 包：
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest # 最新发布版（推荐）
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0 # 或钉住版本
-step install npm:step-code-agent-team                               # 发布到 npm 后
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.1.4）
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 预览版（latest 在 0.2.0 正式版前保持稳定线）
+step install npm:step-code-agent-team                                       # 发布到 npm 后
 ```
 
 然后在会话里下达目标，例如："用智能体小队并行审查这个仓库"（或先运行 `/topo`——插件在此之前保持静默）。
