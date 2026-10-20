@@ -21,8 +21,6 @@ import type { ExtensionAPI } from "@step-harness/coding-agent";
 import {
 	TeamManager,
 	augmentDispatchError,
-	memberCanMessage,
-	messagingWarnings,
 	resumeIgnoredParams,
 	type CreateMemberParams,
 } from "../../extensions/members.ts";
@@ -94,21 +92,14 @@ export default function (pi: ExtensionAPI) {
 			check("resume: no params passed → nothing ignored", resumeIgnoredParams({ name: "s1" }, s1).length === 0);
 			check("resume: matching role → not reported", resumeIgnoredParams({ name: "s1", role: "scout" }, s1).length === 0);
 
-			// --- 3. messaging capability + topology warnings ----------------------
-			check("canMessage: undefined tools (all) → true", memberCanMessage(undefined));
-			check("canMessage: empty list (all) → true", memberCanMessage([]));
-			check("canMessage: bash present → true", memberCanMessage(["read", "bash"]));
-			check("canMessage: read-only preset → false", !memberCanMessage(["read", "grep", "find", "ls"]));
-
-			// Pipeline edges follow creation order of the live members.
+			// --- 3. pipeline topology (edges follow creation order) --------------
+			// Every spawned member gets the topo_team_msg tool, so edges are
+			// usable for every role — the old bash-capability warnings are gone.
 			await manager.createMember({ name: "w9", role: "worker" });
 			const topo = manager.setTopology("pipeline");
 			check("topology: pipeline edge s1→w9", topo.edges.length === 1 && topo.edges[0][0] === "s1" && topo.edges[0][1] === "w9", JSON.stringify(topo.edges));
 
 			const snap = manager.snapshot();
-			const warns = messagingWarnings(snap.members, topo.edges);
-			check("topology: warning flags the bash-less endpoint only", warns.length === 1 && warns[0].includes('"s1"') && !warns[0].includes('"w9"'), warns.join(" | "));
-			check("topology: no edges → no warnings", messagingWarnings(snap.members, []).length === 0);
 
 			// --- 4. dispatch failure context (mid-run failures strand relays) ----
 			const roster = snap.members;

@@ -86,7 +86,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
 | phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput） | 零 token（独立运行） |
 | phase17 | 孤儿进程（成员不得比队长长寿） | 零 token |
-| phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + 拓扑 bash 警告/消息能力提示 + dispatch 失败上下文（超时/中止提示接力在途与成员名册） | 零 token |
+| phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + dispatch 失败上下文（超时/中止提示接力在途与成员名册） | 零 token |
 | phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、优先级、非法 TOML 容忍、env 仍胜出） | 零 token |
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议） | 零 token |

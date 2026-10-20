@@ -27,8 +27,10 @@
  *   — the session file keeps exactly what the user typed.
  */
 
+import * as fs from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
-import { currentDepth, TeamManager } from "./members.ts";
+import { currentDepth, TeamManager, teamIdForSession } from "./members.ts";
+import { registryPath } from "./registry.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
 import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample, consumeKeywordMigration } from "./config.ts";
@@ -36,6 +38,7 @@ import {
 	activate,
 	deactivate,
 	detectKeyword,
+	ensureToolsAvailable,
 	initActivation,
 	isActive,
 	regateTools,
@@ -530,6 +533,16 @@ export default function (pi: ExtensionAPI) {
 		// (STEPCODE_TEAM_AUTOACTIVATE is set only when the depth budget allows).
 		if (process.env.STEPCODE_TEAM_AUTOACTIVATE === "1") {
 			tryActivate(ctx, "sub-team grant");
+			return;
+		}
+		// Self-healing: a team registry for this session on disk means the
+		// plugin was active before (session resume, or an extension
+		// re-initialization that reset the default-off gate). Restore it
+		// instead of leaving the model with "tool not found" and no way back
+		// except /topo.
+		const teamId = teamIdForSession(ctx.sessionManager.getSessionFile());
+		if (teamId && fs.existsSync(registryPath(teamId))) {
+			tryActivate(ctx, "existing team session");
 		}
 	});
 
@@ -537,6 +550,10 @@ export default function (pi: ExtensionAPI) {
 	// when a command matches, the input event is skipped entirely. A plan
 	// chosen without a request applies to the message being submitted now.
 	pi.on("input", async (event, ctx) => {
+		// Self-heal: host-side resets (tool-selection changes, extension
+		// re-initialization) can hide the tools from under an active plugin;
+		// re-assert them so the next tool call does not fail as "not found".
+		if (isActive()) ensureToolsAvailable();
 		if (activeChoice && !pendingInjection) {
 			pendingInjection = choiceInstruction(activeChoice, detectLang(event.text));
 			activeChoice = null;

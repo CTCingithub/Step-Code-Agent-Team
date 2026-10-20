@@ -87,6 +87,17 @@ export function regateTools(): void {
 	pi.setUnavailableTools([...TEAM_TOOL_NAMES]);
 }
 
+/**
+ * Idempotent re-assert that the team tools are available while the plugin is
+ * active. Self-heal for host-side resets (tool-selection changes, extension
+ * re-initialization) that can hide the tools from under an active plugin —
+ * without it the model sees "tool not found" with no way back except /topo.
+ */
+export function ensureToolsAvailable(): void {
+	if (!active) return;
+	releaseTools();
+}
+
 // --- L1 false-positive guard (0.2.0) --------------------------------------
 // A keyword hit that reads as negation, meta-discussion, or a code reference
 // is not a team request. Pure string heuristics — no model calls — applied
