@@ -7,7 +7,7 @@ Agent team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`ste
 > **Reference:** This project references the **agent teams feature of DeepSeek Harness** — the leader/member model, the dependency-aware task board, and member-to-member messaging follow its design. It is an independent implementation for Step Code and is not affiliated with DeepSeek.
 
 > **⚠️ Cost warning:** every team member is a full agent process with its own
-> context window, running on the conversation's current model (thinking per
+> context window, running on the conversation's current model (effort per
 > role preset: `scout`=low, `planner`/`worker`=medium, `reviewer`=high; `high`
 > when no preset applies). N members working in parallel cost roughly N× a
 > single conversation
@@ -76,7 +76,7 @@ From git or npm — no packaging step needed, it is a standard step package:
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest # latest release (recommended)
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.2 # or pin a version
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0 # or pin a version
 step install npm:step-code-agent-team                               # once published to npm
 ```
 
@@ -168,7 +168,7 @@ per invocation.
 
 | Tool | Purpose |
 |---|---|
-| `team_create_member` | Create/resume a member (`name`, optional `role` preset, `model`, `thinking`, `tools`, `systemPrompt`) |
+| `team_create_member` | Create/resume a member (`name`, optional `role` preset, `model`, `effort`, `tools`, `systemPrompt`) |
 | `team_send` | Message a member and wait for the full reply; optional `taskId` (runs it as a task) or `mode: "oneshot"` (stateless) |
 | `team_task` | Task board: `create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | Members, task board, cumulative spend |
@@ -249,7 +249,7 @@ Enforcement lives in the team server: every message carries its sender (injected
 | `reviewer` | read-only | Adversarial review (correctness / style / security) |
 
 Preset effort defaults: `scout`=low, `planner`=medium, `worker`=medium,
-`reviewer`=high. Resolution order: an explicit `thinking` argument to
+`reviewer`=high. Resolution order: an explicit `effort` argument to
 `team_create_member` → the `[stepcodeAgentTeam.presets.effort]` config
 override (built-in role names) → the preset's frontmatter `effort` → `high`.
 While `models.autonomousThinking = true` the leader picks the effort per
@@ -337,7 +337,7 @@ Full reference (all sections, semantics, and topology shapes): [docs/CONFIGURATI
 
 Key points: with `autonomousSelection` off (default) every member runs on the
 conversation's current model; with `autonomousThinking` off (default) members
-use their preset's thinking default (`scout`=low, `planner`/`worker`=medium,
+use their preset's effort default (`scout`=low, `planner`/`worker`=medium,
 `reviewer`=high), falling back to `high` without a preset.
 `members.maxRecursionDepth` (default 1) bounds the
 team tree — members cannot spawn sub-teams until you raise it; and
@@ -418,12 +418,20 @@ is absent, so the core team functionality always runs.
 
 ## Status
 
-Phases 0–5 of the development plan are implemented and validated:
+0.2.0 feature set (release tag pending maintainer approval):
 
+- **Command & activation**: `/topo` with plan tiers, `/topo review [target]`,
+  and `/topo off`; plugin-specific activation keywords with forced migration
+  of the retired terms; a three-layer false-trigger guard.
+- **Team plans** (default off): economic / fast / balanced / performance
+  strategy prompts plus a guided custom flow; `plan.tier` pins one strategy
+  (default `"always ask"`).
+- **Messaging**: members reach teammates through the built-in `team_msg`
+  tool — no bash required, so topology edges are usable for every role.
 - **Protocol layer** (zero-token smoke probes, `test/smoke/phase*.ts`):
   spawn, handshake, registry persistence, task graph, socket round-trip,
-  preset loading.
+  preset and custom-role loading, and the team_msg socket protocol.
 - **Model-touching paths** (validated in the sandbox with a test key): member
   replies, context memory within a live member, resume after respawn via
-  session id, member-to-member messaging through the shim, and end-to-end
-  leader tool-calling (`team_create_member` → `team_send` → verbatim reply).
+  session id, member-to-member messaging, and end-to-end leader tool-calling
+  (`team_create_member` → `team_send` → verbatim reply).

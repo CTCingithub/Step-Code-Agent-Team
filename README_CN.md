@@ -70,7 +70,7 @@ skill 或提示词模板资源；编排协议在激活时经请求本地注入�
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest # 最新发布版（推荐）
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.1.2 # 或钉住版本
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0 # 或钉住版本
 step install npm:step-code-agent-team                               # 发布到 npm 后
 ```
 
@@ -134,7 +134,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 
 | 工具 | 用途 |
 |---|---|
-| `team_create_member` | 创建/恢复成员（`name`，可选 `role` 预设、`model`、`thinking`、`tools`、`systemPrompt`） |
+| `team_create_member` | 创建/恢复成员（`name`，可选 `role` 预设、`model`、`effort`、`tools`、`systemPrompt`） |
 | `team_send` | 给成员发消息并等待完整回复；可带 `taskId`（按任务执行）或 `mode: "oneshot"`（无状态） |
 | `team_task` | 任务板：`create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | 成员、任务板、累计花费 |
@@ -215,7 +215,7 @@ flowchart LR
 | `reviewer` | 只读 | 对抗式审查（正确性 / 风格 / 安全） |
 
 预设 effort 默认值：`scout`=low、`planner`=medium、`worker`=medium、
-`reviewer`=high。解析顺序：`team_create_member` 显式 `thinking` 参数 →
+`reviewer`=high。解析顺序：`team_create_member` 显式 `effort` 参数 →
 `[stepcodeAgentTeam.presets.effort]` 配置覆盖（仅内置角色名）→ 预设
 frontmatter `effort` → `high`。`models.autonomousThinking = true` 时由队长
 逐成员选择 effort，所有预设 effort 一律不生效。
@@ -349,13 +349,18 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 
 ## 状态与验证
 
-开发计划 Phase 0–5 已全部实现。协议层行为（spawn、握手、注册表持久化、任务图、
-socket 往返）已由零 token 冒烟探针（`test/smoke/phase*.ts`）验证通过。
-涉及模型调用的路径已在沙箱内用测试 key 验证通过（成员回复、同进程上下文记忆、按 session-id 重启恢复、经 shim 的成员间直达消息、队长工具调用端到端链路）。以下命令可供人工复验：
+0.2.0 功能集（发布 tag 待维护者同意后执行）：
+
+- **命令与激活**：`/topo`（含方案档位、`/topo review [目标]`、`/topo off`）；插件专属激活关键词 + 旧词强制迁移；三层防误触护栏。
+- **团队方案**（默认关）：经济 / 快速 / 均衡 / 性能四档策略提示词 + 自定义引导流程；`plan.tier` 可固定档位（默认 `"always ask"`）。
+- **成员间消息**：成员经内置 `team_msg` 工具直达通信——无需 bash，拓扑边对所有角色可用。
+- **协议层**（零 token 冒烟探针 `test/smoke/phase*.ts`）：spawn、握手、注册表持久化、任务图、socket 往返、预设与自定义角色加载、team_msg 工具协议。
+- **涉模型路径**（沙箱内用测试 key 验证）：成员回复、同进程上下文记忆、按 session-id 重启恢复、成员间直达消息、队长工具调用端到端链路。
+
+以下命令可供人工复验：
 
 ```bash
-# 1. 启动沙箱会话（先设置密钥）
-export STEP_API_KEY=<你的key>
+# 1. 启动沙箱会话（先设置密钥：export STEP_API_KEY，或放入 sandbox/TEST-KEY.md）
 ./sandbox/run.sh
 
 # 2. 在会话中依次让 LLM 执行：
@@ -372,8 +377,8 @@ export STEP_API_KEY=<你的key>
 #       然后 "给 reviewer 发消息：还记得你审查过什么吗？"
 #       → 验证队长重启后按 session-id 恢复成员上下文
 
-# 3. 成员间消息（双成员协作）：
-#    创建 scout 与 worker，让 worker 通过 bash 调用：
-#      node bin/stepcode-team.mjs msg --to scout --message "<问题>"
-#    → 验证 shim → socket → server → 成员 的完整直达消息链路
+# 3. 成员间消息（双成员协作，验证拓扑边）：
+#    创建 scout 与 worker，声明 pipeline 拓扑（scout → worker），
+#    让 scout 用 team_msg 工具联系 worker（to = "worker"）
+#    → 验证 team_msg → socket → server → 成员 的完整直达消息链路
 ```
