@@ -265,6 +265,24 @@ subjective, with no pass criteria.
 with as many members working at once as possible`, and observe whether the handshake
 time at a full 8-member roster and the TUI refresh are acceptable. **Restore**: see §0.
 
+## 7. Session log (record each manual round)
+
+After a manual round, paste this prompt to have the leader record the session
+(it writes `sandbox/logs/session-log-<date>.md`, gitignored; the same prompt
+lives in [sandbox/README.md](../sandbox/README.md#session-log)):
+
+```text
+Record this session's team collaboration into sandbox/logs/session-log-<today's date>.md with
+this structure: (1) header — date, main model, working directory, team
+framework, security-guardrail compliance; (2) the user prompts, verbatim;
+(3) the roster table — member / role / duty / tools / effort; (4) each phase
+in execution order — topology declared, dispatch method, member output
+highlights; any anomaly (e.g. a topo_team_msg rejection) must quote the
+tool's returned text verbatim, never paraphrase from memory; (5) net result
+— baseline vs. after, changed-file list, what was left undone; (6) how to
+restore the initial state.
+```
+
 ## Known limitations (review-confirmed, not fixing for now)
 
 - **Kill-on-failure semantics**: any dispatch failure kills the member process and
