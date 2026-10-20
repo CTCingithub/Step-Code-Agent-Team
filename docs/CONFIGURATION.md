@@ -57,6 +57,10 @@ reapIntervalMs = 300000              # reaping check interval (5 min)
 [stepcodeAgentTeam.storage]
 # dir omitted (null) = <agentDir>/teams
 
+[stepcodeAgentTeam.tasks]
+max = 999                           # task-board capacity (ids T1..T<max>; 1–10000)
+outputCapBytes = 51200              # per-task output truncation (bytes); the full text stays in details.fullText
+
 [stepcodeAgentTeam.topology]
 default = "star"                     # star/pipeline/mesh/ring/custom
 requireDeclaration = false           # true = no dispatch before the topology is declared
@@ -88,9 +92,10 @@ debug = false                        # debug logging
 | `cost` | Team-level cumulative spend warning; 0 disables |
 | `idle` | Idle members are reaped (sessions stay resumable); running members are never reaped |
 | `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams` |
-| `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender reports to the leader — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `topo_team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
+| `tasks` | `max` sizes the task board (ids T1..T<max>; creating past the cap errors with the configured limit); `outputCapBytes` truncates the model-visible per-task output — the full text stays in `details.fullText` |
+| `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender states it in their final report — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `topo_team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
 | `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). A tier is a strategy prompt with a non-binding example — the model decides members, roles, topology, and effort. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths); `/topo <tier>` overrides per invocation. Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |
-| `presets.effort` | Per-role effort overrides (built-in role names shown; custom roles set `effort` in their own frontmatter). Resolution: explicit `effort` param → this config → preset frontmatter → `high`. Inert while `models.autonomousEffort` is on. Custom roles load from `<agentDir>/agents/` and `<project>/.stepcode/agents/` — see [docs/ROLES.md](docs/ROLES.md) |
+| `presets.effort` | Per-role effort overrides (built-in role names shown; custom roles set `effort` in their own frontmatter). Resolution: explicit `effort` param → this config → preset frontmatter → `high`. Inert while `models.autonomousEffort` is on. Custom roles load from `<agentDir>/agents/` and `<project>/.stepcode/agents/` — see [docs/ROLES.md](ROLES.md) |
 | `debug` | Diagnostic logging to stderr |
 
 Topology shapes (declared with `team_set_topology` after creating members, before dispatching):

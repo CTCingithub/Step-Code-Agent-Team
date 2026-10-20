@@ -16,7 +16,7 @@ import {
 } from "./members.ts";
 import type { MemberUsage } from "./registry.ts";
 import type { PluginConfig } from "./config.ts";
-import { VALID_EFFORT } from "./config.ts";
+import { getConfig, VALID_EFFORT } from "./config.ts";
 import { isActive } from "./activation.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
 
@@ -31,8 +31,6 @@ function formatUsage(usage: MemberUsage): string {
 	return parts.join(", ") || "no usage yet";
 }
 
-const PER_TASK_OUTPUT_CAP = 50 * 1024;
-
 /**
  * Cumulative team spend warning (threshold from config; 0 disables).
  * Env override (STEPCODE_TEAM_COST_WARN) is applied by the config loader.
@@ -43,12 +41,15 @@ export function costWarning(config: PluginConfig, cost: number): string {
 	return `\n\n[cost guardrail] Team spend has reached $${cost.toFixed(4)} (threshold $${threshold.toFixed(2)}). Consider disbanding idle members or finishing up.`;
 }
 
-export function truncateOutput(text: string): string {
+/**
+ * Per-task output cap comes from config (tasks.outputCapBytes; default 50 KiB).
+ */
+export function truncateOutput(text: string, capBytes = getConfig().tasks.outputCapBytes): string {
 	const byteLength = Buffer.byteLength(text, "utf8");
-	if (byteLength <= PER_TASK_OUTPUT_CAP) return text;
+	if (byteLength <= capBytes) return text;
 	// Drop a trailing lone high surrogate: slicing by code units can split a
 	// pair and emit an invalid character into the tool result.
-	const truncated = text.slice(0, PER_TASK_OUTPUT_CAP).replace(/[\uD800-\uDBFF]$/, "");
+	const truncated = text.slice(0, capBytes).replace(/[\uD800-\uDBFF]$/, "");
 	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. The full text is in the tool result details (fullText).]`;
 }
 

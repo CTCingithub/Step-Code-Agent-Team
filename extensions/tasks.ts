@@ -6,6 +6,7 @@
  */
 
 import type { TaskRecord } from "./registry.ts";
+import { getConfig } from "./config.ts";
 
 export class TaskGraphError extends Error {}
 
@@ -64,14 +65,15 @@ export function readyTasks(tasks: TaskRecord[]): TaskRecord[] {
 	return tasks.filter((t) => t.status === "ready");
 }
 
-/** First free id in the T1..T999 sequence. */
+/** First free id in the T1..T<max> sequence (capacity from config). */
 export function nextTaskId(tasks: TaskRecord[]): string {
+	const max = getConfig().tasks.max;
 	const used = new Set(tasks.map((t) => t.id));
-	for (let i = 1; i < 1000; i++) {
+	for (let i = 1; i <= max; i++) {
 		const id = `T${i}`;
 		if (!used.has(id)) return id;
 	}
-	throw new TaskGraphError("Task board is full (999 tasks).");
+	throw new TaskGraphError(`Task board is full (${max} tasks).`);
 }
 
 /** The message a member receives when a task is dispatched to it. */

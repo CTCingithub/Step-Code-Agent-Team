@@ -54,6 +54,7 @@ export default function (pi: ExtensionAPI) {
 				"# [stepcodeAgentTeam.cost]",
 				"# [stepcodeAgentTeam.idle]",
 				"# [stepcodeAgentTeam.storage]",
+				"# [stepcodeAgentTeam.tasks]",
 				"# [stepcodeAgentTeam.topology]",
 				"# [stepcodeAgentTeam.plan]",
 				"# [stepcodeAgentTeam.presets.effort]",

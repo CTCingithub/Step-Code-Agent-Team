@@ -39,7 +39,7 @@ flowchart TD
 - **Members are real `step` processes** with their own context window, model, and tool allowlist, spoken to over the RPC protocol. A member's context lives in its session file, so respawning it with the same session id resumes the conversation.
 - **The task board is a DAG**: a task is `ready` when every task in its `blockedBy` is `done`; cycles are rejected.
 - **Messaging**: members reach teammates through the built-in `topo_team_msg` tool, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader. The tool needs no shell — read-only presets (`scout`/`planner`/`reviewer`) keep their posture and their topology edges stay usable. The `stepcode-team` CLI shim remains for manual/external use.
-- **Guardrails**: max 8 live members (disbanded or reaped members no longer count against the limit), max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), all children killed on leader shutdown.
+- **Guardrails** (defaults below — every number is configurable in the `[stepcodeAgentTeam]` table of step's `config.toml`, see [CONFIGURATION.md](docs/CONFIGURATION.md)): max 8 live members (disbanded or reaped members no longer count against the limit), max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), task-board and per-task output caps (999 tasks / 50 KiB), all children killed on leader shutdown.
 
 ## Requirements
 

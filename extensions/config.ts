@@ -161,6 +161,16 @@ export interface StorageConfig {
 	dir: string | null;
 }
 
+export interface TasksConfig {
+	/** Task-board capacity: ids are allocated in the T1..T<max> sequence. */
+	max: number;
+	/**
+	 * Per-task output truncation threshold (bytes). The model-visible text is
+	 * truncated to this size; the full text stays in the tool result details.
+	 */
+	outputCapBytes: number;
+}
+
 export interface TopologyConfig {
 	/** Shape applied to new teams before the leader declares one. */
 	default: TopologyShape;
@@ -183,6 +193,7 @@ export interface PluginConfig {
 	cost: CostConfig;
 	idle: IdleConfig;
 	storage: StorageConfig;
+	tasks: TasksConfig;
 	topology: TopologyConfig;
 	plan: PlanConfig;
 	presets: PresetsConfig;
@@ -313,6 +324,10 @@ function seedBlock(): string {
 		"# [stepcodeAgentTeam.storage]",
 		line('dir = "/path/to/teams"', "team data root; omit for null (<agentDir>/teams)"),
 		"#",
+		"# [stepcodeAgentTeam.tasks]",
+		line(`max = ${d.tasks.max}`, "task-board capacity (ids T1..T<max>; 1-10000)"),
+		line(`outputCapBytes = ${d.tasks.outputCapBytes}`, "per-task output truncation (bytes); the full text stays in details.fullText"),
+		"#",
 		"# [stepcodeAgentTeam.topology]",
 		line(`default = "${d.topology.default}"`, "star/pipeline/mesh/ring/custom"),
 		line(`requireDeclaration = ${d.topology.requireDeclaration}`, "true = no dispatch before the topology is declared"),
@@ -397,6 +412,7 @@ export function defaultConfig(): PluginConfig {
 		cost: { warnThreshold: 1 },
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
+		tasks: { max: 999, outputCapBytes: 50 * 1024 },
 		topology: { default: "star", requireDeclaration: false, maxLoopCount: 2 },
 		plan: { enabled: false, tier: DEFAULT_TIER_MODE },
 		presets: { effort: { scout: "low", planner: "medium", worker: "medium", reviewer: "high" } },
@@ -671,6 +687,8 @@ function validate(config: PluginConfig): string[] {
 	expectNumberRange(asRecord(config.cost), "warnThreshold", d.cost.warnThreshold, 0, 100_000, warnings);
 	expectIntRange(asRecord(config.idle), "reapAfterMs", d.idle.reapAfterMs, 10_000, 86_400_000, warnings);
 	expectIntRange(asRecord(config.idle), "reapIntervalMs", d.idle.reapIntervalMs, 5_000, 3_600_000, warnings);
+	expectIntRange(asRecord(config.tasks), "max", d.tasks.max, 1, 10_000, warnings);
+	expectIntRange(asRecord(config.tasks), "outputCapBytes", d.tasks.outputCapBytes, 1_024, 10 * 1024 * 1024, warnings);
 
 	if (config.storage.dir !== null && (typeof config.storage.dir !== "string" || !config.storage.dir.trim())) {
 		config.storage.dir = d.storage.dir;

@@ -36,7 +36,7 @@ flowchart TD
 - **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
 - **任务板是 DAG**：`blockedBy` 全部完成的任务才 `ready`；成环的依赖在创建时即被拒绝。
 - **成员间消息**：成员通过内置 `topo_team_msg` 工具连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。该工具不需要 shell——只读预设（`scout`/`planner`/`reviewer`）保持原状，其拓扑边始终可用。`stepcode-team` CLI shim 保留作手动/外部路径。
-- **护栏**：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；队长退出时全部子进程被清理。
+- **护栏**（以下为默认值——每个数字都可在 step 的 `config.toml` 的 `[stepcodeAgentTeam]` 表中配置，见 [CONFIGURATION_CN.md](docs/CONFIGURATION_CN.md)）：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；任务板与单任务输出上限（999 个任务 / 50 KiB）；队长退出时全部子进程被清理。
 
 ## 环境要求
 
