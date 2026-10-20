@@ -132,6 +132,10 @@ after `kill -9` the next send succeeds and remembers the earlier context;
 processes after abort; onUpdate is called at least once; >50KB output is
 truncated and `details.fullText` holds the full text.
 
+After a manual sandbox round, have the agent record the session into
+`sandbox/SESSION-LOG.md` — the pasteable prompt is in the sandbox README's
+[Session log](../sandbox/README.md#session-log) section.
+
 ## 4. Layer D — robustness and boundaries
 
 Leader crash recovery (no `.tmp-*` residue in the registry, the view matches disk

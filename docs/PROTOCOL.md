@@ -71,7 +71,7 @@ Rules:
   under star (default) there is no direct member-to-member messaging — everything routes through the leader.
 - **Ring chain-length enforcement**: before nested dispatch the server computes `next = currentChainLength(from) + 1`
   (leader dispatch = 0, +1 for each member relay); when `topology.maxLoopCount > 0` and `next` exceeds the cap
-  the message is rejected and the sender is told to report to the leader. Nested dispatch carries `chainLength: next`, and the manager layer re-validates before dispatch
+  the message is rejected and the sender is told to state it in their final report (the leader is not a messaging target). Nested dispatch carries `chainLength: next`, and the manager layer re-validates before dispatch
   as a backstop.
 - **nested exemption**: server-brokered dispatches carry `nested:true` and bypass the global concurrency gate (the sender already holds a running slot),
   but the per-member serialized queue and topology gate still apply.

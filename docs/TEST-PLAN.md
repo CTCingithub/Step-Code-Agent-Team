@@ -17,7 +17,7 @@
 | phase3 | Message service + shim status round-trip + preset loading | zero-token |
 | phase4 | LLM full path (reply/memory/resume/member-to-member messaging) | a few tokens |
 | phase5 | Concurrent-creation races/fail-fast/state machine/socket 0600/abort/shutdown | 1 token |
-| phase6 | Default-off activation + config pure functions + model/thinking parsing | zero-token |
+| phase6 | Default-off activation + config pure functions + model/effort parsing | zero-token |
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero-token |
 | phase8 | Recursion depth /proc real check + sub-team self-bootstrap + concurrency defaults | zero-token |
 
@@ -28,7 +28,7 @@
 3. **Recursion depth 2 live chain**: phase8 only verifies process-level self-bootstrap; a sub-leader really creating sub-members and relaying answers back is unverified
 4. **oneshot mode**: never live-tested since release
 5. **Task chain live**: the real dispatch → completion → downstream unlock of `team_task start`
-6. **`/agent-team` command path**: command activation + team board notify have never been triggered
+6. **`/topo` command path**: command activation + team board notify have never been triggered
 7. **Streaming progress**: `onUpdate`/interim text has never been observed
 8. **Unicode/emoji round-trip**, **kill -9 crash recovery** (including the anticipated state staleness after onClose), **reaper logic**, **config boundaries** (storage.dir/project-level not loading/invalid fallback)
 
@@ -41,7 +41,7 @@
 | smoke-phase10 | cfg-deadlock (maxConcurrent=1, timeoutMs=60s) | ~2 tokens | 2 |
 | smoke-phase11 | cfg-deep2 (maxRecursionDepth=2, dispatch.timeoutMs=240s) | ~4 tokens | 3 |
 | smoke-phase12 | default config | ~6 tokens | 4/5/7/8 |
-| RPC-direct `/agent-team` | default config | zero-token | 6 |
+| RPC-direct `/topo` | default config | zero-token | 6 |
 | smoke-phase13 | default config (synthetic base/project dirs, settings.json section + legacy file fallback) | zero-token | project-level config |
 
 ## IV. Execution record
@@ -53,7 +53,7 @@
 | phase10 / cfg-deadlock | ✅ pass after fix | **Product defect: nested-message deadlock** (A holds the only semaphore slot, messages B via the shim, B's dispatch also needs a slot → 60s timeout) | Fixed: server dispatches marked nested bypass the global gate |
 | phase11 / cfg-deep2 | ✅ 4/4 after fix | **Product defects ①: `team_set_topology` not in the gate list → leak before activation; ② sub-leader `--tools` allowlist filters out the team tools → depth-2 orchestration broken** (plus test-harness issues: cfg-deep2 config file missing, probe didn't start the leader server) | Fixed: gate list completed, sub-leader allowlist merges the team tools, coordination prompt hardened (command failure doesn't mean investigating tools); probe now starts the leader server + refusal detection |
 | phase12 / default | ✅ 9/9 | — | oneshot/task chain/Unicode/crash recovery/streaming all pass; also verified the **onClose state fix** (no longer stuck idle after an external kill) |
-| /agent-team command | ✅ | — | RPC-direct `/agent-team` → activation notify + team board notify |
+| /topo command | ✅ | — | RPC-direct `/topo` → activation notify + team board notify |
 | Regression (after fixes) | ✅ phase1/2/3/5/6/7 + phase4 all green | — | The three product fixes introduce no regressions |
 | phase13 / default (plan-51) | ✅ 14/14 pass (1 SKIP: the probe's project is untrusted, so the live trusted branch is skipped; the untrusted live assertions pass) | phase9 legacy assertion sentinel value 99 out of range (members.max validation range 1–64), passes after changing to 7 — probe defect, not a product defect | Project-level config is wired up; phase1–9 zero-token regression all green |
 | Probes moved into the repo (plan-51) | ✅ `test/smoke/` now hosts phase1/2/3/5/6/7/8/9/13, `test/run-smoke.sh` runs hermetically; phase5 verified with a key | phase5 needs a key (an earlier manual loop with `grep 'FAIL '` misjudged it as passing — the probe output is `FAILED:` with no trailing space; the runner was corrected with a DONE marker + key gating) | The sandbox copies were deleted; the LLM layer (4/10/11/12) stays in sandbox |
@@ -92,7 +92,7 @@ serving as the vehicle for team members doing real work inside the sandbox (memb
 |---|---|---|
 | Fix chain | pipeline | scout locates the seeded bug → planner produces a fix plan → worker fixes and runs `npm test` to green → reviewer reviews the diff |
 | Parallel review | star | three reviewers review correctness / style / security in parallel, the leader merges the findings |
-| Round-robin review | ring | members pass review comments along the ring; watch how `topology.maxLoopCount` (default 2) bounds the review chain length — once exceeded, members should switch to reporting to the leader (the error message says so explicitly). Verified 2026-10-19: two hops succeeded; on the third hop the member declined as anticipated |
+| Round-robin review | ring | members pass review comments along the ring; watch how `topology.maxLoopCount` (default 2) bounds the review chain length — once exceeded, members should state it in their final report (the error message says so explicitly; the leader is not a messaging target). Verified 2026-10-19: two hops succeeded; on the third hop the member declined as anticipated |
 
 ## VIII. Demo project review and fixes (plan-56, 2026-10-19)
 
@@ -170,7 +170,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | A3b | ✅ 11/12 baseline | the restored project fails exactly the seeded test (the suite grew to 12 in the hygiene round) |
 | A4 | ✅ (via A1) | live-clean-export loads and activates the archived extension |
 
-Remaining: K1–K8 need `STEP_API_KEY` (set it in `sandbox/TEST-KEY.md`, gitignored, or export it); M1–M6 are manual (see the tables above).
+Remaining: K1–K8 need `STEP_API_KEY` (set it in `sandbox/TEST-KEY.md`, gitignored, or export it); M1–M6 are manual (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
 
 ### Findings from the 2026-10-20 sandbox session
 

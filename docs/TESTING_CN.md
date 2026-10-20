@@ -113,6 +113,9 @@ oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记�
 `STEPCODE_TEAM_COST_WARN=0.0001` 触发告警、设为 0 禁用；abort 后无孤儿进程；
 onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。
 
+每轮人工沙箱演练结束后，让 agent 把过程记录到 `sandbox/SESSION-LOG.md`——可粘贴的
+prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
+
 ## 4. D 层 — 鲁棒性与边界
 
 队长崩溃恢复（registry 无 `.tmp-*` 残留、resume 后视图与磁盘一致）、Unicode/emoji 往返、

@@ -71,7 +71,7 @@ shim 从 spawn env 取身份与地址：`STEPCODE_TEAM_SOCK`、`STEPCODE_TEAM_ME
   star（默认）下没有任何成员间直达消息，全部经由队长中转。
 - **环形链长强制**：嵌套派发前 server 计算 `next = currentChainLength(from) + 1`
   （队长派发 = 0，成员每转发一次 +1）；`topology.maxLoopCount > 0` 且 `next` 超过上限时
-  拒绝并提示发送方向队长汇报。嵌套派发携带 `chainLength: next`，manager 层在 dispatch
+  拒绝并提示发送方把结论写入最终报告（leader 不是消息目标）。嵌套派发携带 `chainLength: next`，manager 层在 dispatch
   前置校验兜底。
 - **nested 豁免**：server 中介的派发带 `nested:true`，绕过全局并发门（发送方已占运行位），
   但每成员串行队列与拓扑门控仍然生效。

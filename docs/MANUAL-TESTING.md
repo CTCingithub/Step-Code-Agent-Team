@@ -138,8 +138,8 @@ bash sandbox/restore-project.sh
 
 The server's deterministic rejections (topology out-of-bounds, loop cap, wait cycle)
 are already covered by probes; the irreducible part is whether member LLMs "obey" —
-after receiving a rejection they report to the leader instead of retrying repeatedly or
-going off to investigate tools.
+after receiving a rejection they state the conclusion in their final report instead of
+retrying repeatedly or going off to investigate tools.
 
 **Action** (paste in order inside a sandbox session):
 
@@ -150,9 +150,10 @@ Use the topo team feature for a round-robin review: create three members with th
 **Expected**: `team_set_topology ring` declares 3 edges; the two hops r1→r2 and r2→r3
 succeed; the third hop (r3→r1) exceeds `topology.maxLoopCount` (default 2) — the member
 **does not attempt** that hop (anticipating rejection), or attempts it and is rejected
-by the server with an error listing the allowed neighbors and "report to the leader";
-in either form the member should report its conclusion to the leader, rather than
-retrying the same hop repeatedly or switching to investigating the environment/tools.
+by the server with an error listing the allowed neighbors and "state it in your final report";
+in either form the member should deliver its conclusion through the final report (the leader
+is not a messaging target), rather than retrying the same hop repeatedly or switching to
+investigating the environment/tools.
 
 **Measured record (2026-10-19, ✅ passed)**: the ring two-hop relay succeeded (chain
 length exactly used up the limit); reviewer-3 did not attempt the third hop and

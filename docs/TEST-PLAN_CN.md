@@ -17,7 +17,7 @@
 | phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
 | phase4 | LLM 全路径（回复/记忆/恢复/成员间消息） | 少量 token |
 | phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token |
-| phase6 | 默认关闭激活 + 配置纯函数 + 模型/思考解析 | 零 token |
+| phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
 
@@ -28,7 +28,7 @@
 3. **递归深度 2 live 链**：phase8 只验证进程级自举；子队长真实创建子成员并回传答案未验证
 4. **oneshot 模式**：自发版以来从未 live 测试
 5. **任务链 live**：`team_task start` 的真实派活→完成→解锁下游
-6. **`/agent-team` 命令路径**：命令激活 + 团队板 notify 从未触发过
+6. **`/topo` 命令路径**：命令激活 + 团队板 notify 从未触发过
 7. **流式进度**：`onUpdate`/interim 文本从未观测
 8. **Unicode/emoji 往返**、**kill -9 崩溃恢复**（含 onClose 后状态 staleness 预判）、**reaper 逻辑**、**配置边界**（storage.dir/项目级不加载/非法回退）
 
@@ -41,7 +41,7 @@
 | smoke-phase10 | cfg-deadlock（maxConcurrent=1, timeoutMs=60s） | ~2 次 token | 2 |
 | smoke-phase11 | cfg-deep2（maxRecursionDepth=2, dispatch.timeoutMs=240s） | ~4 次 token | 3 |
 | smoke-phase12 | 默认配置 | ~6 次 token | 4/5/7/8 |
-| RPC 直发 `/agent-team` | 默认配置 | 零 token | 6 |
+| RPC 直发 `/topo` | 默认配置 | 零 token | 6 |
 | smoke-phase13 | 默认配置（合成 base/project 目录，settings.json 节 + 旧文件回退） | 零 token | 项目级配置 |
 
 ## 四、执行记录
@@ -53,7 +53,7 @@
 | phase10 / cfg-deadlock | ✅ 修复后通过 | **产品缺陷：嵌套消息死锁**（A 持唯一信号量经 shim 消息 B，B 的派活也要信号量→60s 超时） | 已修复：server 派活标记 nested 绕过全局门 |
 | phase11 / cfg-deep2 | ✅ 修复后 4/4 | **产品缺陷①：`team_set_topology` 不在门控清单→激活前泄漏；②子队长 `--tools` 允许清单过滤掉团队工具→深度2 编排失效**（另有 cfg-deep2 配置文件丢失的测试设施问题、探针未启队长 server 问题） | 已修复：门控清单补全、子队长允许清单合并团队工具、协调提示加固（命令失败不排查工具）；探针补启队长 server + 拒答检测 |
 | phase12 / default | ✅ 9/9 | — | oneshot/任务链/Unicode/崩溃恢复/流式全过；顺带验证 **onClose 状态修复**（外部 kill 后不再滞留 idle） |
-| /agent-team 命令 | ✅ | — | RPC 直发 `/agent-team`→激活 notify + 团队板 notify |
+| /topo 命令 | ✅ | — | RPC 直发 `/topo`→激活 notify + 团队板 notify |
 | 回归（修复后） | ✅ phase1/2/3/5/6/7 + phase4 全绿 | — | 三处产品修复无回归 |
 | phase13 / default（plan-51） | ✅ 14/14 通过（1 项 SKIP：探针环境项目未授信，live 受信任分支跳过；不受信 live 断言通过） | phase9 旧断言哨兵值 99 越界（members.max 校验范围 1–64），改 7 后通过——探针缺陷，非产品缺陷 | 项目级配置已接线；phase1–9 零 token 回归全绿 |
 | 探针入库（plan-51） | ✅ `test/smoke/` 承接 phase1/2/3/5/6/7/8/9/13，`test/run-smoke.sh` hermetic 运行；带 key 验证 phase5 通过 | phase5 需 key（此前手工循环以 `grep 'FAIL '` 漏判为通过——探针输出为 `FAILED:` 无尾随空格；runner 以 DONE 标记 + key 门控修正） | sandbox 副本已删；LLM 层（4/10/11/12）留 sandbox |
@@ -92,7 +92,7 @@
 |---|---|---|
 | 修复链 | pipeline | scout 定位种子 bug → planner 出修复方案 → worker 修复并跑 `npm test` 转绿 → reviewer 审查 diff |
 | 并行审查 | star | 三个 reviewer 分头审查正确性 / 风格 / 安全，队长汇总 |
-| 巡回审查 | ring | 成员沿环传递审查意见；观察 `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应转为向队长汇报（错误信息明确提示）。2026-10-19 实测：两跳成功、第三跳成员按预判规避未发起 |
+| 巡回审查 | ring | 成员沿环传递审查意见；观察 `topology.maxLoopCount`（默认 2）对巡游链长的约束——超限后成员应把结论写入最终报告交回队长（错误信息明确提示；leader 不是消息目标）。2026-10-19 实测：两跳成功、第三跳成员按预判规避未发起 |
 
 ## 八、演示项目复审与修复（plan-56，2026-10-19）
 
@@ -171,7 +171,7 @@
 | A3b | ✅ 11/12 基线 | 还原后的项目恰好只挂种子测试（套件已在卫生轮扩至 12 条） |
 | A4 | ✅（经 A1） | live-clean-export 加载并激活归档导出物的扩展 |
 
-剩余：K1–K8 需 `STEP_API_KEY`（写入 `sandbox/TEST-KEY.md`——gitignored，或 export 环境变量）；M1–M6 为人工项（见上表）。
+剩余：K1–K8 需 `STEP_API_KEY`（写入 `sandbox/TEST-KEY.md`——gitignored，或 export 环境变量）；M1–M6 为人工项（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
 ### 2026-10-20 沙箱会话发现
 

@@ -21,7 +21,7 @@
 |---|---|
 | `run.sh` | 沙箱启动器：隔离 agentDir/session/plan，cwd 指向 `project/` |
 | `probe.sh` | 零 token 协议探针（期望输出 `PROBE OK`） |
-| `restore-project.sh` | 还原沙箱测试环境：`project/` 复位为初始种子态（含 off-by-one 种子 bug），清除运行时数据与会话日志（`session-log-*.md`） |
+| `restore-project.sh` | 还原沙箱测试环境：`project/` 复位为初始种子态（含 off-by-one 种子 bug），清除运行时数据与会话日志（`session-log-*.md`、`SESSION-LOG.md`） |
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`：12 条测试，种子 bug 在位时 11 条通过） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
@@ -66,8 +66,23 @@ git submodule，钉住本沙箱跟踪的 Step Code 版本——step 升级时只
 2. **star 并行审查**：三名 reviewer 分头审查，队长汇总
 3. **ring 巡回审查**：观察 `topology.maxLoopCount` 对巡游链长的约束
 
-每轮演示前跑 `bash sandbox/restore-project.sh` 还原。
+每轮演示前跑 `bash sandbox/restore-project.sh` 还原；每轮结束后按下方「会话日志」一节生成记录。
 `project/secret-sample.txt` 是**假密钥**，用于验证路径保护护栏（成员不得读取或外传）。
+
+## 会话日志
+
+每轮沙箱测试结束后，让 agent 把过程写入 `sandbox/SESSION-LOG.md`
+（gitignored，本地留存；`restore-project.sh` 还原种子态时一并清除）。
+把下面这段 prompt 粘进会话（或在该轮结束时交给队长）：
+
+```text
+请把本 session 的团队协作过程记录到 sandbox/SESSION-LOG.md，结构：
+（1）头部——日期、主模型、工作目录、团队框架、安全护栏遵守情况；
+（2）用户 Prompt 逐字摘录；（3）小队名册表——成员/角色/职责/工具/effort；
+（4）按执行顺序的各阶段——拓扑声明、派活方式、成员产出要点；异常实况
+（如 topo_team_msg 被拒）必须引用工具返回的原文，不得凭记忆转述；
+（5）净结果——基线对比、改动文件清单、未做的事；（6）还原方式。
+```
 
 ## 跑测试
 
