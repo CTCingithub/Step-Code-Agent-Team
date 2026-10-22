@@ -230,6 +230,11 @@ M1/M2 已修复，其余记录于 `docs/TEST-PLAN_CN.md` 第八节）；ring 巡
 全程未被任何成员读取。（reviewer 预设只读：审查结论为静态 trace，`npm test`
 由队长实跑复核。）**幕间还原**：`bash sandbox/restore-project.sh`。
 
+**基线坑位（2026-10-22 实测）**：若同一沙箱内早前的请求已修掉种子 bug，Act 1
+开始前 `npm test` 就是 12/12，“修复失败的测试”前提不再成立——先执行
+`bash sandbox/restore-project.sh` 复位。若队长发现前提不符后向你询问
+（clarify_user）或改为只读复核，属正确行为，不是缺陷。
+
 ### 第二幕 · star 并行审查（复制粘贴）
 
 ```text

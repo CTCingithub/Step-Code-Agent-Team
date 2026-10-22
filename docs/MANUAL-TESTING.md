@@ -267,6 +267,13 @@ in `src/tasks.js`; `secret-sample.txt` is never read by any member. (The reviewe
 preset is read-only: its review conclusion is a static trace; `npm test` is re-run for
 real by the leader.) **Between-act restore**: `bash sandbox/restore-project.sh`.
 
+**Baseline pitfall (observed 2026-10-22)**: if an earlier request in the same
+sandbox already fixed the seeded bug, `npm test` reads 12/12 before Act 1 starts
+and the "fix the failing tests" premise no longer holds — run `bash
+sandbox/restore-project.sh` first to put the bug back. If the leader instead
+detects the mismatch and asks you (clarify_user) or adapts to a verify-only
+pass, that is correct behavior, not a bug.
+
 ### Act 2 · star parallel review (copy-paste)
 
 ```text
