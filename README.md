@@ -39,7 +39,7 @@ flowchart TD
 - **Members are real `step` processes** with their own context window, model, and tool allowlist, spoken to over the RPC protocol. A member's context lives in its session file, so respawning it with the same session id resumes the conversation.
 - **The task board is a DAG**: a task is `ready` when every task in its `blockedBy` is `done`; cycles are rejected.
 - **Messaging**: members reach teammates through the built-in `topo_team_msg` tool, which talks to a Unix socket served by the leader process. Direct messaging is gated by the declared topology (see below); the default star routes everything through the leader. The tool needs no shell — read-only presets (`scout`/`planner`/`reviewer`) keep their posture and their topology edges stay usable. The `stepcode-team` CLI shim remains for manual/external use.
-- **Guardrails** (defaults below — every number is configurable in the `[stepcodeAgentTeam]` table of step's `config.toml`, see [CONFIGURATION.md](docs/CONFIGURATION.md)): max 8 live members (disbanded or reaped members no longer count against the limit), max 5 concurrent dispatches (queue-before-start), 180s per-dispatch timeout, cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), task-board and per-task output caps (999 tasks / 50 KiB), all children killed on leader shutdown.
+- **Guardrails** (defaults below — every number is configurable in the `[stepcodeAgentTeam]` table of step's `config.toml`, see [CONFIGURATION.md](docs/CONFIGURATION.md)): max 8 live members (disbanded or reaped members no longer count against the limit), max 5 concurrent dispatches (queue-before-start), 600s per-dispatch timeout (covers the member's whole turn, nested relays included), cumulative-spend warning (`STEPCODE_TEAM_COST_WARN`, default $1), idle members reaped after 30 min (sessions stay resumable), task-board and per-task output caps (999 tasks / 50 KiB), all children killed on leader shutdown.
 
 ## Requirements
 
@@ -172,12 +172,12 @@ per invocation.
 | `team_task` | Task board: `create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | Members, task board, cumulative spend |
 | `team_disband` | Stop one member or the whole team (sessions persist) |
-| `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work |
+| `team_set_topology` | Declare the member messaging topology (`star`/`pipeline`/`mesh`/`ring`/`custom`) before dispatching work; pass `members` to scope pipeline/mesh/ring to a subset of the current members |
 | `/topo` | Command: activate the plugin and show the team board. `/topo off` deactivates and re-hides the team tools; `/topo <tier>` (economic/fast/balanced/performance/custom) applies a team strategy (see Team plans); `/topo review [target]` runs the parallel multi-reviewer protocol; text after the command is forwarded to the agent **verbatim** — the "use the team" instruction is injected request-locally through a context event and never written to the session file |
 
 ## Member communication topology
 
-Direct member-to-member messaging is **denied unless the topology allows it**. The leader designs the topology that fits the task with `team_set_topology` after creating members and before dispatching work; the default is a star, where everything routes through the leader.
+Direct member-to-member messaging is **denied unless the topology allows it**. The leader designs the topology that fits the task with `team_set_topology` after creating members and before dispatching work; the default is a star, where everything routes through the leader. Pass `members` to scope a pipeline/mesh/ring to a subset of the current members (e.g. a 3-member ring inside a team that accumulated members across phases) — members outside the scope get no edges.
 
 > **Read-only roles and topology edges:** every member — including the read-only presets (scout/planner/reviewer) and custom roles without `bash` — messages teammates through the built-in `topo_team_msg` tool, so topology edges are usable for every role. Express dependencies with the task board's `blockedBy`; the `stepcode-team` CLI shim remains available for manual use.
 
@@ -251,7 +251,7 @@ Preset effort defaults: `scout`=low, `planner`=medium, `worker`=medium,
 `reviewer`=high. Resolution order: an explicit `effort` argument to
 `team_create_member` → the `[stepcodeAgentTeam.presets.effort]` config
 override (built-in role names) → the preset's frontmatter `effort` → `high`.
-While `models.autonomousThinking = true` the leader picks the effort per
+While `models.autonomousEffort = true` the leader picks the effort per
 member and all preset efforts are inert.
 
 You can add your own roles — Markdown files with the same frontmatter format
@@ -335,7 +335,7 @@ reviewer = "high"
 Full reference (all sections, semantics, and topology shapes): [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 Key points: with `autonomousSelection` off (default) every member runs on the
-conversation's current model; with `autonomousThinking` off (default) members
+conversation's current model; with `autonomousEffort` off (default) members
 use their preset's effort default (`scout`=low, `planner`/`worker`=medium,
 `reviewer`=high), falling back to `high` without a preset.
 `members.maxRecursionDepth` (default 1) bounds the
@@ -367,6 +367,11 @@ npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9
 The suite ships in `test/smoke/` with a hermetic runner (`test/run-smoke.sh`,
 temporary agent dir via mktemp). LLM-path probes (`sandbox/smoke-phase4/10/11/12.ts`)
 need a test key; see [docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
+
+> **Dev-only paths:** `test/` and `sandbox/` are development-only — they are
+> not part of the packaged artifact (`package.json` "files" ships the
+> extension, agents, and docs). Clone the repo to run the smoke suite or use
+> the sandbox; a `step install` of the package gives you the extension only.
 
 > **Headless runs:** `step -p` blocks tools that spawn processes or modify the
 > workspace unless a permission preset is configured. For unattended runs, add

@@ -93,7 +93,6 @@
 | 成本告警 | tools.ts costWarning（config.cost.warnThreshold，0 禁用） |
 | idle 收割 | members.ts reapIdleMembers（跳过有排队派发的成员） |
 | 成员名额（仅存活计数） | members.ts createMemberLocked（dead 记录可恢复但不占名额） |
-| 消息能力提示 | members.ts memberCanMessage / messagingWarnings + tools.ts 结果文本 |
 | 退出清理 | index.ts session_shutdown → manager.shutdown（全置 dead + kill） |
 
 ## 6. 相关文档

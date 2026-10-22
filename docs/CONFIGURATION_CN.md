@@ -40,12 +40,12 @@ maxRecursionDepth = 1                # 团队树深度上限（1–4）
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5                    # 并行成员上限（1–16）；超出的派活排队
-timeoutMs = 180000                   # 单次派发超时
+timeoutMs = 600000                   # 单次派发超时
 handshakeTimeoutMs = 15000           # 成员 spawn 握手超时
 retries = 1                          # 任务重试次数（0–5）
 
 [stepcodeAgentTeam.oneshot]
-timeoutMs = 180000                   # 无状态派发超时
+timeoutMs = 600000                   # 无状态派发超时
 
 [stepcodeAgentTeam.cost]
 warnThreshold = 1                    # 累计花费告警阈值（美元）；0 = 禁用

@@ -22,17 +22,17 @@
 > rendering checklist (look-and-feel only; the content layer is asserted by phase15)
 > is §1.
 
-## Status overview (2026-10-19)
+## Status overview (2026-10-20)
 
 | # | Item | Status |
 |---|---|---|
 | 1 | Interactive TUI look and feel | ✅ Verified 2026-10-19 (no rendering issues found) |
-| 2 | Real install (`step install` from a clean export) | ⬜ To be run by you |
-| 3 | Trust prompt interactive UX | ⬜ To be run by you |
-| 4 | LLM behavior adherence (ring) | ✅ Verified 2026-10-19 (third hop avoided + reported to the leader) |
+| 2 | Real install (`step install` from a clean export) | ➖ Mechanics covered by `live-package-install` / `live-clean-export`; the interactive residue ⬜ yours |
+| 3 | Trust prompt interactive UX | ➖ Rejection path covered by `live-untrusted-config`; the popup itself ⬜ yours |
+| 4 | LLM behavior adherence (ring) | ✅ 2026-10-19 (third hop avoided + reported); the third hop / `maxLoopCount` rejection itself still unobserved live ⬜ |
 | 5 | Sandbox demo scripts (three acts) | ✅ Verified 2026-10-19 |
 | 6 | Performance subjective items (8 full members) | ➖ Optional, subjective |
-| — | English translation review | ⬜ Recommended (new bilingual docs this round) |
+| — | English translation review | ⬜ Recommended |
 
 ## Round runbook (one complete test round)
 
@@ -65,7 +65,7 @@ npm run smoke   # 17 phases + manifest + 7 live checks; stop and fix on any fail
 | 1 | Activation + team board | §1 steps 1–2 | §1 | — |
 | 2 | Members + pipeline + task board | §1 steps 3–8 | §1 | — |
 | 3 | `topo_team_msg` E2E | paste: `Have scout1 send worker1 a one-line intro through topo_team_msg and report the tool's exact return text` | §1, §4 | The reply is best-effort: a delivery acknowledgment ("Delivered to …") is not the teammate's answer — collect outputs through the leader |
-| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 180s default `dispatch.timeoutMs` — long high-effort reviews get fail-fast killed. Run one loop; the leader collects the final list |
+| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list |
 | 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 
@@ -291,14 +291,16 @@ took effect); the two-hop relay r1→r2→r3 succeeded (chain length exactly use
 summary report back along the reply chain.
 
 **Known runtime behavior (nested chain timeout)**: the leader-side `team_send` wait
-timeout (`dispatch.timeoutMs`, default 180s) covers the **entire nested relay chain** —
-when a chain of three high-effort reviewers exceeds 180s, the leader-side timeout
-returns while the relay continues on the server side (the dispatched members are reaped
-per the kill-on-failure semantics; the error message indicates the relay may still be
-in flight and lists member status). Recovery path: use `team_status` to see who is
-still alive → reach the still-running members directly to collect the summary. To
-avoid the timeout: raise `dispatch.timeoutMs` in `sandbox/config.toml` before
-the session (config is read only once at session startup).
+timeout (`dispatch.timeoutMs`, default 600s) covers the **entire nested relay chain** —
+when a chain of reviewers exceeds it, the leader-side timeout returns while the relay
+continues on the server side (the dispatched members are reaped per the
+kill-on-failure semantics; the error message indicates the relay may still be
+in flight and lists member status). The failed task carries harvest guidance: the
+member's context may already contain the work, so re-dispatch a short harvest prompt
+(e.g. "report what you have completed so far") instead of re-running the task — an
+automatic retry would duplicate the work. To avoid the timeout: raise
+`dispatch.timeoutMs` in `sandbox/config.toml` before the session (config is read
+only once at session startup).
 
 **Closing restore**: `bash sandbox/restore-project.sh`.
 

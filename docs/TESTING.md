@@ -107,8 +107,9 @@ either set, phase5 is part of the regression run.
 | phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
 | phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) | zero token |
 
-The LLM-path probes (phase4/10/11/12) need a test key and still live in the
-gitignored `sandbox/` (see Layer C).
+The LLM-path probes (phase4/10/11/12) need a test key and live in `sandbox/` —
+the probes themselves are tracked; only sandbox runtime state is gitignored (see
+Layer C).
 
 ## 3. Layer C — LLM-path tests (test key, inside the sandbox, minimal cost per probe)
 

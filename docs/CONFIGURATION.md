@@ -40,12 +40,12 @@ maxRecursionDepth = 1                # team-tree depth bound (1–4)
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5                    # parallel member cap (1–16); extra dispatches queue
-timeoutMs = 180000                   # per-dispatch timeout
+timeoutMs = 600000                   # per-dispatch timeout
 handshakeTimeoutMs = 15000           # member spawn handshake timeout
 retries = 1                          # task retry count (0–5)
 
 [stepcodeAgentTeam.oneshot]
-timeoutMs = 180000                   # stateless dispatch timeout
+timeoutMs = 600000                   # stateless dispatch timeout
 
 [stepcodeAgentTeam.cost]
 warnThreshold = 1                    # cumulative spend warning (USD); 0 = off
