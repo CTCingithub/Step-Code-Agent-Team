@@ -72,12 +72,11 @@ directory, not your shell's cwd), and note the entry breaks if the checkout
 moves. Add `-l` to install project-locally instead (the project's `.stepcode/`
 config, shared with your team, auto-installed once the project is trusted).
 
-From git or npm — no packaging step needed, it is a standard step package:
+From git — no packaging step needed, it is a standard step package:
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.1.4)
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 preview (latest stays on the stable line until 0.2.0 final)
-step install npm:step-code-agent-team                                       # once published to npm
 ```
 
 Then start a session and ask: *"Use an agent squad to review this repo in parallel."* — or run `/topo` first; the plugin stays dormant until then.
