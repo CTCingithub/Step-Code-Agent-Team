@@ -142,7 +142,7 @@ Leader crash recovery (no `.tmp-*` residue in the registry, the view matches dis
 after resume), Unicode/emoji round-trips, parameter validation (empty message /
 invalid member name / unknown task id / unknown member all get explicit errors),
 missing directories (createMember still works after the sessions directory is
-deleted), and scale (8-member cap / 999-task cap / 50KB per-task detail).
+deleted), and scale (8-member cap / 999-task board / 50KB per-task detail — configurable defaults, see [CONFIGURATION.md](CONFIGURATION.md)).
 
 TUI rendering (renderCall/renderResult, the `/topo` panel, streaming
 progress, activation notify) only takes effect in the interactive TUI and is not

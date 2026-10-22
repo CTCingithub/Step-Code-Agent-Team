@@ -105,6 +105,7 @@ export default function (pi: ExtensionAPI) {
 						members: { max: 2, maxRecursionDepth: 3 },
 						dispatch: { maxConcurrent: 7 },
 						cost: { warnThreshold: 0.25 },
+						tasks: { max: 5, outputCapBytes: 2048 },
 						unknownTop: { x: 1 },
 					},
 				}),
@@ -116,6 +117,8 @@ export default function (pi: ExtensionAPI) {
 					c1.members.max === 2 &&
 					c1.members.maxRecursionDepth === 3 &&
 					c1.dispatch.maxConcurrent === 7 &&
+					c1.tasks.max === 5 &&
+					c1.tasks.outputCapBytes === 2048 &&
 					c1.models.autonomousSelection === true,
 			);
 			check("loadConfig: unknown keys ignored", !("unknownTop" in (c1 as unknown as Record<string, unknown>)));
@@ -128,6 +131,7 @@ export default function (pi: ExtensionAPI) {
 						models: { available: [] },
 						dispatch: { maxConcurrent: -2 },
 						cost: { warnThreshold: "abc" },
+						tasks: { max: "nine", outputCapBytes: 512 },
 						topology: { default: "bogus" },
 					},
 				}),
@@ -147,6 +151,8 @@ export default function (pi: ExtensionAPI) {
 			);
 			check("loadConfig: invalid cost → default", c2.cost.warnThreshold === d.cost.warnThreshold);
 			check("loadConfig: invalid topology.default → default", c2.topology.default === d.topology.default, `got ${c2.topology.default}`);
+			check("loadConfig: invalid tasks.max → default", c2.tasks.max === d.tasks.max, `got ${c2.tasks.max}`);
+			check("loadConfig: invalid tasks.outputCapBytes → default", c2.tasks.outputCapBytes === d.tasks.outputCapBytes, `got ${c2.tasks.outputCapBytes}`);
 
 			// env overrides
 			const savedCost = process.env.STEPCODE_TEAM_COST_WARN;

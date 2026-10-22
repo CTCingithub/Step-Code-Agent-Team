@@ -375,7 +375,7 @@
 
 **工作**：① `team-server.ts`：新增 `to="leader"` 精确拒绝分支（指引把结论写入最终报告）；无出边提示与 loop 上限/死循环报错文案全部对齐。② `members.ts`：协调提示词明确"leader 不是消息目标"；`assertLoopBound` 文案对齐。③ demo README（project/pristine）ring 剧本改为"把结论写入最终报告交回队长"。④ `phase3` 增加 leader 目标拒绝探针。⑤ 文档：TUI-VERIFICATION 双语环境块具体化 + TEST-KEY.md 密钥机制（弃用废弃的 local/test-api-key.md）、MANUAL-TESTING 双语 `step install/remove` 具体路径、TESTING 双语密钥说明去占位符；弱日志 prompt 改为指向沙箱 README 的规范化 prompt。⑥ `.gitignore` 与 restore 脚本纳入会话日志清理；演示项目恢复种子态。
 
-**验证**：全量冒烟 21 phase + manifest + 6 live + orphan-check 全绿；提交 2262e42 / 4f2f6b6。
+**验证**：全量冒烟 17 phase + manifest + 7 live + orphan-check 全绿；提交 2262e42 / 4f2f6b6。
 
 ### 37. 护栏配置化审计与沙箱测试文档整合（plan-72）
 
@@ -385,7 +385,7 @@
 
 **工作**：① 新增 `[stepcodeAgentTeam.tasks]` 节（`max` 默认 999 范围 1–10000、`outputCapBytes` 默认 51200 范围 1KiB–10MiB，含校验与种子块）；`nextTaskId`/`truncateOutput` 改读配置；README 双语护栏行改「默认值、每项均可配置」并链接 CONFIGURATION；CONFIGURATION 双语补 tasks 节并修复既有 ROLES 断链。② `team_set_topology` 新增 `members` 作用域参数（修复 ring 圈入全部历史成员——实测 3 成员环变 10 成员环；phase7 增加 12 个作用域探针）；清除 3 处过时 no-bash 表述（`team_create_member` 描述——JSONL 曾证实队长推理被此句误导、/topo review 指令、phase18 文件头）；`findTask` 报错补"团队任务板 ID 非会话计划 ID"提示。③ TUI-VERIFICATION 双语文档删除，11 步清单并入 MANUAL-TESTING §1（双语）；全部引用改指向；环境准备以 TESTING §0 为唯一规范副本。
 
-**验证**：全量冒烟全绿（21 phase + manifest + 6 live + orphan-check）；TUI-VERIFICATION 引用在历史档案外清零、6 个受影响文档链接全部可达；提交 8feca72 / 11e84df / a236869 / e94cf5c。
+**验证**：全量冒烟全绿（17 phase + manifest + 7 live + orphan-check）；TUI-VERIFICATION 引用在历史档案外清零、6 个受影响文档链接全部可达；提交 8feca72 / 11e84df / a236869 / e94cf5c。
 
 ### 38. 沙箱会话二轮修复：topo_team_msg 投递回执（plan-73）
 
@@ -395,7 +395,7 @@
 
 **工作**：① `member-messaging.ts`：新增 `formatTeammateReply()`——空/占位符/undefined/纯空白一律转为明确投递回执（结论写入最终报告、队长经 `team_send`/`team_task` 收集）；工具描述同步为「投递保证、回复尽力」。② `rpc-client.ts`：不再把宿主占位符捕获为 assistant 文本（队长侧空回合显示 `(no output)`）。③ `phase16` 增加 6 个契约探针。④ TEST-PLAN 双语补二轮发现（含 180s 默认超时 vs 长审查的观察、拓扑作用域参数验证通过）。⑤ MANUAL-TESTING 双语新增 §7「会话日志」，内含可复制粘贴的规范化日志生成 prompt（与沙箱 README 同源互链）。
 
-**验证**：全量冒烟全绿（21 phase + manifest + 6 live + orphan-check）；提交 eb4665d / 98bf5b4。
+**验证**：全量冒烟全绿（17 phase + manifest + 7 live + orphan-check）；提交 eb4665d / 98bf5b4。
 
 ### 39. v0.2.0-preview 发布与 develop 分支约定（plan-74）
 
@@ -406,3 +406,23 @@
 **工作**：① `package.json` 0.2.0 → 0.2.0-preview；README 双语安装示例改 `@v0.2.0-preview` 并注明 latest 停留稳定线。② 提交 `chore: release v0.2.0-preview`，打附注标签并推送 main + 标签；latest 分支未移动（仍 698a698 = v0.1.4）。③ hermetic 验证：临时 agentDir 中 `step install git:...@v0.2.0-preview` 安装成功且 `/topo` 激活探针 OK，验证后清理。④ HANDOFF 刷新至发布后状态；README 双语 Development 节与 HANDOFF §7 增加 develop 分支约定（新版本开发在 develop 上进行，稳定后合并 main 发版；正式版才移动 latest，preview 不动）。
 
 **验证**：发布前全量冒烟全绿；标签安装与激活验证通过；latest 指向经 `git ls-remote` 确认未变。
+
+### 40. npm 安装表述移除与 develop 分支启用（plan-77）
+
+**用户 prompt**：「请检查是否已经npm发布了，然后创建develop分支，我要在该分支上继续开发」+「请删除两分支中关于npm安装的相关表述，然后切换到develop分支」
+
+**思路**：npm 检查证实两种包名（step-code-agent-team / stepcode-agent-team）均 E404——本插件从未发布 npm，安装示例中的 npm 行是无效引导，删除；develop 分支按上轮约定的分支模型从 main 切出，改动同步两分支。
+
+**工作**：① README 双语删除 `step install npm:step-code-agent-team` 行，引言句 "From git or npm" / "从 git 或 npm 安装" 改为 "From git" / "从 git 安装"（`npm run smoke` 等无关提及保留）。② `git checkout main && git checkout -b develop` 创建开发分支（上轮 SSH 网络故障已恢复），提交 3f9b607 推送 develop；main 以 `--ff-only` 快进至同一提交并推送——两分支同值；latest 保持 v0.1.4 未动。③ 切回 develop 作为当前开发分支。
+
+**验证**：grep 确认 npm 安装表述在主仓库文档清零（仅存 sandbox/step 上游 submodule）；两分支 `git branch -vv` 同值且均与各自远程同步。
+
+### 41. 测试流程全面优化（plan-79）
+
+**用户 prompt**：「请给我全面优化测试流程，并更新相关文档」（团队协议激活，按组队判据派 scout 审计 + 后续 implement/review 分工）
+
+**思路**：先审计后动手——派只读 scout（high effort）系统审计全部测试文档与脚本，产出分级缺口清单（摩擦点/文档不一致/承诺vs现实/证据丢失/覆盖缺口/分级提案）；再按"runbook 总纲 + 明细清单"重组文档、把证据保全脚本化、补齐最后一块探针缺口。审计与实施均验证了上轮修复的机制：scout 派发撞 180s 超时后经 resume 正常回收报告（best-effort 回复语义下的标准恢复模式）。
+
+**工作**：① **审计**（scout）：定位 7 项摩擦（头号：`sandbox/run.sh` 不读 TEST-KEY.md——文档承诺自动读取但交互沙箱实际无 key）、8 处文档不一致、4 项承诺vs现实、证据丢失点（restore 删 `logs/`——正是 §7 日志产物）、5 项特性探针覆盖核查（4 项已覆盖，tasks 配置校验为唯一缺口）、10 条分级提案。② **新增 `sandbox/archive-round.sh`**：还原前把本轮证据（sessions JSONL、teams 注册表、logs/、project diff/status）归档到 gitignored 的 `sandbox/archive/<时间戳>-<标签>/`；.gitignore 同步。③ **`sandbox/run.sh` 修复头号摩擦**：环境未提供 STEP_API_KEY 时按 with-test-key.sh 同一提取逻辑读取 TEST-KEY.md 并导出。④ **restore-project.sh 死亡引用修复**（指向已合并删除的 TUI-VERIFICATION.md → MANUAL-TESTING.md §7）。⑤ **MANUAL-TESTING 双语新增「单轮测试 runbook」**（第 0 步预检：归档上轮→还原→密钥；第 1 步自动化门；第 2 步 6 个有序交互场景表格，每场景含可复制粘贴 prompt、明细指向与已知坑——topo 回复尽力语义需队长收集、每跳小工作量以 fit 180s 默认超时、选单需启动前改配置+重启会话；第 3 步收尾五步），文件头同步指向，形成 runbook+明细结构。⑥ **探针补齐**：phase9 增加 tasks 配置面断言（有效合并 + 无效回退），phase16 增加 nextTaskId 容量契约（首空闲/跳过已用/满板抛错）与 truncateOutput 显式 cap 行为；`bash test/run-smoke.sh 9 16` 全绿。⑦ **文档修正 10 处**：phase15 死亡引用、EN §5 陈旧 8/8→12/12、TESTING 双语 Layer D 配置化表述、TEST-PLAN 双语日志路径与 0.2.0 轮执行记录计数（校正为 17 phase + 7 live）、Known limitations standalone 清单 15/16、§0 还原表补 trust.json 行（快速还原不重置信任）、sandbox README 双语日志节补归档提示。
+
+**验证**：目标 phase 冒烟全绿；全量冒烟、链接与双语一致性、reviewer 审查并入下一验证轮统一执行。

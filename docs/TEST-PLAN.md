@@ -96,7 +96,7 @@ serving as the vehicle for team members doing real work inside the sandbox (memb
 
 ## VIII. Demo project review and fixes (plan-56, 2026-10-19)
 
-Source: task 2 (star three-way parallel review) and task 3 (ring round-robin summary) of the second manual verification session (`sandbox/session-log-2026-10-19.md`, deleted per the restore
+Source: task 2 (star three-way parallel review) and task 3 (ring round-robin summary) of the second manual verification session (`sandbox/session-log-2026-10-19.md`, deleted per the restore strategy; session logs now live in `sandbox/logs/`)
 strategy). The review target is the `sandbox/project` demo code (not the plugin itself).
 
 **Fixed (project and project-pristine in sync; the buggy 7/8 and fixed 8/8 baselines unchanged)**:
@@ -123,7 +123,7 @@ strategy). The review target is the `sandbox/project` demo code (not the plugin 
 
 **Verification**: fixed state `npm test` 12/12; M1 reproduction paths (`add ""` / `done 99`) all exit cleanly with code 2; M2 reproduction paths (`{}` / `{"tasks":[]}`) all fall back to an empty list; the post-restore 11/12 baseline (seeded failure) unchanged; project and project-pristine file-for-file identical.
 
-## V. 0.2.0 round (2026-10-19)
+## IX. 0.2.0 round (2026-10-19)
 
 New surface to verify: the `/topo` command (tiers / picker / review / off), plugin-specific keywords + forced migration, the three-layer false-trigger guard, verbatim forwarding with request-local instruction injection, `topo_team_msg` member messaging (no bash), custom roles, effort presets.
 
@@ -131,7 +131,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Check | Command / probe | Expected |
 |---|---|---|---|
-| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 6 live checks + orphan-check) |
+| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 7 live checks + orphan-check) |
 | A2 | Protocol probe | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
 | A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |
@@ -164,7 +164,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Result | Notes |
 |---|---|---|
-| A1 | ✅ all phases passed | 17 phases + manifest + 6 live checks (incl. live-review) + orphan-check |
+| A1 | ✅ all phases passed | 17 phases + manifest + 7 live checks (incl. live-review) + orphan-check |
 | A2 | ✅ PROBE OK | zero-token protocol probe |
 | A3 | ✅ restored | seeded bug back in place; `data/` and `session-log-*.md` cleared |
 | A3b | ✅ 11/12 baseline | the restored project fails exactly the seeded test (the suite grew to 12 in the hygiene round) |

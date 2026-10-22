@@ -8,7 +8,9 @@
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { costWarning, truncateOutput } from "../../extensions/tools.ts";
 import { formatTeammateReply } from "../../extensions/member-messaging.ts";
+import { nextTaskId } from "../../extensions/tasks.ts";
 import { defaultConfig } from "../../extensions/config.ts";
+import type { TaskRecord } from "../../extensions/registry.ts";
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async () => {
@@ -67,6 +69,23 @@ export default function (pi: ExtensionAPI) {
 				ack.includes("final report") && ack.includes("team_send") && ack.includes("team_task"),
 				ack.slice(0, 120),
 			);
+
+			// ---- nextTaskId (task-board capacity; the cap comes from config) ----
+			check("tasks: first free id is T1", nextTaskId([]) === "T1");
+			check("tasks: skips used ids", nextTaskId([{ id: "T1" }, { id: "T3" }] as unknown as TaskRecord[]) === "T2");
+			const fullBoard = Array.from({ length: 999 }, (_, i) => ({ id: `T${i + 1}` }) as unknown as TaskRecord);
+			let fullMsg = "";
+			try {
+				nextTaskId(fullBoard);
+			} catch (err) {
+				fullMsg = err instanceof Error ? err.message : String(err);
+			}
+			check("tasks: full board throws with the configured cap", /Task board is full \(999 tasks\)/.test(fullMsg), fullMsg);
+
+			// ---- truncateOutput with an explicit (config-supplied) cap ----
+			check("truncate: explicit cap below length truncates", truncateOutput("x".repeat(100), 10).includes("[Output truncated: 90 bytes omitted."), "");
+			check("truncate: explicit cap at length keeps text", truncateOutput("x".repeat(10), 10) === "x".repeat(10));
+			check("truncate: explicit cap above length keeps text", truncateOutput("hello", 10) === "hello");
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE16 DONE (all passed)" : `SMOKE16 DONE (${failed}/${results.length} failed)`);

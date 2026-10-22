@@ -97,6 +97,7 @@
 ## 八、演示项目复审与修复（plan-56，2026-10-19）
 
 来源：第二轮手动验证 session（`sandbox/session-log-2026-10-19.md`，已按 restore
+策略删除；会话日志现统一写 `sandbox/logs/`）
 策略删除）的任务 2（star 三方并行审查）与任务 3（ring 巡回汇总）。复审对象为
 `sandbox/project` 演示代码（非插件本身）。
 
@@ -124,7 +125,7 @@
 
 **验证**：修复态 `npm test` 12/12；M1 复现路径（`add ""` / `done 99`）均为干净 exit 2；M2 复现路径（`{}` / `{"tasks":[]}`）均回退为空列表；restore 后 11/12 基线（种子失败）不变；project 与 project-pristine 逐文件一致。
 
-## V. 0.2.0 轮次（2026-10-19）
+## 九、0.2.0 轮次（2026-10-19）
 
 待验证新面：`/topo` 命令（档位 / 选单 / review / off）、插件专属关键词 + 强制迁移、三层防误触护栏、逐字转发与请求本地指令注入、`topo_team_msg` 成员间消息（无需 bash）、自定义角色、effort 预设。
 
@@ -132,7 +133,7 @@
 
 | # | 检查项 | 命令 / 探针 | 预期 |
 |---|---|---|---|
-| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（17 phase + manifest + 6 live + orphan-check） |
+| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（17 phase + manifest + 7 live + orphan-check） |
 | A2 | 协议探针 | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
 | A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |
@@ -165,7 +166,7 @@
 
 | # | 结果 | 说明 |
 |---|---|---|
-| A1 | ✅ all phases passed | 17 phase + manifest + 6 live（含 live-review）+ orphan-check |
+| A1 | ✅ all phases passed | 17 phase + manifest + 7 live（含 live-review）+ orphan-check |
 | A2 | ✅ PROBE OK | 零 token 协议探针 |
 | A3 | ✅ 已还原 | 种子 bug 复现；`data/` 与 `session-log-*.md` 已清除 |
 | A3b | ✅ 11/12 基线 | 还原后的项目恰好只挂种子测试（套件已在卫生轮扩至 12 条） |

@@ -120,7 +120,7 @@ prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](
 队长崩溃恢复（registry 无 `.tmp-*` 残留、resume 后视图与磁盘一致）、Unicode/emoji 往返、
 参数校验（空 message/非法成员名/未知 task id/未知 member 均得明确错误）、
 目录不存在（sessions 目录删后 createMember 仍正常）、大规模（8 成员上限 / 999 任务上限 /
-单任务 detail 50KB）。
+单任务 detail 50KB——均为可配置默认值，见 [CONFIGURATION.md](CONFIGURATION_CN.md)）。
 
 TUI 渲染（renderCall/renderResult、`/topo` 面板、流式进度、激活 notify）只在交互 TUI
 生效，探针覆盖不到，按 [MANUAL-TESTING.md](MANUAL-TESTING_CN.md) 第 1 节人工验证——该文档
