@@ -458,3 +458,23 @@
 **验证**：冒烟与四探针全绿（见上）；探针调用修复经"首跑失败→定位冲突→补隔离→重跑通过"闭环；提交 858d0f5 推送 develop。
 
 **遗留人工项**（已向用户交付清单）：K1–K7 沙箱交互场景（K8 探针已由本轮覆盖）、M1–M6 纯手动项（真实安装/信任弹窗/TUI 选单与确认框——含档位确认框修复目验/渲染观感/译文/8 成员性能）、建议重跑 ring 剧本 Act 3（600s 超时族与无盲目重试改动直接作用于嵌套中继，2026-10-19 验证基于旧 180s 行为）。
+
+### 45. 四项请求轮：档位确认框结构化方案、沙箱日志分析加固、发版审查、安装故障定位（plan-83）
+
+**用户 prompt**：「1.目前在斜杠命令选择档位后，询问yes或no时，提供的还是类似提示词一样的文本，而不是模型给出的团队协作方案，请修改；2.请检查目前的发版方式是否合理，若不合理请给我修改建议；3.我刚刚做了沙箱测试，测试日志是 sandbox/logs/session-log-2026-10-22.md，请分析日志并优化项目；4.我在本机上 step install ~/GitProjects/Step-Code-Agent-Team 后，无法启动 step code，请定位原因」
+
+**思路**：四项独立请求并行推进——环境故障（4）优先诊断；确认框（1）从数据层改造；日志（3）先分析后优化；发版（2）纯审查出建议不改码。指定的日志文件已被此前一次未归档的还原删除（本 session 的操作失误），证据改从会话 JSONL 完整重建，分析照常完成。
+
+**工作**：① **档位确认框结构化方案**（`67efd02`）：plan.ts 的 TeamTier 增结构化 plan 字段（members/topology/effort 三行、双语、四档位齐全）+ tierPlanLines() 辅助函数；index.ts confirmChoice 把 guidance 散文行替换为结构化方案行；phase21 补 4 条断言（期间发现并修复探针 bug：裸 `performance` 标识符解析到 Node 全局对象，改用 getTier("performance")）。此版随后被用户第三轮反馈否决，演进终态见 entry 46。② **安装故障定位**（item 4，根因经隔离复现坐实）：用户 config.toml 原有 `git:github.com/...@v0.2.0-preview` 包项，`step install <本地路径>` 把本地路径**追加**进 packages 形成双副本——两个 index.ts 的六个团队工具名全部冲突（"Tool X conflicts with…"），扩展加载失败、step code 无法启动；单独任一副本启动均 0 冲突。用户配置现已只剩 git 一项（复测启动正常）；修复 = 两种安装方式只能留其一（`step remove` 摘除另一项）。该冲突由 step 扩展加载器判定，插件侧无法自去重，纳入 README 排障建议。③ **沙箱日志分析与优化**（`0c4f130`）：用户 2026-10-22 手动轮结论——§1 走查 + 三幕剧本全过；Act 1 前提已被早前请求修绿（基线 12/12），队长以 clarify_user + 只读复核任务妥善应对；Act 3 环形巡回 a→b→c 两跳成功、第 3 跳被拒并原文引用（"would reach 3 hops, over the ring loop limit (2)"），约 12 分钟链条在 600s 超时族下零超时零收割；team_set_topology 的 members 作用域正确使用；全会话仅 1 处 isError:true（即该预期拒绝）。四项优化：**restore-project.sh 删除日志前自动归档**到 sandbox/archive/<时间戳>-auto-before-restore/（根治"未归档的还原毁掉整轮证据"类事故，已功能验证）；激活指令补"用户未要求改动时保持只读，不要顺手修改文件"（双语——针对 22:47 未经要求修掉种子 bug 导致后续 Act 1 前提失效）；MANUAL-TESTING(_CN) Act 1 基线坑位提示（双语）；TEST-PLAN(_CN) U1/F2 执行记录。④ **发版方式审查**（item 2，纯建议待用户确认）：总体合理（develop/main 分离、latest 仅随正式版移动、annotated tag、发布后 hermetic 实测、约定成文）；三个实际问题——main 落后 develop 12 个提交（含 P1-1 预设信任门控安全修复）发布节奏断裂且 README"推荐安装"给新用户的是 v0.1.4 旧版、安装双副本冲突无排障文档、发版流程 8 步全手工易错。分级建议：P0（合并 develop→main 切 v0.2.0 正式版并移动 latest；README 补双副本冲突排障段）/ P1（scripts/release.sh 脚本化发版流程；npm 发布与否做明确决策并成文）/ P2（验证 step remove 对本地路径项的摘除；preview 不动 latest 约定延续）。
+
+**验证**：各代码项全量冒烟全绿；安装根因经隔离复现坐实；restore 自动归档经"造固件→还原→归档+删除确认→清理"功能验证。
+
+### 46. 档位确认框第三轮改造：展示模型生成的实际方案（plan-84）
+
+**用户 prompt**：「目前档位确认框出现的还是预设方案，但我希望能看到的是实际方案」（对 `67efd02` 结构化档位方案的反馈——该确认框的第三轮演进：非绑定 example → 策略散文 → 档位预设形态 → 模型实际方案）
+
+**思路**：前两轮内容均被否，核心诉求明确——yes/no 对话框必须展示模型针对**本次请求**真正会执行的实际方案，而非任何档位级预设。调研确认 ExtensionContext 持有 `model`（当前模型）与 `modelRegistry`，`ModelRegistry.complete(model, { systemPrompt, messages })` 支持一次性生成（密钥由 registry 解析）——"确认前让模型先出方案"路径成立。
+
+**工作**（`72e93ef`）：① forward.ts 新增 `teamPlanPrompt()`（一次性规划提示：成员名单与各自 effort、通信拓扑及理由、任务拆解与 blockedBy 依赖，≤10 行，只出方案不执行）与 `approvedPlanInstruction()`（批准方案的优先级注入）；② index.ts 新增 `generateTeamPlan()`——经 `ctx.modelRegistry.complete` 做一次性规划调用（90s 超时竞速 + clearTimeout 清理；无模型/出错/超时/空文本一律返回 null）；confirmChoice 增加 planText 参数（有实际方案时展示"模型为本次请求生成的实际方案：+方案全文"，否则回退档位标准形态）；runTeamCommand 接线：tier + 有请求 + 交互式时先 notify"正在生成本次请求的实际团队方案…"再生成 → 确认框展示之 → 批准则 pendingInjection = tierInstruction + approvedPlanInstruction（已确认方案优先级高于一般性策略描述）；③ phase21 补 4 条断言覆盖两个新构建器（再次避开 performance 全局对象坑）；④ MANUAL-TESTING(_CN) runbook 新增确认框内容说明段，TEST-PLAN(_CN) K2 行同步更新。**回退路径**：裸 /topo（无请求可规划）/ 无模型 / 规划调用失败 / headless（无对话框）均回退档位标准形态并注明"没有可展示的请求相关内容"；custom 与 review 分支不受影响。
+
+**验证**：全量冒烟全绿（18 phase + manifest + 7 live + orphan-check）；`bash test/run-smoke.sh 21` 单独通过；提交 72e93ef 推送 develop。
