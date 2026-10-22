@@ -258,6 +258,10 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 重跑任务——自动重试会重复工作。要避免超时：会话前在 `sandbox/config.toml`
 调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
 
+**等待期间的进度信号**：长派发会把成员的 interim 文本流式送入工具结果
+（`team_send` / `team_task start` 转发 `onUpdate`），`team_status` 则展示每个
+成员的实时状态——用它们区分"合法的长审查"与"卡死"，不必干等超时。
+
 **收尾还原**：`bash sandbox/restore-project.sh`。
 
 ## 6. 性能主观项

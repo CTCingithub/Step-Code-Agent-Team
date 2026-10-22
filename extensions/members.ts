@@ -190,6 +190,9 @@ export class TeamManager {
 	/** Member → the member it is currently waiting on (nested dispatch in flight). */
 	private waitingOn = new Map<string, string>();
 
+	/** Project trust (gates project-tier preset loading); set by forSession. */
+	private projectTrusted = false;
+
 	private constructor(
 		private reg: TeamRegistry,
 		private readonly cwd: string,
@@ -198,7 +201,7 @@ export class TeamManager {
 	) {}
 
 	/** Load (or create) the team bound to the leader session. */
-	static forSession(sessionFile: string | null, cwd: string): TeamManager {
+	static forSession(sessionFile: string | null, cwd: string, projectTrusted = false): TeamManager {
 		let teamId: string;
 		if (sessionFile) {
 			const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
@@ -212,7 +215,9 @@ export class TeamManager {
 		const reg = existing ?? createRegistry(teamId, cwd);
 		reg.cwd = cwd;
 		if (!existing) saveRegistry(reg);
-		return new TeamManager(reg, cwd);
+		const manager = new TeamManager(reg, cwd);
+		manager.projectTrusted = projectTrusted;
+		return manager;
 	}
 
 	get teamId(): string {
@@ -301,14 +306,16 @@ export class TeamManager {
 			const last = this.lastActivity.get(member.name) ?? 0;
 			if (now - last < maxIdleMs) continue;
 			const rpc = this.rpcs.get(member.name);
-			if (rpc) {
-				// Wait for the exit so the registry's "dead" is truthful and the
-				// next dispatch cannot respawn a duplicate on the same session id.
-				await rpc.killAndWait();
-				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
-			}
+			// Mark dead and drop the entry BEFORE awaiting the exit: a dispatch
+			// landing in the kill window must see "dead" and spawn a fresh
+			// process instead of attaching to the dying one (which fails with
+			// "exited during run" and triggers a duplicate re-dispatch).
 			member.status = "dead";
 			member.pid = -1;
+			if (rpc) {
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
+				await rpc.killAndWait();
+			}
 			reaped.push(member.name);
 		}
 		if (reaped.length > 0) this.save();
@@ -363,7 +370,7 @@ export class TeamManager {
 		// A role may reference a bundled preset (agents/<role>.md); explicit params win.
 		// Without an explicit role, members default to the configured role.
 		const role = params.role?.trim() || config.members.defaultRole;
-		const preset = loadPreset(role, this.cwd);
+		const preset = loadPreset(role, this.cwd, this.projectTrusted);
 		const systemPrompt = params.systemPrompt?.trim() || preset?.systemPrompt;
 
 		const record: MemberRecord = {
@@ -545,7 +552,9 @@ export class TeamManager {
 	 */
 	private ensureLive(member: MemberRecord): Promise<MemberRpc> {
 		const existing = this.rpcs.get(member.name);
-		if (existing && !existing.isClosed()) return Promise.resolve(existing);
+		// A record marked dead is being torn down; reusing its dying RPC fails
+		// mid-dispatch — fall through to a fresh spawn.
+		if (existing && !existing.isClosed() && member.status !== "dead") return Promise.resolve(existing);
 
 		const inFlight = this.spawning.get(member.name);
 		if (inFlight) return inFlight;
@@ -925,6 +934,23 @@ export class TeamManager {
 	 * fire-and-forget work where context continuity does not matter.
 	 */
 	async sendOneshot(name: string, message: string, options: SendOptions = {}): Promise<SendResult> {
+		// Serialize per member like persistent dispatches: a oneshot and a
+		// persistent run to the same member must not interleave — both mutate
+		// the same MemberRecord (status, usage), and an interleaved oneshot
+		// would mark a running member idle and drop a usage update (the cost
+		// guardrail then under-reports).
+		const prev = this.queues.get(name) ?? Promise.resolve();
+		const run = prev
+			.catch(() => {})
+			.then(() => this.runOneshotDispatch(name, message, options))
+			.finally(() => {
+				if (this.queues.get(name) === run) this.queues.delete(name);
+			});
+		this.queues.set(name, run);
+		return run;
+	}
+
+	private async runOneshotDispatch(name: string, message: string, options: SendOptions): Promise<SendResult> {
 		const member = this.findMember(name);
 		if (!member) {
 			const available = this.reg.members.map((m) => m.name).join(", ") || "none";

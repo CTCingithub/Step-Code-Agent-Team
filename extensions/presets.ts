@@ -108,23 +108,28 @@ function parseEffort(value: string | undefined): EffortLevel | undefined {
  * name, so users can shadow a bundled preset or add custom roles that behave
  * exactly like built-in ones (same frontmatter format).
  */
-function presetDirs(projectDir?: string | null): string[] {
+function presetDirs(projectDir?: string | null, trusted?: boolean): string[] {
 	const dirs = [presetsDir()];
 	const userDir = path.join(agentDir(), "agents");
 	if (!dirs.includes(userDir)) dirs.push(userDir);
-	if (projectDir) dirs.push(path.join(projectDir, ".stepcode", "agents"));
+	// Project-tier presets carry member spawn privileges (system prompts, tool
+	// allowlists, models), so they load only for a TRUSTED project — an
+	// untrusted repo must not be able to plant or shadow a role.
+	if (projectDir && trusted) dirs.push(path.join(projectDir, ".stepcode", "agents"));
 	return dirs;
 }
 
 const presetCaches = new Map<string, AgentPreset[]>();
 
 /** Loads presets from every tier; later tiers win on role-name conflicts. */
-export function loadPresets(projectDir?: string | null): AgentPreset[] {
-	const key = projectDir ?? "";
+export function loadPresets(projectDir?: string | null, trusted?: boolean): AgentPreset[] {
+	// Trust is part of the cache key: an untrusted load (project tier skipped)
+	// must not poison the cache for a later trusted load, or vice versa.
+	const key = `${projectDir ?? ""}\u0000${trusted === true}`;
 	const cached = presetCaches.get(key);
 	if (cached) return cached;
 	const byName = new Map<string, AgentPreset>();
-	for (const dir of presetDirs(projectDir)) {
+	for (const dir of presetDirs(projectDir, trusted)) {
 		let entries: fs.Dirent[];
 		try {
 			entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -156,6 +161,6 @@ export function loadPresets(projectDir?: string | null): AgentPreset[] {
 	return presets;
 }
 
-export function loadPreset(role: string, projectDir?: string | null): AgentPreset | undefined {
-	return loadPresets(projectDir).find((p) => p.name === role);
+export function loadPreset(role: string, projectDir?: string | null, trusted?: boolean): AgentPreset | undefined {
+	return loadPresets(projectDir, trusted).find((p) => p.name === role);
 }

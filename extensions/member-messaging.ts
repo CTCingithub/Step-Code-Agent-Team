@@ -140,6 +140,21 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			if (res.ok) {
+				// A success reply carrying NO reply key at all is protocol drift
+				// (the server always populates it on the ok path). Reporting it as
+				// an empty receiver turn would silently hide the drift — exactly
+				// how ring pass-along broke before.
+				if (res.reply === undefined) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `topo_team_msg to "${params.to}": the server's success reply carried no reply field (protocol drift) — do not assume an empty turn; note it in your final report.`,
+							},
+						],
+						isError: true,
+					};
+				}
 				return { content: [{ type: "text", text: formatTeammateReply(params.to, res.reply) }] };
 			}
 			// Policy rejections (topology) are actionable — the server lists the

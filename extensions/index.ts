@@ -121,7 +121,13 @@ export default function (pi: ExtensionAPI) {
 
 	const getManager = (ctx: ExtensionContext): TeamManager => {
 		if (shutDown) throw new Error("Agent team plugin has shut down for this session.");
-		if (!manager) manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
+		if (!manager) {
+			// Project-tier presets load only for trusted projects (the same gate
+			// as the project-level config); the trust probe lives on the context.
+			const trust = ctx as { isProjectTrusted?: () => boolean };
+			const trusted = typeof trust.isProjectTrusted === "function" ? trust.isProjectTrusted() : false;
+			manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd, trusted);
+		}
 		return manager;
 	};
 

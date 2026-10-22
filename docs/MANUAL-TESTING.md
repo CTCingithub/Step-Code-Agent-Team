@@ -302,6 +302,11 @@ automatic retry would duplicate the work. To avoid the timeout: raise
 `dispatch.timeoutMs` in `sandbox/config.toml` before the session (config is read
 only once at session startup).
 
+**Progress signals while waiting**: a long dispatch streams interim member text
+into the tool result (`team_send` / `team_task start` forward `onUpdate`), and
+`team_status` shows each member's live state — use them to tell a legitimate
+long review from a stuck one before the timeout fires.
+
 **Closing restore**: `bash sandbox/restore-project.sh`.
 
 ## 6. Subjective performance items
