@@ -446,3 +446,15 @@
 **工作**：① README.md/README_CN.md Activation 节新增 "The /topo command"/「/topo 命令」参考表，罗列 6 种形式（/topo 激活+团队板、/topo <请求> 逐字转发、/topo off、/topo <档位> 直通 economic/fast/balanced/performance、/topo custom 自定义流程、/topo review [目标] 并行评审）+ headless/RPC 回退行为（balanced 直应用+隐式确认）与档位名参数补全说明。② extensions/index.ts confirmChoice 档位分支移除 example 行——确认框只展示档位标签、guidance（模型将实际遵循的策略）与"具体成员、角色、拓扑与 effort 由模型按任务实际需要决定"注脚；example 仅保留在选单（tierPickerOptions）中供选择时参考，并加注释说明原因防止回退；顺带清理冗余三元表达式。自定义分支不受影响（展示用户需求原文）。
 
 **验证**：全量冒烟全绿（18 phase + manifest + 7 live + orphan-check）；双语表格行数与结构核验；提交 84bf584。
+
+### 44. 第三轮测试验证：流程核查 + 全量自动化门 + LLM 探针 4/4（plan-82）
+
+**用户 prompt**：「请检查测试流程无误后，开始测试功能，完成后告诉我哪些功能需要我手动测试」
+
+**思路**：按 MANUAL-TESTING runbook 走完整一轮——先核查测试流程自洽性（脚本与文档互证），再执行自动化门（零 token 冒烟 + LLM 层功能探针），收尾归档还原，最后汇总仍需人工的项。LLM 探针首跑即暴露流程缺陷，修复后重跑通过。
+
+**工作**：① **流程核查发现 4 处问题**：(a) **TESTING(_CN).md 的 LLM 探针调用缺 `STEP_CODING_AGENT_DIR` 隔离**——真 bug，实测 phase4/10 全部"无探针日志行"：step 回退到 `~/.stepcode/agent`，其 packages 项已安装本插件（git 克隆副本），与 `-e extensions/index.ts` 显式加载形成 6 个工具名冲突、扩展整体加载失败、探针从未运行；双语文档补隔离导出（指向 sandbox/agent）后重跑全部通过。(b) MANUAL-TESTING(_CN).md runbook 计数陈旧 17→18 phase（phase22 加入后未同步）。(c) run-smoke.sh 重复注释行（test-hardening 批残留）。(d) 确认 cfg-deep2 fixture 的旧式 settings.json 仍按 legacy 配置层读取（config.ts 优先级链 defaults < legacy files < settings.json < config.toml < env），无需改造。② **自动化门全绿**：`npm run smoke` 18 phase（含 phase22 自愈）+ manifest + 7 live + orphan-check。③ **LLM 探针 4/4 全过**：phase4（成员回复 PONG/上下文记忆 4242/respawn 后恢复 4242/shim 消息 BETA-OK）、phase10（并行 4/4 回复、并发实测 max 4 ≤ 5）、phase11（默认配置干净 SKIP——探针检测 ambient maxRecursionDepth=1 后按设计跳过；用 sandbox/cfg-deep2 补跑：depth-2 链 LEAF-OK 回传、子团队先于派发自举、leaf 以 --no-extensions 启动的边界断言全 PASS）、phase12（oneshot+用量记录/任务链 T1→T2/Unicode 往返/SIGKILL 后重生/流式中 interim 更新）。④ **轮次收尾按 runbook**：证据归档 `sandbox/archive/20261022-222529-round3-2026-10-20/`（1.7M）、种子态还原、TEST-PLAN 双语执行记录补 A1/K8/F1 行。
+
+**验证**：冒烟与四探针全绿（见上）；探针调用修复经"首跑失败→定位冲突→补隔离→重跑通过"闭环；提交 858d0f5 推送 develop。
+
+**遗留人工项**（已向用户交付清单）：K1–K7 沙箱交互场景（K8 探针已由本轮覆盖）、M1–M6 纯手动项（真实安装/信任弹窗/TUI 选单与确认框——含档位确认框修复目验/渲染观感/译文/8 成员性能）、建议重跑 ring 剧本 Act 3（600s 超时族与无盲目重试改动直接作用于嵌套中继，2026-10-19 验证基于旧 180s 行为）。
