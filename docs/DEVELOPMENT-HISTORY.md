@@ -426,3 +426,23 @@
 **工作**：① **审计**（scout）：定位 7 项摩擦（头号：`sandbox/run.sh` 不读 TEST-KEY.md——文档承诺自动读取但交互沙箱实际无 key）、8 处文档不一致、4 项承诺vs现实、证据丢失点（restore 删 `logs/`——正是 §7 日志产物）、5 项特性探针覆盖核查（4 项已覆盖，tasks 配置校验为唯一缺口）、10 条分级提案。② **新增 `sandbox/archive-round.sh`**：还原前把本轮证据（sessions JSONL、teams 注册表、logs/、project diff/status）归档到 gitignored 的 `sandbox/archive/<时间戳>-<标签>/`；.gitignore 同步。③ **`sandbox/run.sh` 修复头号摩擦**：环境未提供 STEP_API_KEY 时按 with-test-key.sh 同一提取逻辑读取 TEST-KEY.md 并导出。④ **restore-project.sh 死亡引用修复**（指向已合并删除的 TUI-VERIFICATION.md → MANUAL-TESTING.md §7）。⑤ **MANUAL-TESTING 双语新增「单轮测试 runbook」**（第 0 步预检：归档上轮→还原→密钥；第 1 步自动化门；第 2 步 6 个有序交互场景表格，每场景含可复制粘贴 prompt、明细指向与已知坑——topo 回复尽力语义需队长收集、每跳小工作量以 fit 180s 默认超时、选单需启动前改配置+重启会话；第 3 步收尾五步），文件头同步指向，形成 runbook+明细结构。⑥ **探针补齐**：phase9 增加 tasks 配置面断言（有效合并 + 无效回退），phase16 增加 nextTaskId 容量契约（首空闲/跳过已用/满板抛错）与 truncateOutput 显式 cap 行为；`bash test/run-smoke.sh 9 16` 全绿。⑦ **文档修正 10 处**：phase15 死亡引用、EN §5 陈旧 8/8→12/12、TESTING 双语 Layer D 配置化表述、TEST-PLAN 双语日志路径与 0.2.0 轮执行记录计数（校正为 17 phase + 7 live）、Known limitations standalone 清单 15/16、§0 还原表补 trust.json 行（快速还原不重置信任）、sandbox README 双语日志节补归档提示。
 
 **验证**：目标 phase 冒烟全绿；全量冒烟、链接与双语一致性、reviewer 审查并入下一验证轮统一执行。
+
+### 42. 优化计划实施：P0/timeout/文档/行为/测试加固五批（plan-80）
+
+**用户 prompt**：「请开始修改」（承接上一轮审计产出分级提案，团队协议激活）
+
+**思路**：审计提案按影响×工作量分五批实施——P0 正确性批（6 项低风险小改动）→ timeout 批（T1-T4）→ 文档批 → 行为变更批（P1-1/5/7/8 + T5）→ 测试加固批（P2-6/7/8d）。每批独立全量冒烟后提交 develop；P0 批完成后加派双视角对抗审查（契约视角发现并修复 9 项，含一个批内引入的 blocker）。
+
+**工作**：① **P0 批**（commit 1c85ca1）：members.ts kill 路径删序倒置+实例身份守卫（dispatch catch/reaper/killMember 三处——此前 delete 先于 await killAndWait，窗口内 ensureLive 以同一确定性 session-id 生成第二进程，双进程共写会话文件）；doSpawn onClose 按实例身份驱逐（输家竞争 spawn 的退出不再误删赢家条目/误标 dead）；activation.ts 否定护栏窗口从固定 6 字符改为回扫至子句边界或 40 字符（README 自己的例句 "don't use an agent squad" 此前实测会激活）；config.ts 全旧词 keywords 置空禁用激活（不再静默回退 14 个默认词扩大激活面）+ 迁移报告改走 session_start（受影响用户永远无法触发激活，原 tryActivate 内报告不可达）；member-messaging.ts finish() destroy→end（flush 待写字节）+ write 错误回调 + "team server asserts delivery" 措辞；README 双语安装注释去 skill+prompt。探针：phase1 零断言→10 条生命周期断言（兼作 P0-1/P0-2 回归）、phase6 远程否定回归、phase9 迁移语义。对抗审查修复 9 项（B1 通知路径、M1 陈旧文件头、m1/m2 探针保真、M2/M3 phase6 全旧词端到端+报告去重、M4/m5/m6 文档）。② **timeout 批**（1770ab6）：dispatch/oneshot 默认 180s→600s（覆盖含嵌套中继的整回合）；spawn 注入 STEPCODE_TEAM_REPLY_TIMEOUT_MS 使成员侧回复等待与派发超时联动（此前写死 180s，调高配置后嵌套中继仍先失败）；重试只重试证明工作未启动的错误（超时/回合中退出直接断链——此前 respawn 后重发同一 prompt 死循环，沙箱 r3 连续 4 次超时根因）；超时任务携带收割指引；超时分类 infra→"投递状态未知"+禁止重发指引。③ **文档批**（b3983e0）：T6 超时语义族（README/CONFIGURATION/MANUAL-TESTING 双语）；P2-1 members scoping 参数入 PROTOCOL/README（此前零文档）；P2-2 ARCHITECTURE 死引用；P2-3 autonomousThinking 幻影键 5 处→autonomousEffort；P2-4 打包说明；P2-5 TESTING gitignored 表述；P1-2 README_CN 成本陈述；m5 状态表刷新。④ **行为变更批**（003f134）：P1-1 安全修复——项目级预设（<cwd>/.stepcode/agents）此前无信任门控即可加载，不可信仓库仅靠打开项目即可植入/覆盖角色（systemPrompt+工具白名单注入成员进程）；现 presets 三层函数加 trusted 参数+缓存键含信任位，经 forSession 透传，phase3 三段断言。P1-5 {ok:true} 缺 reply 判协议漂移 isError；P1-7 oneshot 纳入 per-member 队列（消除 status 误置 idle 与 usage 丢失导致成本护栏少报）；P1-8 reaper 先置死+删条目再 kill（杀进程窗口内落地派发不再附到将死进程）+ ensureLive dead 守卫；T5 进度信号文档化（interim 流已在 onProgress/onUpdate 接通）。⑤ **测试加固批**（c57bd87）：PHASES 清单磁盘派生+opt-out（新探针不再静默漏跑）；runner 捕获 rc，240s 杀死明确报挂起（此前与断言失败的 (fails=0) 混同）；新增 phase22 自愈探针（ensureToolsAvailable 重置恢复/失活 no-op/session_start 重激活判据——该机制此前零回归保护）；orphan 检查轮询 15s+缺失 pid 显式 SKIPPED。按上下文预算 deferred 并记录：P2-8a/b/c/e 与 P2-9 杂项。
+
+**验证**：每批全量冒烟（17→18 phase + manifest + 7 live + orphan-check）全绿；P0 批经双视角对抗审查；phase3/6/9/22 专项验证通过。
+
+### 43. README 斜杠命令清单与档位确认框修复（plan-81）
+
+**用户 prompt**：「1.请在README中，罗列斜杠命令的选项与功能；2.目前在斜杠命令选择档位后，询问yes或no时，提供的并不是模型打算实施的智能体协作方案，而是示例，请修改」
+
+**思路**：两项独立修改——README 补命令参考表（此前 /topo 的各形式散落在 Activation/Tools 节，无统一清单）；确认框修复源于档位 example 的语义错位——example 在数据中明确标注"仅供参考，非固定方案"，却与待确认方案并列展示，用户确认的是一套模型从未受其约束的阵容，实际执行只遵循 guidance。
+
+**工作**：① README.md/README_CN.md Activation 节新增 "The /topo command"/「/topo 命令」参考表，罗列 6 种形式（/topo 激活+团队板、/topo <请求> 逐字转发、/topo off、/topo <档位> 直通 economic/fast/balanced/performance、/topo custom 自定义流程、/topo review [目标] 并行评审）+ headless/RPC 回退行为（balanced 直应用+隐式确认）与档位名参数补全说明。② extensions/index.ts confirmChoice 档位分支移除 example 行——确认框只展示档位标签、guidance（模型将实际遵循的策略）与"具体成员、角色、拓扑与 effort 由模型按任务实际需要决定"注脚；example 仅保留在选单（tierPickerOptions）中供选择时参考，并加注释说明原因防止回退；顺带清理冗余三元表达式。自定义分支不受影响（展示用户需求原文）。
+
+**验证**：全量冒烟全绿（18 phase + manifest + 7 live + orphan-check）；双语表格行数与结构核验；提交 84bf584。
