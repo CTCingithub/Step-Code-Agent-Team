@@ -69,6 +69,13 @@ npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any fail
 | 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 
+**Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
+a tier is picked, the plugin first asks the model (one-off, plan-only call) to draft
+the actual team plan for that request; the yes/no confirmation then shows that plan,
+and on approval it is injected with precedence over the tier's general guidance. Bare
+`/topo` (no request) or a failed planning call falls back to the tier's standard
+shape — there is nothing request-specific to show yet.
+
 ### Step 3 — wrap-up
 
 1. `Report the team's current status`, then disband the team when finished.

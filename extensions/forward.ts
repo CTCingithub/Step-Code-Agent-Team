@@ -72,6 +72,60 @@ export function tierInstruction(tier: TeamTier, lang: Lang): string {
 }
 
 /**
+ * One-off planning prompt for the tier confirmation: the model drafts the
+ * ACTUAL team plan for this specific request — what the user is about to
+ * approve — replacing the tier's preset shape in the yes/no dialog. Plan
+ * only: no tools, no execution.
+ */
+export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { system: string; user: string } {
+	const label = tier.label[lang] ?? tier.label.zh;
+	if (lang === "zh") {
+		return {
+			system: "你是智能体小队的方案规划器。根据用户请求与既定策略，输出具体的组队方案。只输出方案本身：不要执行、不要调用工具、不要解释流程。",
+			user: [
+				`用户请求：${request}`,
+				`既定策略：[团队方案 · ${label}] ${tier.guidance.zh}`,
+				"请输出实际方案，依次包含：",
+				"1. 成员名单：每个成员的名字、角色与各自 effort；",
+				"2. 通信拓扑（star/pipeline/mesh/ring/custom）及选择理由；",
+				"3. 任务拆解：每个任务分配给谁、先后依赖（用任务板 blockedBy 表达）。",
+				"控制在 10 行以内，直接给出方案。",
+			].join("\n"),
+		};
+	}
+	return {
+		system: "You are the team planner for an agent squad. Given the user's request and the chosen strategy, output the concrete team plan. Output the plan only: no execution, no tool calls, no process commentary.",
+		user: [
+			`User request: ${request}`,
+			`Chosen strategy: [Team plan · ${label}] ${tier.guidance.en}`,
+			"Output the actual plan, covering:",
+			"1. Roster: each member's name, role, and effort;",
+			"2. Communication topology (star/pipeline/mesh/ring/custom) and why;",
+			"3. Task breakdown: who does what, and the order dependencies (expressed as task-board blockedBy edges).",
+			"Keep it within 10 lines; give the plan directly.",
+		].join("\n"),
+	};
+}
+
+/**
+ * Instruction injected after the user confirms the model-generated plan:
+ * the approved plan takes precedence over the tier's general guidance.
+ */
+export function approvedPlanInstruction(tier: TeamTier, plan: string, lang: Lang): string {
+	const label = tier.label[lang] ?? tier.label.zh;
+	if (lang === "zh") {
+		return [
+			`[团队方案 · ${label}] 用户已确认以下实际方案——优先级高于一般性策略描述，请严格按它组建（成员、角色、拓扑、effort、任务拆解）：`,
+			plan,
+		].join("\n");
+	}
+	return [
+		`[Team plan · ${label}] The user confirmed this actual plan — it takes precedence over the general strategy; build exactly this (members, roles, topology, effort, task breakdown):`,
+		plan,
+	].join("\n");
+}
+
+/**
  * Parallel multi-reviewer protocol — the former prompts/team-review.md
  * template, reimplemented as code for the `/topo review` command (no
  * prompt-template resource, no context cost until invoked).

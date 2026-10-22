@@ -141,7 +141,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | # | Check | Probe | Gap |
 |---|---|---|---|
 | K1 | `/topo <request>` end-to-end | RPC prompt with the command | the verbatim request lands in the session log; the leader forms a team (no solo completion) |
-| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; the chosen tier's instruction reaches the model |
+| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; with a request attached the confirmation shows the model-generated actual plan (one-off planning call), and on approval that plan reaches the model with precedence over the tier's general guidance |
 | K3 | `plan.tier` pinned mode | config `tier="fast"` | no picker; the tier applies on every activation (command and keyword paths) |
 | K4 | `/topo review <target>` | sandbox session | three reviewers + worker merge protocol executed |
 | K5 | topo_team_msg success dispatch | two members + a declared edge; the upstream messages the downstream | the reply returns over the socket — the E2E gap left by the topology fix |
