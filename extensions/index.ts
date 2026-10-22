@@ -60,6 +60,7 @@ import {
 	PLAN_TIER_IDS,
 	tierLabel,
 	tierPickerOptions,
+	tierPlanLines,
 	type CustomPicks,
 	type TeamTier,
 } from "./plan.ts";
@@ -327,13 +328,14 @@ export default function (pi: ExtensionAPI) {
 			choice.kind === "tier"
 				? [
 						lang === "zh" ? `团队方案 · ${tierLabel(choice.tier, "zh")}` : `Team plan · ${tierLabel(choice.tier, "en")}`,
-						// The strategy the model will actually follow. The tier example
-					// stays in the picker only — showing it here would present a
-					// non-binding example as the confirmed plan.
-					choice.tier.guidance[lang],
+						// The tier's standard plan shape (members / topology / effort) —
+						// what the tier directs the model to build. Strategy prose stays
+						// out of the dialog: the user approves a concrete plan, not an
+						// instruction.
+						...tierPlanLines(choice.tier, lang),
 						lang === "zh"
-							? "具体成员、角色、拓扑与 effort 由模型按任务实际需要决定。"
-							: "Actual members, roles, topology, and effort are decided by the model from the task.",
+							? "以上为该档位的标准方案形态；具体成员名、数量与分工由模型按任务实际需要调整。"
+							: "The above is this tier's standard plan shape; the model adjusts member names, counts, and division of labor to the task.",
 					].filter(Boolean)
 				: [
 						lang === "zh" ? "团队方案 · 自定义" : "Team plan · Custom",
