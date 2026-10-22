@@ -42,8 +42,8 @@ interface ServerResponse {
 const EMPTY_TURN_PLACEHOLDER = "No result provided";
 
 /**
- * Formats a teammate reply for the sender. Delivery is guaranteed but the
- * reply is best-effort: a teammate whose turn ends without text (empty or
+ * Formats a teammate reply for the sender. The team server asserts delivery;
+ * the reply is best-effort: a teammate whose turn ends without text (empty or
  * the host placeholder) yields an explicit acknowledgment instead of a
  * silent empty result — otherwise ring-style "pass along and collect" flows
  * break quietly and members cannot tell delivery from a lost reply.
@@ -68,7 +68,7 @@ export default function (pi: ExtensionAPI) {
 		name: "topo_team_msg",
 		label: "Message Teammate",
 		description: [
-			"Send a message to a teammate. Delivery is guaranteed; the reply is best-effort — a teammate whose turn ends without text yields a delivery acknowledgment, not their answer.",
+			"Send a message to a teammate. The team server asserts delivery; the reply is best-effort — a teammate whose turn ends without text yields a delivery acknowledgment, not their answer.",
 			"Only teammates allowed by the team topology are accepted; a rejection lists the teammates you may message.",
 			"If no allowed teammate fits, state the need in your final report instead — the leader will relay it.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
@@ -85,7 +85,10 @@ export default function (pi: ExtensionAPI) {
 					if (settled) return;
 					settled = true;
 					clearTimeout(timer);
-					conn.destroy();
+					// Graceful half-close: end() flushes a pending write while
+					// destroy() can discard it — a request whose bytes never left
+					// must not be reported as delivered.
+					conn.end();
 					resolve(value);
 				};
 				const timer = setTimeout(
@@ -95,7 +98,11 @@ export default function (pi: ExtensionAPI) {
 				const conn = net.connect(socketPath);
 				let buffer = "";
 				conn.on("connect", () => {
-					conn.write(`${JSON.stringify(request)}\n`);
+					// A failed write must surface as a delivery failure, never as
+					// a silent success on an unsent request.
+					conn.write(`${JSON.stringify(request)}\n`, (err) => {
+						if (err) finish({ ok: false, error: `socket write failed: ${err.message}`, infra: true });
+					});
 				});
 				conn.on("data", (chunk: Buffer) => {
 					buffer += chunk.toString("utf8");

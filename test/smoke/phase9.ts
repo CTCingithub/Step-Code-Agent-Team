@@ -154,6 +154,31 @@ export default function (pi: ExtensionAPI) {
 			check("loadConfig: invalid tasks.max → default", c2.tasks.max === d.tasks.max, `got ${c2.tasks.max}`);
 			check("loadConfig: invalid tasks.outputCapBytes → default", c2.tasks.outputCapBytes === d.tasks.outputCapBytes, `got ${c2.tasks.outputCapBytes}`);
 
+			// Forced migration: a list that is ALL deprecated terms disables
+			// keyword activation (empty list) instead of silently re-adding the
+			// full default list — migration must narrow, never widen, the
+			// user's activation surface.
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { activation: { keywords: ["agent team"] } } }),
+			);
+			const cfgAllDeprecated = loadConfig({ agentDir: tmp });
+			check(
+				"loadConfig: all-deprecated keywords → activation disabled",
+				cfgAllDeprecated.activation.keywords.length === 0,
+				`got ${JSON.stringify(cfgAllDeprecated.activation.keywords)}`,
+			);
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { activation: { keywords: ["agent team", "智能体小队"] } } }),
+			);
+			const cfgPartialDeprecated = loadConfig({ agentDir: tmp });
+			check(
+				"loadConfig: partially-deprecated keywords keep the rest",
+				cfgPartialDeprecated.activation.keywords.join(",") === "智能体小队",
+				`got ${JSON.stringify(cfgPartialDeprecated.activation.keywords)}`,
+			);
+
 			// env overrides
 			const savedCost = process.env.STEPCODE_TEAM_COST_WARN;
 			const savedDebug = process.env.STEPCODE_TEAM_DEBUG;

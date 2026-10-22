@@ -648,9 +648,24 @@ function validate(config: PluginConfig): string[] {
 			(k) => !(DEPRECATED_KEYWORDS as readonly string[]).includes(k.trim().toLowerCase()),
 		);
 		if (kept.length !== config.activation.keywords.length) {
-			lastKeywordMigration = config.activation.keywords.filter((k) => !kept.includes(k));
-			config.activation.keywords = kept.length > 0 ? kept : d.activation.keywords;
-			warnings.push("activation.keywords (deprecated terms removed)");
+			// Report the user's own terms, trimmed and deduped: the strip above
+			// matches on the normalized form, so a list like
+			// ["agent team", "agent team "] must not notify the same term twice.
+			lastKeywordMigration = [
+				...new Set(config.activation.keywords.filter((k) => !kept.includes(k)).map((k) => k.trim())),
+			];
+			if (kept.length > 0) {
+				config.activation.keywords = kept;
+				warnings.push("activation.keywords (deprecated terms removed)");
+			} else {
+				// Every configured term was deprecated: keyword activation stays
+				// OFF instead of silently re-adding the full default list (which
+				// would widen the user's activation surface, not narrow it).
+				config.activation.keywords = [];
+				warnings.push(
+					"activation.keywords (all terms deprecated; keyword activation disabled — set plugin-specific keywords to re-enable)",
+				);
+			}
 		}
 	}
 

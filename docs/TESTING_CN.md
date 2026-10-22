@@ -72,14 +72,14 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 
 | 探针 | 覆盖 | 成本 |
 |---|---|---|
-| phase1 | 成员生命周期（spawn/握手/disband/重建） | 零 token |
+| phase1 | 成员生命周期断言（spawn/握手/注册表持久化/disband 复位/幂等恢复——kill 路径实例身份回归） | 零 token |
 | phase2 | 任务板状态机（DAG/环/ready-set/持久化） | 零 token |
 | phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
 | phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token（无 key 时 SKIP） |
-| phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 | 零 token |
+| phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 + 强制关键词迁移（剥离/上报/全旧词禁用）+ L1 否定护栏矩阵 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
-| phase9 | 配置边界（storage.dir/项目级/非法回退） | 零 token |
+| phase9 | 配置边界（storage.dir/项目级/非法回退）+ [tasks] 节校验 | 零 token |
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
 | phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |

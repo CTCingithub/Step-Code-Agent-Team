@@ -305,7 +305,7 @@ export class TeamManager {
 				// Wait for the exit so the registry's "dead" is truthful and the
 				// next dispatch cannot respawn a duplicate on the same session id.
 				await rpc.killAndWait();
-				this.rpcs.delete(member.name);
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 			}
 			member.status = "dead";
 			member.pid = -1;
@@ -554,12 +554,16 @@ export class TeamManager {
 
 	private async doSpawn(member: MemberRecord): Promise<MemberRpc> {
 		fs.mkdirSync(memberSessionsDir(this.reg.teamId), { recursive: true });
+		let rpc: MemberRpc | undefined;
 		const handlers: MemberRpcHandlers = {
 			onClose: () => {
-				this.rpcs.delete(member.name);
+				// Evict by instance identity: a losing duplicate spawn's exit
+				// must not delete the winner's entry or mark a live member dead.
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 				// Any exit (including an external kill) means the process is
-				// gone; keep the registry honest instead of a stale "idle".
-				if (member.status !== "dead") {
+				// gone; keep the registry honest instead of a stale "idle" —
+				// but only when no newer process owns the slot.
+				if (this.rpcs.get(member.name) === undefined && member.status !== "dead") {
 					member.status = "dead";
 					this.save();
 				}
@@ -567,7 +571,7 @@ export class TeamManager {
 		};
 		const config = getConfig();
 		const { args, env } = this.buildSpawnArgs(member);
-		const rpc = await MemberRpc.spawn(args, this.cwd, {
+		rpc = await MemberRpc.spawn(args, this.cwd, {
 			handlers,
 			env,
 			handshakeTimeoutMs: config.dispatch.handshakeTimeoutMs,
@@ -657,8 +661,12 @@ export class TeamManager {
 			// for exit so the next dispatch respawns a clean process instead of
 			// interleaving runs on one session id.
 			if (rpc) {
-				this.rpcs.delete(member.name);
+				// Kill first and wait for the exit, and only then evict by
+				// instance identity: deleting before the kill lets ensureLive
+				// spawn a second process on the same deterministic session id
+				// while this one is still dying (double-run on one session).
 				await rpc.killAndWait();
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 			}
 			throw augmentDispatchError(err, this.reg.members, options.nested === true);
 		} finally {
@@ -1051,7 +1059,7 @@ export class TeamManager {
 		const rpc = this.rpcs.get(member.name);
 		if (rpc) {
 			rpc.kill();
-			this.rpcs.delete(member.name);
+			if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 		}
 	}
 

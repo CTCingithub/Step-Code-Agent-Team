@@ -89,14 +89,14 @@ either set, phase5 is part of the regression run.
 
 | Probe | Coverage | Cost |
 |---|---|---|
-| phase1 | Member lifecycle (spawn / handshake / disband / rebuild) | zero token |
+| phase1 | Member lifecycle with assertions (spawn / handshake / registry persistence / disband reset / idempotent resume — kill-path instance-identity regression) | zero token |
 | phase2 | Task board state machine (DAG / cycles / ready set / persistence) | zero token |
 | phase3 | Messaging service + shim status round-trip + preset loading | zero token |
 | phase5 | Concurrent creation races / fail-fast kill / state machine / socket 0600 / abort / shutdown | 1 token (SKIP without a key) |
-| phase6 | Default-off activation + config pure functions + model/effort resolution | zero token |
+| phase6 | Default-off activation + config pure functions + model/effort resolution + forced keyword migration (strip / report / all-deprecated disables) + L1 negation guard matrix | zero token |
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero token |
 | phase8 | Recursion depth /proc inspection + sub-team self-bootstrap + concurrent defaults | zero token |
-| phase9 | Config boundaries (storage.dir / project-level / invalid fallback) | zero token |
+| phase9 | Config boundaries (storage.dir / project-level / invalid fallback) + [tasks] section validation | zero token |
 | phase13 | Project-level config (trust gate / deep merge / precedence / env / MAXDEPTH) | zero token |
 | phase14 | Ring loop cap (config surface / immediate throw at the manager layer / rejection at the server layer via the shim / topology precedence / boundary allowed through) | zero token |
 | phase15 | TUI render assertions (render.ts, the six tools' call/result, including collapse/expand / usage rows / status icons) | zero token (standalone run) |

@@ -53,7 +53,7 @@ flowchart TD
 # Dev loop: load the extension straight from a checkout, no install
 step -e ./extensions/index.ts
 
-# Try the full package (extension + skill + prompt) without installing
+# Try the full package (the pi manifest declares extensions only — no skills or prompt templates) without installing
 step -e /absolute/path/to/Step-Code-Agent-Team
 
 # Install from a checkout — records the path in your step settings

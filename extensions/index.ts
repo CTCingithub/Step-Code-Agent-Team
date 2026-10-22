@@ -529,6 +529,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		currentCtx = ctx;
 		applyProjectConfigFromCtx(ctx);
+		// Forced keyword migration (0.2.0): report stripped terms on a path that
+		// runs whether or not an activation follows — a user whose whole list was
+		// deprecated can never trigger activation (the effective list is now
+		// empty), so the report must not wait for one; the config-level warning
+		// is debug-gated only.
+		const migratedOnStart = consumeKeywordMigration();
+		if (migratedOnStart.length > 0) {
+			ctx.ui.notify(
+				`Migrated activation config: removed deprecated keywords (${migratedOnStart.join(", ")}). Use current keywords like 智能体小队 / topo team.`,
+				"info",
+			);
+		}
 		// Sub-leader members are granted their own team by their parent process
 		// (STEPCODE_TEAM_AUTOACTIVATE is set only when the depth budget allows).
 		if (process.env.STEPCODE_TEAM_AUTOACTIVATE === "1") {

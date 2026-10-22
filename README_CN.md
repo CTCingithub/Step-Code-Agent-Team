@@ -50,7 +50,7 @@ flowchart TD
 # 开发期：从检出副本直接加载扩展，无需安装
 step -e ./extensions/index.ts
 
-# 免安装试运行整个包（扩展 + 技能 + 提示模板）
+# 免安装试运行整个包（pi manifest 仅声明扩展——不再分发技能或提示词模板）
 step -e /absolute/path/to/Step-Code-Agent-Team
 
 # 从检出副本安装——仅把路径写进 step 设置
