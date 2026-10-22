@@ -327,8 +327,10 @@ export default function (pi: ExtensionAPI) {
 			choice.kind === "tier"
 				? [
 						lang === "zh" ? `团队方案 · ${tierLabel(choice.tier, "zh")}` : `Team plan · ${tierLabel(choice.tier, "en")}`,
-						choice.kind === "tier" ? choice.tier.guidance[lang] : "",
-						choice.kind === "tier" ? choice.tier.example[lang] : "",
+						// The strategy the model will actually follow. The tier example
+					// stays in the picker only — showing it here would present a
+					// non-binding example as the confirmed plan.
+					choice.tier.guidance[lang],
 						lang === "zh"
 							? "具体成员、角色、拓扑与 effort 由模型按任务实际需要决定。"
 							: "Actual members, roles, topology, and effort are decided by the model from the task.",

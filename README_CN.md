@@ -84,6 +84,19 @@ step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.
 
 激活后在本次会话内保持。**`/topo off`** 可再次停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复）。**迁移说明：** `/agent-team` 别名已在 0.2.0 移除——`/topo` 是唯一命令。旧版激活关键词（"agent team" / "智能体团队" / "组队" 等裸词）会在加载时从生效清单中剥离，避免遮蔽未来官方的智能体团队功能；被剥离的词会在激活时提示一次。用户的配置文件不会被改写。
 
+### `/topo` 命令
+
+| 形式 | 功能 |
+|---|---|
+| `/topo` | 激活插件并展示团队板（成员、任务、花费）。`plan.enabled = true` 且 `plan.tier = "always ask"` 时，先弹档位选单 |
+| `/topo <你的请求>` | 激活并把请求**逐字**转发给智能体——“使用团队”指令经 context 事件请求本地注入（不写入会话日志） |
+| `/topo off` | 停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复） |
+| `/topo <档位>` | 激活并直接应用团队策略：`economic`、`fast`、`balanced`、`performance`（跳过选单；见团队方案） |
+| `/topo custom` | 激活并走自定义流程（参考规模 → 拓扑 → effort，并可附上你的需求文本） |
+| `/topo review [目标]` | 激活并运行并行多评审员协议（三名 reviewer + 一名 worker 合并） |
+
+headless/RPC 会话无法弹对话框：选单直接回退 `balanced` 档，确认框为隐式同意。`/topo` 后接档位名有参数补全。
+
 ### 激活关键词（0.2.0 默认清单）
 
 仅插件专属关键词会激活插件。"智能体团队" / "agent team" / "组队" 等裸词已在 0.2.0 刻意移除，避免与未来官方智能体团队功能撞车：

@@ -98,6 +98,21 @@ effective keyword list on load, so a future official agent-teams feature is
 never shadowed; the stripped terms are reported once on activation. Your
 config file is never rewritten.
 
+### The `/topo` command
+
+| Form | Function |
+|---|---|
+| `/topo` | Activate the plugin and show the team board (members, tasks, spend). With `plan.enabled = true` and `plan.tier = "always ask"`, a picker offers the team strategies first |
+| `/topo <your request>` | Activate and forward the request to the agent **verbatim** — the "use the team" instruction is injected request-locally (never written to the session log) |
+| `/topo off` | Deactivate and re-hide the team tools — the escape hatch after a misfired activation (member sessions stay resumable) |
+| `/topo <tier>` | Activate and apply a team strategy directly: `economic`, `fast`, `balanced`, `performance` (skips the picker; see Team plans) |
+| `/topo custom` | Activate and walk the custom-requirements flow (reference size → topology → effort, plus your requirements text) |
+| `/topo review [target]` | Activate and run the parallel multi-reviewer protocol (three reviewers + a merge worker) |
+
+In headless/RPC sessions the picker cannot open a dialog: the `balanced`
+strategy applies directly and the confirmation is an implicit yes. Argument
+completion suggests the tier names after `/topo`.
+
 ### Activation keywords (0.2.0 defaults)
 
 Only plugin-specific keywords activate the plugin. The bare "agent team" /
