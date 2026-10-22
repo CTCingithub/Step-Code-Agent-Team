@@ -252,8 +252,7 @@ fi
 rm -rf "$EXPORT_DIR" "$NEUTRAL"
 
 # Orphan processes: a member spawned by phase17 must not outlive its leader.
-# A member spawned by phase17 must not outlive its leader. Always report:
-# a silently-skipped check is indistinguishable from a passing one.
+# Always report: a silently-skipped check is indistinguishable from a passing one.
 if [ -f "$AGENT_DIR/orphan.pid" ]; then
   orphan_pid="$(cat "$AGENT_DIR/orphan.pid")"
   # Poll up to ~15s instead of a fixed 3s: on a loaded machine a member can

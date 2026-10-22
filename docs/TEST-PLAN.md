@@ -169,6 +169,9 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | A3 | ✅ restored | seeded bug back in place; `data/` and `session-log-*.md` cleared |
 | A3b | ✅ 11/12 baseline | the restored project fails exactly the seeded test (the suite grew to 12 in the hygiene round) |
 | A4 | ✅ (via A1) | live-clean-export loads and activates the archived extension |
+| A1 | ✅ all phases passed (2026-10-22 optimization-verification re-run) | 18 phases + manifest + 7 live checks + orphan-check; includes the phase22 self-heal probe |
+| K8 | ✅ all four LLM probes passed (2026-10-22) | phase4 (replies / context memory / resume after respawn / shim messaging), phase10 (parallel 4/4, observed max 4 ≤ 5), phase11 (depth-2 chain, re-run under `sandbox/cfg-deep2` after a clean SKIP on the default config), phase12 (oneshot + usage, task chain, unicode, SIGKILL recovery, streaming with interim updates) |
+| F1 | Flow fixes found while re-running | TESTING(_CN): the documented LLM-probe invocation lacked `STEP_CODING_AGENT_DIR` isolation — an installed copy under `~/.stepcode/agent` conflicts with the `-e` extension, so every tool name failed to load and the probes never ran (isolation export added to both docs); MANUAL-TESTING(_CN) runbook 17→18 phases; run-smoke.sh duplicate comment removed |
 
 Remaining: K1–K8 need `STEP_API_KEY` (set it in `sandbox/TEST-KEY.md`, gitignored, or export it); M1–M6 are manual (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
 

@@ -114,6 +114,10 @@ Layer C).
 ## 3. Layer C — LLM-path tests (test key, inside the sandbox, minimal cost per probe)
 
 ```bash
+# Isolate the agent dir first: without this, step falls back to ~/.stepcode/agent,
+# whose packages entry (an installed copy of this plugin) conflicts with the -e
+# extension below — every tool name fails to load and the probe never runs.
+export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
   -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"

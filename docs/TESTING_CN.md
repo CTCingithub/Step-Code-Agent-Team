@@ -95,6 +95,9 @@ LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——�
 ## 3. C 层 — LLM 路径测试（测试 key，沙箱内，每条成本极小）
 
 ```bash
+# 先隔离 agent 目录：不设置时 step 回退到 ~/.stepcode/agent，其 packages 项里
+# 安装的本插件副本会与下面的 -e 扩展冲突——全部工具名加载失败，探针根本不运行。
+export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
   -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"

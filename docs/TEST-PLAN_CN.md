@@ -171,6 +171,9 @@
 | A3 | ✅ 已还原 | 种子 bug 复现；`data/` 与 `session-log-*.md` 已清除 |
 | A3b | ✅ 11/12 基线 | 还原后的项目恰好只挂种子测试（套件已在卫生轮扩至 12 条） |
 | A4 | ✅（经 A1） | live-clean-export 加载并激活归档导出物的扩展 |
+| A1 | ✅ all phases passed（2026-10-22 优化验证轮重跑） | 18 phase + manifest + 7 live + orphan-check；含 phase22 自愈探针 |
+| K8 | ✅ 四个 LLM 探针全部通过（2026-10-22） | phase4（回复/上下文记忆/respawn 恢复/shim 消息）、phase10（并行 4/4，实测 max 4 ≤ 5）、phase11（默认配置干净 SKIP 后用 `sandbox/cfg-deep2` 补跑 depth-2 链）、phase12（oneshot+用量/任务链/Unicode/SIGKILL 恢复/流式中 interim） |
+| F1 | 重跑中发现的流程修复 | TESTING(_CN)：文档化的 LLM 探针调用缺 `STEP_CODING_AGENT_DIR` 隔离——`~/.stepcode/agent` 中已安装的插件副本与 `-e` 扩展冲突，全部工具名加载失败、探针根本不运行（双语文档已补隔离导出）；MANUAL-TESTING(_CN) runbook 17→18 phase；run-smoke.sh 重复注释已删 |
 
 剩余：K1–K8 需 `STEP_API_KEY`（写入 `sandbox/TEST-KEY.md`——gitignored，或 export 环境变量）；M1–M6 为人工项（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
