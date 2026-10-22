@@ -506,6 +506,11 @@ export class TeamManager {
 			// Effective depth bound (it may come from a project-level config the
 			// child cannot read at load time); the child's config loader honors it.
 			STEPCODE_TEAM_MAXDEPTH: String(getConfig().members.maxRecursionDepth),
+			// Effective dispatch timeout: the member-side topo_team_msg reply wait
+			// must not give up before the leader-side dispatch that contains it
+			// (a nested relay outliving its outer dispatch produced the recurring
+			// "timeout waiting for member to settle" loop).
+			STEPCODE_TEAM_REPLY_TIMEOUT_MS: String(getConfig().dispatch.timeoutMs),
 		};
 		if (canOrchestrate) {
 			args.push("-e", extensionEntryPath(), "-e", memberMessagingEntryPath());
@@ -768,11 +773,26 @@ export class TeamManager {
 			} catch (err) {
 				lastError = err;
 				if (options.signal?.aborted) break;
+				// Only retry failures that prove the work never started (spawn /
+				// handshake). A settle timeout or a mid-run exit means the member
+				// may already have done the work — re-sending the same prompt to
+				// the respawned member duplicates it (its resumed context holds
+				// the result), which is what made timeouts recur in a loop.
+				const msg = err instanceof Error ? err.message : String(err);
+				if (!/aborted before start|handshake|spawn|failed to start/i.test(msg)) break;
 			}
 		}
 		const aborted = options.signal?.aborted === true;
+		const failure = lastError instanceof Error ? lastError.message : String(lastError);
 		try {
-			this.failTask(id, aborted ? "aborted by leader" : lastError instanceof Error ? lastError.message : String(lastError));
+			this.failTask(
+				id,
+				aborted
+					? "aborted by leader"
+					: /timeout waiting for member to settle|exited during run/.test(failure)
+						? `${failure} — the member's context may already contain the work; re-dispatch a short harvest prompt (e.g. "report what you have completed so far") instead of re-running the task`
+						: failure,
+			);
 		} catch {
 			// Already terminal via another path; the original error matters more.
 		}

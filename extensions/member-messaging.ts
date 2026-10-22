@@ -23,8 +23,12 @@ import * as net from "node:net";
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 
-/** Matches the shim's timeout: a teammate reply may take a while. */
-const REPLY_TIMEOUT_MS = 180_000;
+/**
+ * Teammate reply timeout. The leader injects the effective dispatch.timeoutMs
+ * at spawn (STEPCODE_TEAM_REPLY_TIMEOUT_MS) so this hop never gives up before
+ * the leader-side dispatch that contains it; falls back to 180s when unset.
+ */
+const REPLY_TIMEOUT_MS = Number.parseInt(process.env.STEPCODE_TEAM_REPLY_TIMEOUT_MS ?? "", 10) || 180_000;
 
 interface ServerResponse {
 	ok?: boolean;
@@ -92,7 +96,13 @@ export default function (pi: ExtensionAPI) {
 					resolve(value);
 				};
 				const timer = setTimeout(
-					() => finish({ ok: false, error: "timeout waiting for the teammate's reply", infra: true }),
+					() =>
+						finish({
+							ok: false,
+							error:
+								"timeout waiting for the teammate's reply — delivery state is unknown (the message may already be running on the receiver). " +
+								"Do NOT re-send the same message (it would duplicate the work); the leader collects member output, so proceed with your task and note the timeout in your final report.",
+						}),
 					REPLY_TIMEOUT_MS,
 				);
 				const conn = net.connect(socketPath);

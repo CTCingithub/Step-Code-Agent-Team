@@ -137,6 +137,7 @@ export default function (pi: ExtensionAPI) {
 				}),
 			);
 			const c2 = loadConfig({ agentDir: tmp });
+			check("config: dispatch/oneshot timeout defaults cover a full member turn", d.dispatch.timeoutMs === 600_000 && d.oneshot.timeoutMs === 600_000, `dispatch=${d.dispatch.timeoutMs} oneshot=${d.oneshot.timeoutMs}`);
 			check("loadConfig: invalid members.max → default", c2.members.max === d.members.max, `got ${c2.members.max}`);
 			check(
 				"loadConfig: invalid maxRecursionDepth → default",
