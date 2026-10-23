@@ -513,3 +513,16 @@
 
 
 **验证**：发布前 develop 冒烟门全绿；release.sh 内冒烟门全绿（18 phase + manifest + 7 live + orphan-check）；hermetic 安装激活实测通过；远程 refs（main/latest/develop/v0.2.0）逐一核验指向正确。
+
+### 50. 遗留问题修复与测试流程更新（plan-88）
+
+**用户 prompt**：「1.请不要管可疑进程问题，解决前4项代码遗留问题；2.请检查测试流程是否需要修改更新；3.请检查更新优化文档」（性能档团队方案：Fixer-A/B 竞速修代码、TestLead 查测试流程、DocLead 更文档、Chief 终审；实际由队长直接实施+explore 子代理审计）
+
+**思路**：T1 四项代码遗留逐项修复并配回归；T2 派只读 explore 子代理系统审计测试流程（16 项发现），按严重度实施低风险项；T3 文档收尾。
+
+**工作**：① **P1-4 修复**（activation.ts）：元问题守卫从"关键词前 12 字符窗口命中即抑"改为**句子锚定**——定义问句（什么是/是什么/what is）与文档引用（文档/readme/提到，含"关键词+的+文档"链接形态）恒判元问题；how-to 问句仅在剔除 how-to 词与填充词后无请求主体时判元问题。"如何用智能体小队修复测试"类普通用法请求自此正常激活（此前必被误抑、headless 静默单干）；"how to use the topo team" 纯用法问句仍抑。phase6 新增 8 条回归用例；中途修复 filler 正则含 \s 致英文停用词黏连（"use the"→"usethe" 越过 \b 边界）的缺陷。② **Optional 写法警示**（tools.ts）：双参 Type.Optional 处加注释——单参内嵌写法经负载匹配对照实验（3 败 vs 2 胜）证实与成员握手超时相关，防未来"清理"改回。③ **runner 抖动硬化**（test/run-smoke.sh）：per-phase run+verdict 提取为 run_phase_attempt 函数，失败后以新 session id 有界重试一次——单个负载抖动（成员握手 grazing 15s 预算）不再 fail 整个套件与 release 门。④ **tsc 伪影处置**（index.ts）：context hook 经官方 ContextEvent 类型化窄 cast 注册（消除 submodule dist 构建偏移导致的重载缺失）；synthetic 消息内联进返回字面量获得上下文类型。tsc 全图错误 19→1（剩余 1 个为 typebox@1.3.7 映射伪影）。⑤ **T2 测试流程更新**（explore 审计 16 项发现）：HIGH#1 runner 重试由③实现；HIGH#2 createMember spawn 路径与 startTask 的重试策略不一致——产品侧变更，列为建议待专轮。MEDIUM——phase 清单 17→18 并补 phase22 行（TESTING/README/TEST-PLAN 双语 6 处）；Layer C 调用块补 mkdir -p sessions 与 --approval-mode auto；补 cfg-* fixture 重指向说明（消除 phase11 假绿）；sandbox/config.toml 陈旧 180000→600000。LOW——cfg-misc/cfg-on 死键 autonomousThinking→autonomousEffort；cfg-misc 移除 cwd 相对断链的 storage 覆盖；smoke-phase4 错误文案指向 sandbox/TEST-KEY.md；archive-round.sh git 命令路径限定；TESTING restore 表补 archive-first 警告；MANUAL-TESTING coverage 摘要补 phase22 自愈、确认框注补"仅交互式"限定；README 双语 Status 行更新为已发布；TESTING §0 补 OPT_OUT_PHASES/probe.sh/archive-round.sh 指引。
+
+**验证**：全量冒烟门全绿（18 phase + manifest + 7 live + orphan-check，runner 重构后正常路径实测）；phase6 八条新用例全过；tsc 19→1；双语编辑均经锚点断言落盘。
+
+**遗留建议**：members.ts createMember/ensureLive 与 startTask 重试策略不一致（握手类失败可安全重试——ensureLive 对已存在记录幂等），需配套探针后专轮实施；storage.dir 相对路径按 cwd 解析的 footgun 仍在（CONFIGURATION 未承诺相对路径语义，fixture 覆盖已移除）。
+
