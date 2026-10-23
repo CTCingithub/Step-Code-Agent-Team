@@ -154,7 +154,7 @@ function sanitizeTeamId(sessionId: string): string {
 }
 
 /** Team id a session file maps to (null for ephemeral sessions without a file). */
-export function teamIdForSession(sessionFile: string | null): string | null {
+export function teamIdForSession(sessionFile: string | null | undefined): string | null {
 	if (!sessionFile) return null;
 	const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
 	// Session files are named "<timestamp>_<sessionId>.jsonl"; strip the ts prefix.
@@ -201,7 +201,7 @@ export class TeamManager {
 	) {}
 
 	/** Load (or create) the team bound to the leader session. */
-	static forSession(sessionFile: string | null, cwd: string, projectTrusted = false): TeamManager {
+	static forSession(sessionFile: string | null | undefined, cwd: string, projectTrusted = false): TeamManager {
 		let teamId: string;
 		if (sessionFile) {
 			const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
@@ -1027,7 +1027,7 @@ export class TeamManager {
 					return;
 				}
 				const msg = event.message as
-					| { role?: string; content?: unknown[]; usage?: Record<string, number> }
+					| { role?: string; content?: unknown[]; usage?: { input?: number; output?: number; cost?: { total?: number } } }
 					| undefined;
 				if (event.type === "message_end" && msg?.role === "assistant") {
 					usage.turns += 1;

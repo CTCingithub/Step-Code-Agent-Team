@@ -52,7 +52,6 @@ import {
 	teamPlanPrompt,
 	teamReviewInstruction,
 	tierInstruction,
-	type Lang,
 } from "./forward.ts";
 import {
 	allTiers,
@@ -64,6 +63,7 @@ import {
 	tierPickerOptions,
 	tierPlanLines,
 	type CustomPicks,
+	type Lang,
 	type TeamTier,
 } from "./plan.ts";
 import { VALID_EFFORT } from "./config.ts";
@@ -324,6 +324,37 @@ export default function (pi: ExtensionAPI) {
 		}
 	};
 
+	/** Braille spinner frames for the plan-generation progress widget. */
+	const PLAN_PROGRESS_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+	/**
+	 * Progress indicator for the one-off plan generation: a spinner widget
+	 * above/below the editor via ctx.ui.setWidget with plain strings
+	 * (importing pi-tui here would stage a second copy of the extension and
+	 * clash on tool names — see the STANDALONE_PHASES note in run-smoke.sh).
+	 * Falls back to a plain notify when the host exposes no widget slot.
+	 * Always call the returned stop function — it clears the widget.
+	 */
+	const startPlanProgress = (ctx: ExtensionContext, message: string): (() => void) => {
+		// The widget slot is terminal-only UI (see ExtensionContext.mode's doc):
+		// rpc/json/print modes get one plain notify instead of widget traffic.
+		if (ctx.mode !== "tui" || typeof ctx.ui.setWidget !== "function") {
+			ctx.ui.notify(message, "info");
+			return () => {};
+		}
+		let frame = 0;
+		const draw = () => {
+			ctx.ui.setWidget("team-plan-progress", [`${PLAN_PROGRESS_FRAMES[frame % PLAN_PROGRESS_FRAMES.length]} ${message}`]);
+			frame += 1;
+		};
+		draw();
+		const timer = setInterval(draw, 120);
+		return () => {
+			clearInterval(timer);
+			ctx.ui.setWidget("team-plan-progress", undefined);
+		};
+	};
+
 	/**
 	 * One-off planning call: the model drafts the ACTUAL team plan for this
 	 * request — what the user is about to approve in the confirmation. Plan
@@ -465,8 +496,15 @@ export default function (pi: ExtensionAPI) {
 			// built — not the tier's preset shape.
 			let planText: string | null = null;
 			if (choice.kind === "tier" && effectiveRequest && isInteractive(ctx)) {
-				ctx.ui.notify(lang === "zh" ? "正在生成本次请求的实际团队方案…" : "Generating the actual team plan for this request…", "info");
-				planText = await generateTeamPlan(ctx, choice.tier, effectiveRequest, lang);
+				const stopPlanProgress = startPlanProgress(
+					ctx,
+					lang === "zh" ? "正在生成智能体拓扑协作方案…" : "Generating the agent topology collaboration plan…",
+				);
+				try {
+					planText = await generateTeamPlan(ctx, choice.tier, effectiveRequest, lang);
+				} finally {
+					stopPlanProgress();
+				}
 			}
 			const confirmed = choice.kind === "review" ? true : await confirmChoice(ctx, choice, lang, planText);
 			if (!confirmed) choice = null;
@@ -565,33 +603,25 @@ export default function (pi: ExtensionAPI) {
 	pi.on("context", (event) => {
 		if (!pendingInjection) return;
 		const injection = pendingInjection;
-		const messages = (event.messages as unknown as Array<{ role?: string; content?: unknown }>).map((m) => ({ ...m }));
+		// structuredClone (not a spread) keeps the AgentMessage union intact for the type checker.
+		const messages = event.messages.map((m) => structuredClone(m));
 		for (let i = messages.length - 1; i >= 0; i--) {
 			const m = messages[i];
 			if (m?.role !== "user") continue;
-			const content = m.content;
-			if (typeof content === "string") {
-				m.content = `${injection}\n\n${content}`;
+			if (typeof m.content === "string") {
+				m.content = `${injection}\n\n${m.content}`;
 				return { messages };
 			}
-			if (Array.isArray(content)) {
-				const parts = content.map((p) => (typeof p === "object" && p !== null ? { ...(p as object) } : p));
-				const textPart = parts.find(
-					(p) =>
-						typeof p === "object" &&
-						p !== null &&
-						(p as { type?: string }).type === "text" &&
-						typeof (p as { text?: unknown }).text === "string",
-				) as { text?: string } | undefined;
-				if (textPart) {
-					textPart.text = `${injection}\n\n${textPart.text ?? ""}`;
-					m.content = parts;
-					return { messages };
-				}
+			const parts = m.content.map((p) => structuredClone(p));
+			const textPart = parts.find((p) => p.type === "text");
+			if (textPart) {
+				textPart.text = `${injection}\n\n${textPart.text ?? ""}`;
+				m.content = parts;
+				return { messages };
 			}
 			break;
 		}
-		const synthetic = { role: "user", content: [{ type: "text", text: injection }] };
+		const synthetic = { role: "user", content: [{ type: "text", text: injection }], timestamp: Date.now() };
 		return { messages: [...messages, synthetic] };
 	});
 

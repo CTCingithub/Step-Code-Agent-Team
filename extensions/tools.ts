@@ -387,7 +387,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const manager = getManager(ctx);
 			assertActive();
-			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
+			const edges = params.edges?.map((e: { from: string; to: string }) => [e.from, e.to] as [string, string]);
 			const topology = manager.setTopology(params.shape, edges, params.members);
 			const lines = ["Topology set:", manager.describeTopology()];
 			return {

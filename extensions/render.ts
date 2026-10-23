@@ -7,12 +7,8 @@
  */
 
 import { Text } from "@step-harness/pi-tui";
+import type { Theme } from "@step-harness/coding-agent";
 import type { MemberUsage } from "./registry.ts";
-
-interface Theme {
-	fg: (color: string, text: string) => string;
-	bold: (text: string) => string;
-}
 
 const STATUS_ICON: Record<string, string> = {
 	idle: "○",
@@ -49,7 +45,11 @@ export type TeamToolName =
 	| "team_status";
 
 export function renderTeamCall(tool: TeamToolName) {
-	return (args: Record<string, unknown>, theme: Theme): Text => {
+	// `object` (not Record<string, unknown>) so empty schemas — Type.Object({})
+	// infers {}, which lacks an index signature — still satisfy the official
+	// render-call parameter type; the body works off a narrowed local.
+	return (toolArgs: object, theme: Theme): Text => {
+		const args = toolArgs as Record<string, unknown>;
 		const head = theme.fg("toolTitle", theme.bold("team "));
 		const str = (v: unknown): string => (typeof v === "string" ? v : "");
 		switch (tool) {
