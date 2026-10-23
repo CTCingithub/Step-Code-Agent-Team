@@ -37,6 +37,22 @@ import * as stepCore from "@step-harness/coding-agent";
 import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
 import { DEFAULT_TIER_MODE, PLAN_TIER_MODES } from "./plan.ts";
 
+/**
+ * Official step-config symbols this plugin consumes from
+ * `@step-harness/coding-agent` (its `step/config-toml.ts` exports). All
+ * optional: an older step that predates them still works through the
+ * fallbacks at each use site — a hard import would fail to link there.
+ * Typing the shape here turns our own typos into compile errors.
+ */
+interface StepCoreConfigExports {
+	CONFIG_DIR_NAME?: string;
+	STEP_CONFIG_FILE_NAME?: string;
+	ensureStepConfigFile?: (path: string) => string;
+	readStepConfig?: (path: string) => unknown;
+}
+
+const stepConfigExports = stepCore as Partial<StepCoreConfigExports>;
+
 export const CONFIG_FILE_NAME = "stepcode-agent-team.json";
 /** Legacy settings file name (Step Code's pre-config.toml convention). */
 export const SETTINGS_FILE_NAME = "settings.json";
@@ -235,12 +251,12 @@ export function unifiedConfigFilePath(agentDirPath: string): string {
 
 /** Project-level unified config (<projectDir>/.stepcode/config.toml). */
 export function projectUnifiedConfigFilePath(projectDir: string): string {
-	const dirName = (stepCore as Record<string, unknown>).CONFIG_DIR_NAME;
+	const dirName = stepConfigExports.CONFIG_DIR_NAME;
 	return path.join(projectDir, typeof dirName === "string" && dirName ? dirName : ".stepcode", unifiedConfigFileName());
 }
 
 function unifiedConfigFileName(): string {
-	const name = (stepCore as Record<string, unknown>).STEP_CONFIG_FILE_NAME;
+	const name = stepConfigExports.STEP_CONFIG_FILE_NAME;
 	return typeof name === "string" && name ? name : "config.toml";
 }
 
@@ -262,7 +278,7 @@ export function seedGlobalConfigExample(agentDirPath: string): boolean {
 			return true;
 		}
 		// No config file yet: create it with step's own header, then seed.
-		const ensure = (stepCore as Record<string, unknown>).ensureStepConfigFile as ((path: string) => string) | undefined;
+		const ensure = stepConfigExports.ensureStepConfigFile;
 		if (typeof ensure !== "function") return false;
 		ensure(file);
 		fs.appendFileSync(file, seedBlock(), { encoding: "utf8", mode: 0o600 });
@@ -355,7 +371,7 @@ function seedBlock(): string {
  * version does not export the reader.
  */
 function readUnifiedSection(file: string): Record<string, unknown> | null {
-	const read = (stepCore as Record<string, unknown>).readStepConfig as ((path: string) => unknown) | undefined;
+	const read = stepConfigExports.readStepConfig;
 	if (typeof read !== "function") return null;
 	let doc: unknown;
 	try {
