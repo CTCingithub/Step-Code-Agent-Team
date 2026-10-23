@@ -80,6 +80,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"topo_team_msg tool (no bash needed — read-only presets can use their topology edges too).",
 			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
 			"Keep teams small (2-4 members) and give each member a distinct focus.",
+			"Role presets (bundled, <agentDir>/agents/, trusted <project>/.stepcode/agents/) are this plugin's own system; the built-in subagent extension reads the same directories with the same frontmatter shape independently — one file can back both a team role and a subagent agent, but the two systems keep separate state and never share it.",
 		].join(" "),
 		parameters: Type.Object({
 			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
@@ -248,6 +249,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"list: show the board.",
 			"A task is ready when every task in blockedBy is done; cycles are rejected.",
 			"Prefer blockedBy dependencies over member-to-member messages.",
+			"Scope: this is the team's shared board — tasks have assignees and live with the team, not the session; for your own in-session checklist use the built-in task_* tools. The two systems are separate and do not sync.",
 		].join(" "),
 		parameters: Type.Object({
 			action: StringEnum(["create", "start", "complete", "fail", "list"] as const, {
