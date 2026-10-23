@@ -329,6 +329,11 @@ npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,
 LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，跑法见
 [docs/TESTING.md](docs/TESTING_CN.md) 与 `sandbox/README_CN.md`。
 
+发版在 `main` 上经 `scripts/release.sh <version>` 完成——前置检查（树干净、在
+`main`、tag 未占用）→ 冒烟门 → 版本 bump → 附注 tag → 推送 → `latest` 移动
+（仅正式版；预览版绝不移动）→ 从已推送 tag 做 hermetic 安装实测。`develop` →
+`main` 合并不在脚本内：先手动合并，再在 `main` 上运行本脚本。
+
 > **仅开发路径**：`test/` 与 `sandbox/` 仅供开发使用——不在打包产物内
 > （`package.json` 的 "files" 只分发扩展、agents 与文档）。跑冒烟集或使用沙箱
 > 请克隆仓库；`step install` 安装包只含扩展本身。

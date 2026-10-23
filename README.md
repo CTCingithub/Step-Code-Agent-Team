@@ -396,6 +396,12 @@ The suite ships in `test/smoke/` with a hermetic runner (`test/run-smoke.sh`,
 temporary agent dir via mktemp). LLM-path probes (`sandbox/smoke-phase4/10/11/12.ts`)
 need a test key; see [docs/TESTING.md](docs/TESTING.md) and `sandbox/README.md`.
 
+Releases happen on `main` via `scripts/release.sh <version>` — preflight checks
+(clean tree, on `main`, tag free) → smoke gate → version bump → annotated tag →
+push → `latest` move (final releases only; previews never move it) → hermetic
+install verify from the pushed tag. The `develop` → `main` merge stays a manual
+step: merge first, then run the script on `main`.
+
 > **Dev-only paths:** `test/` and `sandbox/` are development-only — they are
 > not part of the packaged artifact (`package.json` "files" ships the
 > extension, agents, and docs). Clone the repo to run the smoke suite or use
