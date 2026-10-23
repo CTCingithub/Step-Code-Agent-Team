@@ -429,9 +429,12 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.notify(lines.join("\n"), "info");
 		if (!isInteractive(ctx)) return true;
 		try {
-			return await ctx.ui.confirm("智能体团队", lang === "zh" ? "按此方案组建团队？" : "Form the team with this plan?", {
+			const acceptLabel = lang === "zh" ? "Accept · 按此方案组建" : "Accept · form this team";
+			const cancelLabel = lang === "zh" ? "取消" : "Cancel";
+			const picked = await ctx.ui.select("智能体团队", [acceptLabel, cancelLabel], {
 				timeout: INTERACTIVE_TIMEOUT_MS,
 			});
+			return picked === acceptLabel;
 		} catch {
 			return false;
 		}
@@ -498,7 +501,7 @@ export default function (pi: ExtensionAPI) {
 			if (choice.kind === "tier" && effectiveRequest && isInteractive(ctx)) {
 				const stopPlanProgress = startPlanProgress(
 					ctx,
-					lang === "zh" ? "正在生成智能体拓扑协作方案…" : "Generating the agent topology collaboration plan…",
+					lang === "zh" ? "正在生成智能体拓扑协作方案" : "Generating the agent topology collaboration plan",
 				);
 				try {
 					planText = await generateTeamPlan(ctx, choice.tier, effectiveRequest, lang);

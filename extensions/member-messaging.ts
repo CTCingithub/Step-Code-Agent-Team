@@ -153,9 +153,10 @@ export default function (pi: ExtensionAPI) {
 							},
 						],
 						isError: true,
+						details: { to: params.to },
 					};
 				}
-				return { content: [{ type: "text", text: formatTeammateReply(params.to, res.reply) }] };
+				return { content: [{ type: "text", text: formatTeammateReply(params.to, res.reply) }], details: { to: params.to } };
 			}
 			// Policy rejections (topology) are actionable — the server lists the
 			// allowed teammates. Infrastructure failures get the "don't
@@ -166,6 +167,7 @@ export default function (pi: ExtensionAPI) {
 			return {
 				content: [{ type: "text", text: `topo_team_msg to "${params.to}" failed: ${res.error ?? "unknown error"}.${guidance}` }],
 				isError: true,
+				details: { to: params.to },
 			};
 		},
 	});

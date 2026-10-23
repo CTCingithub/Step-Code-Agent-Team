@@ -19,6 +19,7 @@ import type { PluginConfig } from "./config.ts";
 import { getConfig, VALID_EFFORT } from "./config.ts";
 import { isActive } from "./activation.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
+import { taskPrompt } from "./tasks.ts";
 
 type GetManager = (ctx: ExtensionContext) => TeamManager;
 
@@ -257,7 +258,9 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			}),
 			id: Type.Optional(Type.String({ description: "Task id (required for start/complete/fail)" })),
 			title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
-			detail: Type.Optional(Type.String({ description: "Task detail / acceptance criteria" })),
+			detail: Type.Optional(
+				Type.String({ description: "Task detail / acceptance criteria — on start it is appended to the dispatch prompt" }),
+			),
 			blockedBy: Type.Optional(Type.Array(Type.String(), { description: "Task ids this task depends on" })),
 			assignee: Type.Optional(Type.String({ description: "Member name for start, or default assignee for create" })),
 			result: Type.Optional(Type.String({ description: "Result text for complete" })),
@@ -322,7 +325,12 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 								})
 						: undefined,
 				};
-				const { task, text } = await manager.startTask(params.id, params.assignee, undefined, options);
+				let dispatchMessage: string | undefined;
+				if (params.detail) {
+					const board = manager.snapshot().tasks.find((t) => t.id === params.id);
+					dispatchMessage = board ? [taskPrompt(board), params.detail].join("\n\n") : params.detail;
+				}
+				const { task, text } = await manager.startTask(params.id, params.assignee, dispatchMessage, options);
 				return {
 					content: [
 						{

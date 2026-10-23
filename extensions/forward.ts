@@ -88,7 +88,7 @@ export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { s
 				"请输出实际方案，依次包含：",
 				"1. 成员名单：每个成员的名字、角色与各自 effort；",
 				"2. 通信拓扑（star/pipeline/mesh/ring/custom）及选择理由；",
-				"3. 任务拆解：每个任务分配给谁、先后依赖（用任务板 blockedBy 表达）。",
+				"3. 任务拆解：每个任务从 1 起独立编号；每个任务分配给谁、先后依赖（用任务板 blockedBy 表达）。",
 				"控制在 10 行以内，直接给出方案。",
 			].join("\n"),
 		};
@@ -101,7 +101,7 @@ export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { s
 			"Output the actual plan, covering:",
 			"1. Roster: each member's name, role, and effort;",
 			"2. Communication topology (star/pipeline/mesh/ring/custom) and why;",
-			"3. Task breakdown: who does what, and the order dependencies (expressed as task-board blockedBy edges).",
+			"3. Task breakdown: number each task from 1; who does what, and the order dependencies (expressed as task-board blockedBy edges).",
 			"Keep it within 10 lines; give the plan directly.",
 		].join("\n"),
 	};
