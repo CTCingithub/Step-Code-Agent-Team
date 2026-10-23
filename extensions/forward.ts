@@ -74,7 +74,7 @@ export function tierInstruction(tier: TeamTier, lang: Lang): string {
 /**
  * One-off planning prompt for the tier confirmation: the model drafts the
  * ACTUAL team plan for this specific request — what the user is about to
- * approve — replacing the tier's preset shape in the yes/no dialog. Plan
+ * approve — replacing the tier's preset shape in the Accept/Cancel dialog. Plan
  * only: no tools, no execution.
  */
 export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { system: string; user: string } {
