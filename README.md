@@ -75,8 +75,7 @@ config, shared with your team, auto-installed once the project is trusted).
 From git — no packaging step needed, it is a standard step package:
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.1.4)
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 preview (latest stays on the stable line until 0.2.0 final)
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.2.0)
 ```
 
 **Troubleshooting — "Tool … conflicts with …" at startup**: step loads every

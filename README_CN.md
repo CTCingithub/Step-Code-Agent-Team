@@ -69,8 +69,7 @@ skill 或提示词模板资源；编排协议在激活时经请求本地注入�
 从 git 安装——无需任何打包步骤，它就是标准 step 包：
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.1.4）
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 预览版（latest 在 0.2.0 正式版前保持稳定线）
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.2.0）
 ```
 
 **排障——启动时报 "Tool … conflicts with …"**：step 会加载 `packages` 里的每一项，而本插件在同一份配置里只能安装一份。本地路径安装（`step install /path/to/checkout`）与 git 安装（`git:github.com/…`）并存会加载两份 `extensions/index.ts`，六个团队工具名全部冲突、扩展加载失败，step 可能无法启动。修复：只保留一项——对另一项执行 `step remove`（用当初安装时相同的路径或 git 规格）。
