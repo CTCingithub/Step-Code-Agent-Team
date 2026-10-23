@@ -70,8 +70,8 @@ npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any fail
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
-a tier is picked, the plugin first asks the model (one-off, plan-only call) to draft
-the actual team plan for that request; the yes/no confirmation then shows that plan,
+a tier is picked, the plugin first asks the model (one-off, plan-only call with a
+"正在生成智能体拓扑协作方案…" spinner) to draft the actual team plan for that request; the yes/no confirmation then shows that plan,
 and on approval it is injected with precedence over the tier's general guidance. Bare
 `/topo` (no request) or a failed planning call falls back to the tier's standard
 shape — there is nothing request-specific to show yet.

@@ -40,9 +40,9 @@ maxRecursionDepth = 1                # team-tree depth bound (1–4)
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5                    # parallel member cap (1–16); extra dispatches queue
-timeoutMs = 600000                   # per-dispatch timeout
+timeoutMs = 600000                   # per-dispatch timeout (ms) — covers the member's whole turn, nested relays included
 handshakeTimeoutMs = 15000           # member spawn handshake timeout
-retries = 1                          # task retry count (0–5)
+retries = 1                          # retries only dispatches that never started (0–5)
 
 [stepcodeAgentTeam.oneshot]
 timeoutMs = 600000                   # stateless dispatch timeout
@@ -94,7 +94,7 @@ debug = false                        # debug logging
 | `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams` |
 | `tasks` | `max` sizes the task board (ids T1..T<max>; creating past the cap errors with the configured limit); `outputCapBytes` truncates the model-visible per-task output — the full text stays in `details.fullText` |
 | `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender states it in their final report — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `topo_team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
-| `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). A tier is a strategy prompt with a non-binding example — the model decides members, roles, topology, and effort. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths); `/topo <tier>` overrides per invocation. Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |
+| `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). With a request attached, the model first drafts the ACTUAL plan for that request (a one-off, plan-only call with a spinner progress) and the yes/no confirmation shows that plan — on approval it is injected with precedence over the general strategy; bare `/topo` (no request) or a failed planning call falls back to the tier's standard shape. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths); `/topo <tier>` overrides per invocation. Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |
 | `presets.effort` | Per-role effort overrides (built-in role names shown; custom roles set `effort` in their own frontmatter). Resolution: explicit `effort` param → this config → preset frontmatter → `high`. Inert while `models.autonomousEffort` is on. Custom roles load from `<agentDir>/agents/` and `<project>/.stepcode/agents/` — see [docs/ROLES.md](ROLES.md) |
 | `debug` | Diagnostic logging to stderr |
 
@@ -123,4 +123,5 @@ Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejectio
 
 - **First-activation seed**: when the plugin is first activated in a session and your global config has no `stepcodeAgentTeam` table, a commented defaults block is appended to `config.toml`. It is comments only (defaults keep applying) — uncomment to override, or delete the block.
 - **Known compromise**: tool description strings fixed at registration (e.g. the model list) and the depth gate (`maxRecursionDepth`) do not refresh when a project-level override is applied mid-session; the effective depth bound is propagated to sub-members via `STEPCODE_TEAM_MAXDEPTH`, and description changes take effect next session.
+- **Scope**: these settings govern the team plugin only. The built-in subagent extension (`subagent` / `agent_send` tools) has its own settings and lifecycle; team role presets and subagent agent definitions are discovered from the same directories but parsed independently. For a personal in-session checklist use the built-in `task_*` tools — the team board is the shared, cross-member board.
 - **Sandbox isolation**: `STEP_CODING_AGENT_DIR` moves both the agent dir and the global config root, so the sandbox never touches your real configuration.

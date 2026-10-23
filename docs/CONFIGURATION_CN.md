@@ -40,9 +40,9 @@ maxRecursionDepth = 1                # 团队树深度上限（1–4）
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5                    # 并行成员上限（1–16）；超出的派活排队
-timeoutMs = 600000                   # 单次派发超时
+timeoutMs = 600000                   # 单次派发超时（ms）——覆盖成员整个回合，含嵌套中继
 handshakeTimeoutMs = 15000           # 成员 spawn 握手超时
-retries = 1                          # 任务重试次数（0–5）
+retries = 1                          # 仅对“尚未启动”的派发重试（0–5）
 
 [stepcodeAgentTeam.oneshot]
 timeoutMs = 600000                   # 无状态派发超时
@@ -94,7 +94,7 @@ debug = false                        # 调试日志
 | `storage` | 团队数据根目录（注册表、sessions、prompts、socket）；null = `<agentDir>/teams` |
 | `tasks` | `max` 决定任务板容量（id 为 T1..T<max>；超出后创建报错并给出配置上限）；`outputCapBytes` 截断模型可见的单任务输出——全文保留在 `details.fullText` |
 | `topology` | 成员间消息默认拒绝，除非声明的边允许。`requireDeclaration` 落实「先设计再开工」。`maxLoopCount` 约束链长（队长派发 = 0，每转发 +1）；超限跳被拒且发送方改为把结论写入最终报告——同时防止环形巡游死锁。成员经内置 `topo_team_msg` 工具直达通信（无需 bash，只读角色同样可用），边对所有角色可用；依赖请用任务板 `blockedBy` 表达 |
-| `plan` | 团队方案选单（默认关）：激活时队长给出经济/快速/均衡/性能四种*策略* + 自定义流程（规模 → 拓扑 → effort）。档位是带非绑定示例的策略提示词——成员、角色、拓扑与 effort 由模型按任务决定。`tier = "always ask"`（默认）每次弹选单；固定档位在每次激活（命令与关键词路径）直接应用；`/topo <档位名>` 可按次覆盖。选单超时/headless 回退 `balanced`；选项按语言本地化；无成本倍率 |
+| `plan` | 团队方案选单（默认关）：激活时队长给出经济/快速/均衡/性能四种*策略* + 自定义流程（规模 → 拓扑 → effort）。带请求文本时，模型先经一次性规划调用（带进度动画）为该请求起草实际组队方案，yes/no 确认框展示该方案——批准后以高于一般性策略的优先级注入；裸 `/topo`（无请求）或规划调用失败时回退为该档位的标准方案形态。`tier = "always ask"`（默认）每次弹选单；固定档位在每次激活（命令与关键词路径）直接应用；`/topo <档位名>` 可按次覆盖。选单超时/headless 回退 `balanced`；选项按语言本地化；无成本倍率 |
 | `presets.effort` | 按角色覆盖 effort（内置角色名已列出；自定义角色在自己的 frontmatter 写 `effort`）。解析链：显式 `effort` 参数 → 本配置 → 预设 frontmatter → `high`。`models.autonomousEffort` 开启时不生效。自定义角色从 `<agentDir>/agents/` 与 `<project>/.stepcode/agents/` 加载——见 [docs/ROLES.md](ROLES_CN.md) |
 | `debug` | stderr 诊断日志 |
 
@@ -123,4 +123,5 @@ debug = false                        # 调试日志
 
 - **首次激活种子化**：插件在会话中首次激活时，若你的全局配置中没有 `stepcodeAgentTeam` 表，会向 `config.toml` 追加一段注释默认值块。全部为注释（默认值照常生效）——取消注释即可覆盖，或整块删除。
 - **已知妥协**：注册时固化的工具描述串（如模型列表）与本进程的深度门（`maxRecursionDepth`）不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
+- **管辖范围**：本组设置仅管辖团队插件。内置 subagent 扩展（`subagent` / `agent_send` 工具）有各自的设置与生命周期；team 角色预设与 subagent agent 定义从同一批目录发现但独立解析。个人会话内 checklist 请用内置 `task_*` 工具——团队任务板是跨成员共享板。
 - **沙箱隔离**：`STEP_CODING_AGENT_DIR` 同时移动 agentDir 与全局配置根，沙箱因此绝不触碰你的真实配置。

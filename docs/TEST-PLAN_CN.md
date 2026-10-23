@@ -84,7 +84,7 @@
 - **验证记录**：带 bug 状态 `cd sandbox/project && npm test` = 7/8 通过、退出码 1；临时改为按 id
   查找后 8/8 全绿（证明可修复），已还原为带 bug 的演示状态。
 - `secret-sample.txt`（假密钥）保留，供路径保护护栏测试使用。
-- **还原机制**（plan-10）：`sandbox/project-pristine/` 为初始快照（不含 data/）；`bash sandbox/restore-project.sh` 用快照覆盖 project/ 已知文件并清除 data/。实测：模拟成员修复（8/8）→ 还原 → 回到 7/8 预期失败。每轮演示前先执行一次。
+- **还原机制**（plan-10）：`sandbox/project-pristine/` 为初始快照（不含 data/）；`bash sandbox/restore-project.sh` 用快照覆盖 project/ 已知文件并清除 data/。实测：模拟成员修复（8/8）→ 还原 → 回到 7/8 预期失败（演示套件此后增至 12 条——当前还原态基线为 11/12）。每轮演示前先执行一次。
 
 ### 演示剧本
 

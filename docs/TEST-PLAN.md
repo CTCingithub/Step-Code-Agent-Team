@@ -84,7 +84,7 @@ serving as the vehicle for team members doing real work inside the sandbox (memb
 - **Verification record**: with the bug, `cd sandbox/project && npm test` = 7/8 pass, exit code 1; after temporarily switching to lookup by id,
   8/8 all green (proving it's fixable); already restored to the buggy demo state.
 - `secret-sample.txt` (fake secret) is kept for the path-protection guardrail test.
-- **Restore mechanism** (plan-10): `sandbox/project-pristine/` is the initial snapshot (without data/); `bash sandbox/restore-project.sh` overwrites project/'s known files from the snapshot and clears data/. Verified: simulated member fix (8/8) → restore → back to the 7/8 expected failure. Run it once before each demo round.
+- **Restore mechanism** (plan-10): `sandbox/project-pristine/` is the initial snapshot (without data/); `bash sandbox/restore-project.sh` overwrites project/'s known files from the snapshot and clears data/. Verified: simulated member fix (8/8) → restore → back to the 7/8 expected failure (the demo suite has since grown to 12 tests — the current restored baseline is 11/12). Run it once before each demo round.
 
 ### Demo script
 
