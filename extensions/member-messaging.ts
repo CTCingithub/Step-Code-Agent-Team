@@ -23,8 +23,12 @@ import * as net from "node:net";
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 
-/** Matches the shim's timeout: a teammate reply may take a while. */
-const REPLY_TIMEOUT_MS = 180_000;
+/**
+ * Teammate reply timeout. The leader injects the effective dispatch.timeoutMs
+ * at spawn (STEPCODE_TEAM_REPLY_TIMEOUT_MS) so this hop never gives up before
+ * the leader-side dispatch that contains it; falls back to 180s when unset.
+ */
+const REPLY_TIMEOUT_MS = Number.parseInt(process.env.STEPCODE_TEAM_REPLY_TIMEOUT_MS ?? "", 10) || 180_000;
 
 interface ServerResponse {
 	ok?: boolean;
@@ -42,8 +46,8 @@ interface ServerResponse {
 const EMPTY_TURN_PLACEHOLDER = "No result provided";
 
 /**
- * Formats a teammate reply for the sender. Delivery is guaranteed but the
- * reply is best-effort: a teammate whose turn ends without text (empty or
+ * Formats a teammate reply for the sender. The team server asserts delivery;
+ * the reply is best-effort: a teammate whose turn ends without text (empty or
  * the host placeholder) yields an explicit acknowledgment instead of a
  * silent empty result — otherwise ring-style "pass along and collect" flows
  * break quietly and members cannot tell delivery from a lost reply.
@@ -68,7 +72,7 @@ export default function (pi: ExtensionAPI) {
 		name: "topo_team_msg",
 		label: "Message Teammate",
 		description: [
-			"Send a message to a teammate. Delivery is guaranteed; the reply is best-effort — a teammate whose turn ends without text yields a delivery acknowledgment, not their answer.",
+			"Send a message to a teammate. The team server asserts delivery; the reply is best-effort — a teammate whose turn ends without text yields a delivery acknowledgment, not their answer.",
 			"Only teammates allowed by the team topology are accepted; a rejection lists the teammates you may message.",
 			"If no allowed teammate fits, state the need in your final report instead — the leader will relay it.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
@@ -85,17 +89,30 @@ export default function (pi: ExtensionAPI) {
 					if (settled) return;
 					settled = true;
 					clearTimeout(timer);
-					conn.destroy();
+					// Graceful half-close: end() flushes a pending write while
+					// destroy() can discard it — a request whose bytes never left
+					// must not be reported as delivered.
+					conn.end();
 					resolve(value);
 				};
 				const timer = setTimeout(
-					() => finish({ ok: false, error: "timeout waiting for the teammate's reply", infra: true }),
+					() =>
+						finish({
+							ok: false,
+							error:
+								"timeout waiting for the teammate's reply — delivery state is unknown (the message may already be running on the receiver). " +
+								"Do NOT re-send the same message (it would duplicate the work); the leader collects member output, so proceed with your task and note the timeout in your final report.",
+						}),
 					REPLY_TIMEOUT_MS,
 				);
 				const conn = net.connect(socketPath);
 				let buffer = "";
 				conn.on("connect", () => {
-					conn.write(`${JSON.stringify(request)}\n`);
+					// A failed write must surface as a delivery failure, never as
+					// a silent success on an unsent request.
+					conn.write(`${JSON.stringify(request)}\n`, (err) => {
+						if (err) finish({ ok: false, error: `socket write failed: ${err.message}`, infra: true });
+					});
 				});
 				conn.on("data", (chunk: Buffer) => {
 					buffer += chunk.toString("utf8");
@@ -123,6 +140,21 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			if (res.ok) {
+				// A success reply carrying NO reply key at all is protocol drift
+				// (the server always populates it on the ok path). Reporting it as
+				// an empty receiver turn would silently hide the drift — exactly
+				// how ring pass-along broke before.
+				if (res.reply === undefined) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `topo_team_msg to "${params.to}": the server's success reply carried no reply field (protocol drift) — do not assume an empty turn; note it in your final report.`,
+							},
+						],
+						isError: true,
+					};
+				}
 				return { content: [{ type: "text", text: formatTeammateReply(params.to, res.reply) }] };
 			}
 			// Policy rejections (topology) are actionable — the server lists the

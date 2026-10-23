@@ -7,7 +7,7 @@
 > **参考说明：** 本项目**参考了 DeepSeek Harness 的智能体团队（agent teams）功能**——队长/成员模型、带依赖的任务板、成员间消息均沿袭其设计。本插件是面向 Step Code 的独立实现，与 DeepSeek 无隶属关系。
 
 > **⚠️ 消耗警告：** 每个团队成员都是独立的完整 agent 进程，拥有自己的上下文窗口，
-> 默认使用对话当前模型、思考强度 `high`。N 个成员并行干活的成本约为单轮对话的 N 倍，
+> 默认使用对话当前模型（各角色预设 effort：`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`）。N 个成员并行干活的成本约为单轮对话的 N 倍，
 > 长任务累积很快。插件会统计团队累计花费，并在 `cost.warnThreshold`
 > （默认 $1，0 禁用）时告警——请留意 `team_status`，完工后及时 `team_disband`
 > 回收空闲成员。
@@ -36,7 +36,7 @@ flowchart TD
 - **成员是真实的 `step` 进程**：独立上下文窗口、可配模型与工具白名单，通过 RPC 协议驱动。成员上下文持久化在 session 文件中，用同一 session-id 重启即可续聊。
 - **任务板是 DAG**：`blockedBy` 全部完成的任务才 `ready`；成环的依赖在创建时即被拒绝。
 - **成员间消息**：成员通过内置 `topo_team_msg` 工具连接队长进程内的 Unix socket 与队友通信；直达消息受**拓扑**约束（见下），默认星型下全部经由队长中转。该工具不需要 shell——只读预设（`scout`/`planner`/`reviewer`）保持原状，其拓扑边始终可用。`stepcode-team` CLI shim 保留作手动/外部路径。
-- **护栏**（以下为默认值——每个数字都可在 step 的 `config.toml` 的 `[stepcodeAgentTeam]` 表中配置，见 [CONFIGURATION_CN.md](docs/CONFIGURATION_CN.md)）：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 180s 超时；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；任务板与单任务输出上限（999 个任务 / 50 KiB）；队长退出时全部子进程被清理。
+- **护栏**（以下为默认值——每个数字都可在 step 的 `config.toml` 的 `[stepcodeAgentTeam]` 表中配置，见 [CONFIGURATION_CN.md](docs/CONFIGURATION_CN.md)）：最多 8 个**存活**成员（解散/回收的成员不再占名额）；最多 5 个并发调度（超出则排队，轮到才启动）；单次调度 600s 超时（覆盖成员整回合，含嵌套中继）；累计花费超 `STEPCODE_TEAM_COST_WARN`（默认 $1）时告警；空闲 30 分钟的成员被回收（session 保留可恢复）；任务板与单任务输出上限（999 个任务 / 50 KiB）；队长退出时全部子进程被清理。
 
 ## 环境要求
 
@@ -50,7 +50,7 @@ flowchart TD
 # 开发期：从检出副本直接加载扩展，无需安装
 step -e ./extensions/index.ts
 
-# 免安装试运行整个包（扩展 + 技能 + 提示模板）
+# 免安装试运行整个包（pi manifest 仅声明扩展——不再分发技能或提示词模板）
 step -e /absolute/path/to/Step-Code-Agent-Team
 
 # 从检出副本安装——仅把路径写进 step 设置
@@ -69,9 +69,13 @@ skill 或提示词模板资源；编排协议在激活时经请求本地注入�
 从 git 安装——无需任何打包步骤，它就是标准 step 包：
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.1.4）
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 预览版（latest 在 0.2.0 正式版前保持稳定线）
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.2.0）
 ```
+
+**排障——启动时报 "Tool … conflicts with …"**：step 会加载 `packages` 里的每一项，而本插件在同一份配置里只能安装一份。本地路径安装（`step install /path/to/checkout`）与 git 安装（`git:github.com/…`）并存会加载两份 `extensions/index.ts`，六个团队工具名全部冲突、扩展加载失败，step 可能无法启动。修复：只保留一项——对另一项执行 `step remove`（用当初安装时相同的路径或 git 规格）。
+
+**分发方式**：仅 git——本插件不发布到 npm。稳定线用
+`step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest`（或锁定版本 tag）；`latest` 只跟随正式版，预览版绝不移动它。
 
 然后在会话里下达目标，例如："用智能体小队并行审查这个仓库"（或先运行 `/topo`——插件在此之前保持静默）。
 
@@ -83,6 +87,19 @@ step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.
 2. **自然语言**：prompt 文本命中激活关键词（清单见下，可配置）。
 
 激活后在本次会话内保持。**`/topo off`** 可再次停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复）。**迁移说明：** `/agent-team` 别名已在 0.2.0 移除——`/topo` 是唯一命令。旧版激活关键词（"agent team" / "智能体团队" / "组队" 等裸词）会在加载时从生效清单中剥离，避免遮蔽未来官方的智能体团队功能；被剥离的词会在激活时提示一次。用户的配置文件不会被改写。
+
+### `/topo` 命令
+
+| 形式 | 功能 |
+|---|---|
+| `/topo` | 激活插件并展示团队板（成员、任务、花费）。`plan.enabled = true` 且 `plan.tier = "always ask"` 时，先弹档位选单 |
+| `/topo <你的请求>` | 激活并把请求**逐字**转发给智能体——“使用团队”指令经 context 事件请求本地注入（不写入会话日志） |
+| `/topo off` | 停用并重新隐藏团队工具——误激活后的出口（成员 session 仍可恢复） |
+| `/topo <档位>` | 激活并直接应用团队策略：`economic`、`fast`、`balanced`、`performance`（跳过选单；见团队方案） |
+| `/topo custom` | 激活并走自定义流程（参考规模 → 拓扑 → effort，并可附上你的需求文本） |
+| `/topo review [目标]` | 激活并运行并行多评审员协议（三名 reviewer + 一名 worker 合并） |
+
+headless/RPC 会话无法弹对话框：选单直接回退 `balanced` 档，确认框为隐式同意。`/topo` 后接档位名有参数补全。
 
 ### 激活关键词（0.2.0 默认清单）
 
@@ -138,12 +155,12 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 | `team_task` | 任务板：`create` / `start` / `complete` / `fail` / `list` |
 | `team_status` | 成员、任务板、累计花费 |
 | `team_disband` | 停止单个成员或全队（session 保留） |
-| `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`） |
+| `team_set_topology` | 派活前声明成员通信拓扑（`star`/`pipeline`/`mesh`/`ring`/`custom`）；传 `members` 可将 pipeline/mesh/ring 限定为当前成员的子集 |
 | `/topo` | 命令：激活插件并查看团队板。`/topo off` 停用并重新隐藏团队工具；`/topo <档位>`（economic/fast/balanced/performance/custom）应用团队策略（见「团队方案」）；`/topo review [目标]` 运行并行多评审员协议；命令后的文本**逐字转发**给 agent——「使用团队」指令经 context 事件 request-local 注入，不写入会话文件 |
 
 ## 成员通信拓扑
 
-除非拓扑允许，成员之间的直达消息会被**拒绝**。队长在创建成员后、派活前，用 `team_set_topology` 按任务结构设计拓扑；默认为星型——全部经由队长中转。
+除非拓扑允许，成员之间的直达消息会被**拒绝**。队长在创建成员后、派活前，用 `team_set_topology` 按任务结构设计拓扑；默认为星型——全部经由队长中转。传 `members` 可将 pipeline/mesh/ring 限定为当前成员的子集（如在累积了成员的团队中只让 3 名成员成环）——作用域外的成员没有任何边。
 
 > **只读角色与拓扑边：** 所有成员——包括只读预设（scout/planner/reviewer）与不含 `bash` 的自定义角色——均经内置 `topo_team_msg` 工具直达通信，拓扑边对所有角色可用。依赖关系请用任务板的 `blockedBy` 表达；`stepcode-team` CLI shim 保留作手动使用。
 
@@ -216,7 +233,7 @@ flowchart LR
 预设 effort 默认值：`scout`=low、`planner`=medium、`worker`=medium、
 `reviewer`=high。解析顺序：`team_create_member` 显式 `effort` 参数 →
 `[stepcodeAgentTeam.presets.effort]` 配置覆盖（仅内置角色名）→ 预设
-frontmatter `effort` → `high`。`models.autonomousThinking = true` 时由队长
+frontmatter `effort` → `high`。`models.autonomousEffort = true` 时由队长
 逐成员选择 effort，所有预设 effort 一律不生效。
 
 你可以添加自己的角色——把相同 frontmatter 格式的 Markdown 文件放入
@@ -310,6 +327,15 @@ npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,
 冒烟集随仓库分发（`test/smoke/` + `test/run-smoke.sh`，临时 agentDir 经 mktemp 创建）。
 LLM 路径探针（`sandbox/smoke-phase4/10/11/12.ts`）需你自己的 key，跑法见
 [docs/TESTING.md](docs/TESTING_CN.md) 与 `sandbox/README_CN.md`。
+
+发版在 `main` 上经 `scripts/release.sh <version>` 完成——前置检查（树干净、在
+`main`、tag 未占用）→ 冒烟门 → 版本 bump → 附注 tag → 推送 → `latest` 移动
+（仅正式版；预览版绝不移动）→ 从已推送 tag 做 hermetic 安装实测。`develop` →
+`main` 合并不在脚本内：先手动合并，再在 `main` 上运行本脚本。
+
+> **仅开发路径**：`test/` 与 `sandbox/` 仅供开发使用——不在打包产物内
+> （`package.json` 的 "files" 只分发扩展、agents 与文档）。跑冒烟集或使用沙箱
+> 请克隆仓库；`step install` 安装包只含扩展本身。
 
 > **无界面运行**：`step -p` 默认拦截会派生进程或修改工作区的工具；无人值守运行需加 `--approval-mode auto`（或 `--non-interactive-approval allow`）。
 

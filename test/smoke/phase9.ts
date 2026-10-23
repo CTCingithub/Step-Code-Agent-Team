@@ -105,6 +105,7 @@ export default function (pi: ExtensionAPI) {
 						members: { max: 2, maxRecursionDepth: 3 },
 						dispatch: { maxConcurrent: 7 },
 						cost: { warnThreshold: 0.25 },
+						tasks: { max: 5, outputCapBytes: 2048 },
 						unknownTop: { x: 1 },
 					},
 				}),
@@ -116,6 +117,8 @@ export default function (pi: ExtensionAPI) {
 					c1.members.max === 2 &&
 					c1.members.maxRecursionDepth === 3 &&
 					c1.dispatch.maxConcurrent === 7 &&
+					c1.tasks.max === 5 &&
+					c1.tasks.outputCapBytes === 2048 &&
 					c1.models.autonomousSelection === true,
 			);
 			check("loadConfig: unknown keys ignored", !("unknownTop" in (c1 as unknown as Record<string, unknown>)));
@@ -128,11 +131,13 @@ export default function (pi: ExtensionAPI) {
 						models: { available: [] },
 						dispatch: { maxConcurrent: -2 },
 						cost: { warnThreshold: "abc" },
+						tasks: { max: "nine", outputCapBytes: 512 },
 						topology: { default: "bogus" },
 					},
 				}),
 			);
 			const c2 = loadConfig({ agentDir: tmp });
+			check("config: dispatch/oneshot timeout defaults cover a full member turn", d.dispatch.timeoutMs === 600_000 && d.oneshot.timeoutMs === 600_000, `dispatch=${d.dispatch.timeoutMs} oneshot=${d.oneshot.timeoutMs}`);
 			check("loadConfig: invalid members.max → default", c2.members.max === d.members.max, `got ${c2.members.max}`);
 			check(
 				"loadConfig: invalid maxRecursionDepth → default",
@@ -147,6 +152,33 @@ export default function (pi: ExtensionAPI) {
 			);
 			check("loadConfig: invalid cost → default", c2.cost.warnThreshold === d.cost.warnThreshold);
 			check("loadConfig: invalid topology.default → default", c2.topology.default === d.topology.default, `got ${c2.topology.default}`);
+			check("loadConfig: invalid tasks.max → default", c2.tasks.max === d.tasks.max, `got ${c2.tasks.max}`);
+			check("loadConfig: invalid tasks.outputCapBytes → default", c2.tasks.outputCapBytes === d.tasks.outputCapBytes, `got ${c2.tasks.outputCapBytes}`);
+
+			// Forced migration: a list that is ALL deprecated terms disables
+			// keyword activation (empty list) instead of silently re-adding the
+			// full default list — migration must narrow, never widen, the
+			// user's activation surface.
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { activation: { keywords: ["agent team"] } } }),
+			);
+			const cfgAllDeprecated = loadConfig({ agentDir: tmp });
+			check(
+				"loadConfig: all-deprecated keywords → activation disabled",
+				cfgAllDeprecated.activation.keywords.length === 0,
+				`got ${JSON.stringify(cfgAllDeprecated.activation.keywords)}`,
+			);
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { activation: { keywords: ["agent team", "智能体小队"] } } }),
+			);
+			const cfgPartialDeprecated = loadConfig({ agentDir: tmp });
+			check(
+				"loadConfig: partially-deprecated keywords keep the rest",
+				cfgPartialDeprecated.activation.keywords.join(",") === "智能体小队",
+				`got ${JSON.stringify(cfgPartialDeprecated.activation.keywords)}`,
+			);
 
 			// env overrides
 			const savedCost = process.env.STEPCODE_TEAM_COST_WARN;

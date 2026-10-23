@@ -375,7 +375,7 @@
 
 **工作**：① `team-server.ts`：新增 `to="leader"` 精确拒绝分支（指引把结论写入最终报告）；无出边提示与 loop 上限/死循环报错文案全部对齐。② `members.ts`：协调提示词明确"leader 不是消息目标"；`assertLoopBound` 文案对齐。③ demo README（project/pristine）ring 剧本改为"把结论写入最终报告交回队长"。④ `phase3` 增加 leader 目标拒绝探针。⑤ 文档：TUI-VERIFICATION 双语环境块具体化 + TEST-KEY.md 密钥机制（弃用废弃的 local/test-api-key.md）、MANUAL-TESTING 双语 `step install/remove` 具体路径、TESTING 双语密钥说明去占位符；弱日志 prompt 改为指向沙箱 README 的规范化 prompt。⑥ `.gitignore` 与 restore 脚本纳入会话日志清理；演示项目恢复种子态。
 
-**验证**：全量冒烟 21 phase + manifest + 6 live + orphan-check 全绿；提交 2262e42 / 4f2f6b6。
+**验证**：全量冒烟 17 phase + manifest + 7 live + orphan-check 全绿；提交 2262e42 / 4f2f6b6。
 
 ### 37. 护栏配置化审计与沙箱测试文档整合（plan-72）
 
@@ -385,7 +385,7 @@
 
 **工作**：① 新增 `[stepcodeAgentTeam.tasks]` 节（`max` 默认 999 范围 1–10000、`outputCapBytes` 默认 51200 范围 1KiB–10MiB，含校验与种子块）；`nextTaskId`/`truncateOutput` 改读配置；README 双语护栏行改「默认值、每项均可配置」并链接 CONFIGURATION；CONFIGURATION 双语补 tasks 节并修复既有 ROLES 断链。② `team_set_topology` 新增 `members` 作用域参数（修复 ring 圈入全部历史成员——实测 3 成员环变 10 成员环；phase7 增加 12 个作用域探针）；清除 3 处过时 no-bash 表述（`team_create_member` 描述——JSONL 曾证实队长推理被此句误导、/topo review 指令、phase18 文件头）；`findTask` 报错补"团队任务板 ID 非会话计划 ID"提示。③ TUI-VERIFICATION 双语文档删除，11 步清单并入 MANUAL-TESTING §1（双语）；全部引用改指向；环境准备以 TESTING §0 为唯一规范副本。
 
-**验证**：全量冒烟全绿（21 phase + manifest + 6 live + orphan-check）；TUI-VERIFICATION 引用在历史档案外清零、6 个受影响文档链接全部可达；提交 8feca72 / 11e84df / a236869 / e94cf5c。
+**验证**：全量冒烟全绿（17 phase + manifest + 7 live + orphan-check）；TUI-VERIFICATION 引用在历史档案外清零、6 个受影响文档链接全部可达；提交 8feca72 / 11e84df / a236869 / e94cf5c。
 
 ### 38. 沙箱会话二轮修复：topo_team_msg 投递回执（plan-73）
 
@@ -395,7 +395,7 @@
 
 **工作**：① `member-messaging.ts`：新增 `formatTeammateReply()`——空/占位符/undefined/纯空白一律转为明确投递回执（结论写入最终报告、队长经 `team_send`/`team_task` 收集）；工具描述同步为「投递保证、回复尽力」。② `rpc-client.ts`：不再把宿主占位符捕获为 assistant 文本（队长侧空回合显示 `(no output)`）。③ `phase16` 增加 6 个契约探针。④ TEST-PLAN 双语补二轮发现（含 180s 默认超时 vs 长审查的观察、拓扑作用域参数验证通过）。⑤ MANUAL-TESTING 双语新增 §7「会话日志」，内含可复制粘贴的规范化日志生成 prompt（与沙箱 README 同源互链）。
 
-**验证**：全量冒烟全绿（21 phase + manifest + 6 live + orphan-check）；提交 eb4665d / 98bf5b4。
+**验证**：全量冒烟全绿（17 phase + manifest + 7 live + orphan-check）；提交 eb4665d / 98bf5b4。
 
 ### 39. v0.2.0-preview 发布与 develop 分支约定（plan-74）
 
@@ -406,3 +406,75 @@
 **工作**：① `package.json` 0.2.0 → 0.2.0-preview；README 双语安装示例改 `@v0.2.0-preview` 并注明 latest 停留稳定线。② 提交 `chore: release v0.2.0-preview`，打附注标签并推送 main + 标签；latest 分支未移动（仍 698a698 = v0.1.4）。③ hermetic 验证：临时 agentDir 中 `step install git:...@v0.2.0-preview` 安装成功且 `/topo` 激活探针 OK，验证后清理。④ HANDOFF 刷新至发布后状态；README 双语 Development 节与 HANDOFF §7 增加 develop 分支约定（新版本开发在 develop 上进行，稳定后合并 main 发版；正式版才移动 latest，preview 不动）。
 
 **验证**：发布前全量冒烟全绿；标签安装与激活验证通过；latest 指向经 `git ls-remote` 确认未变。
+
+### 40. npm 安装表述移除与 develop 分支启用（plan-77）
+
+**用户 prompt**：「请检查是否已经npm发布了，然后创建develop分支，我要在该分支上继续开发」+「请删除两分支中关于npm安装的相关表述，然后切换到develop分支」
+
+**思路**：npm 检查证实两种包名（step-code-agent-team / stepcode-agent-team）均 E404——本插件从未发布 npm，安装示例中的 npm 行是无效引导，删除；develop 分支按上轮约定的分支模型从 main 切出，改动同步两分支。
+
+**工作**：① README 双语删除 `step install npm:step-code-agent-team` 行，引言句 "From git or npm" / "从 git 或 npm 安装" 改为 "From git" / "从 git 安装"（`npm run smoke` 等无关提及保留）。② `git checkout main && git checkout -b develop` 创建开发分支（上轮 SSH 网络故障已恢复），提交 3f9b607 推送 develop；main 以 `--ff-only` 快进至同一提交并推送——两分支同值；latest 保持 v0.1.4 未动。③ 切回 develop 作为当前开发分支。
+
+**验证**：grep 确认 npm 安装表述在主仓库文档清零（仅存 sandbox/step 上游 submodule）；两分支 `git branch -vv` 同值且均与各自远程同步。
+
+### 41. 测试流程全面优化（plan-79）
+
+**用户 prompt**：「请给我全面优化测试流程，并更新相关文档」（团队协议激活，按组队判据派 scout 审计 + 后续 implement/review 分工）
+
+**思路**：先审计后动手——派只读 scout（high effort）系统审计全部测试文档与脚本，产出分级缺口清单（摩擦点/文档不一致/承诺vs现实/证据丢失/覆盖缺口/分级提案）；再按"runbook 总纲 + 明细清单"重组文档、把证据保全脚本化、补齐最后一块探针缺口。审计与实施均验证了上轮修复的机制：scout 派发撞 180s 超时后经 resume 正常回收报告（best-effort 回复语义下的标准恢复模式）。
+
+**工作**：① **审计**（scout）：定位 7 项摩擦（头号：`sandbox/run.sh` 不读 TEST-KEY.md——文档承诺自动读取但交互沙箱实际无 key）、8 处文档不一致、4 项承诺vs现实、证据丢失点（restore 删 `logs/`——正是 §7 日志产物）、5 项特性探针覆盖核查（4 项已覆盖，tasks 配置校验为唯一缺口）、10 条分级提案。② **新增 `sandbox/archive-round.sh`**：还原前把本轮证据（sessions JSONL、teams 注册表、logs/、project diff/status）归档到 gitignored 的 `sandbox/archive/<时间戳>-<标签>/`；.gitignore 同步。③ **`sandbox/run.sh` 修复头号摩擦**：环境未提供 STEP_API_KEY 时按 with-test-key.sh 同一提取逻辑读取 TEST-KEY.md 并导出。④ **restore-project.sh 死亡引用修复**（指向已合并删除的 TUI-VERIFICATION.md → MANUAL-TESTING.md §7）。⑤ **MANUAL-TESTING 双语新增「单轮测试 runbook」**（第 0 步预检：归档上轮→还原→密钥；第 1 步自动化门；第 2 步 6 个有序交互场景表格，每场景含可复制粘贴 prompt、明细指向与已知坑——topo 回复尽力语义需队长收集、每跳小工作量以 fit 180s 默认超时、选单需启动前改配置+重启会话；第 3 步收尾五步），文件头同步指向，形成 runbook+明细结构。⑥ **探针补齐**：phase9 增加 tasks 配置面断言（有效合并 + 无效回退），phase16 增加 nextTaskId 容量契约（首空闲/跳过已用/满板抛错）与 truncateOutput 显式 cap 行为；`bash test/run-smoke.sh 9 16` 全绿。⑦ **文档修正 10 处**：phase15 死亡引用、EN §5 陈旧 8/8→12/12、TESTING 双语 Layer D 配置化表述、TEST-PLAN 双语日志路径与 0.2.0 轮执行记录计数（校正为 17 phase + 7 live）、Known limitations standalone 清单 15/16、§0 还原表补 trust.json 行（快速还原不重置信任）、sandbox README 双语日志节补归档提示。
+
+**验证**：目标 phase 冒烟全绿；全量冒烟、链接与双语一致性、reviewer 审查并入下一验证轮统一执行。
+
+### 42. 优化计划实施：P0/timeout/文档/行为/测试加固五批（plan-80）
+
+**用户 prompt**：「请开始修改」（承接上一轮审计产出分级提案，团队协议激活）
+
+**思路**：审计提案按影响×工作量分五批实施——P0 正确性批（6 项低风险小改动）→ timeout 批（T1-T4）→ 文档批 → 行为变更批（P1-1/5/7/8 + T5）→ 测试加固批（P2-6/7/8d）。每批独立全量冒烟后提交 develop；P0 批完成后加派双视角对抗审查（契约视角发现并修复 9 项，含一个批内引入的 blocker）。
+
+**工作**：① **P0 批**（commit 1c85ca1）：members.ts kill 路径删序倒置+实例身份守卫（dispatch catch/reaper/killMember 三处——此前 delete 先于 await killAndWait，窗口内 ensureLive 以同一确定性 session-id 生成第二进程，双进程共写会话文件）；doSpawn onClose 按实例身份驱逐（输家竞争 spawn 的退出不再误删赢家条目/误标 dead）；activation.ts 否定护栏窗口从固定 6 字符改为回扫至子句边界或 40 字符（README 自己的例句 "don't use an agent squad" 此前实测会激活）；config.ts 全旧词 keywords 置空禁用激活（不再静默回退 14 个默认词扩大激活面）+ 迁移报告改走 session_start（受影响用户永远无法触发激活，原 tryActivate 内报告不可达）；member-messaging.ts finish() destroy→end（flush 待写字节）+ write 错误回调 + "team server asserts delivery" 措辞；README 双语安装注释去 skill+prompt。探针：phase1 零断言→10 条生命周期断言（兼作 P0-1/P0-2 回归）、phase6 远程否定回归、phase9 迁移语义。对抗审查修复 9 项（B1 通知路径、M1 陈旧文件头、m1/m2 探针保真、M2/M3 phase6 全旧词端到端+报告去重、M4/m5/m6 文档）。② **timeout 批**（1770ab6）：dispatch/oneshot 默认 180s→600s（覆盖含嵌套中继的整回合）；spawn 注入 STEPCODE_TEAM_REPLY_TIMEOUT_MS 使成员侧回复等待与派发超时联动（此前写死 180s，调高配置后嵌套中继仍先失败）；重试只重试证明工作未启动的错误（超时/回合中退出直接断链——此前 respawn 后重发同一 prompt 死循环，沙箱 r3 连续 4 次超时根因）；超时任务携带收割指引；超时分类 infra→"投递状态未知"+禁止重发指引。③ **文档批**（b3983e0）：T6 超时语义族（README/CONFIGURATION/MANUAL-TESTING 双语）；P2-1 members scoping 参数入 PROTOCOL/README（此前零文档）；P2-2 ARCHITECTURE 死引用；P2-3 autonomousThinking 幻影键 5 处→autonomousEffort；P2-4 打包说明；P2-5 TESTING gitignored 表述；P1-2 README_CN 成本陈述；m5 状态表刷新。④ **行为变更批**（003f134）：P1-1 安全修复——项目级预设（<cwd>/.stepcode/agents）此前无信任门控即可加载，不可信仓库仅靠打开项目即可植入/覆盖角色（systemPrompt+工具白名单注入成员进程）；现 presets 三层函数加 trusted 参数+缓存键含信任位，经 forSession 透传，phase3 三段断言。P1-5 {ok:true} 缺 reply 判协议漂移 isError；P1-7 oneshot 纳入 per-member 队列（消除 status 误置 idle 与 usage 丢失导致成本护栏少报）；P1-8 reaper 先置死+删条目再 kill（杀进程窗口内落地派发不再附到将死进程）+ ensureLive dead 守卫；T5 进度信号文档化（interim 流已在 onProgress/onUpdate 接通）。⑤ **测试加固批**（c57bd87）：PHASES 清单磁盘派生+opt-out（新探针不再静默漏跑）；runner 捕获 rc，240s 杀死明确报挂起（此前与断言失败的 (fails=0) 混同）；新增 phase22 自愈探针（ensureToolsAvailable 重置恢复/失活 no-op/session_start 重激活判据——该机制此前零回归保护）；orphan 检查轮询 15s+缺失 pid 显式 SKIPPED。按上下文预算 deferred 并记录：P2-8a/b/c/e 与 P2-9 杂项。
+
+**验证**：每批全量冒烟（17→18 phase + manifest + 7 live + orphan-check）全绿；P0 批经双视角对抗审查；phase3/6/9/22 专项验证通过。
+
+### 43. README 斜杠命令清单与档位确认框修复（plan-81）
+
+**用户 prompt**：「1.请在README中，罗列斜杠命令的选项与功能；2.目前在斜杠命令选择档位后，询问yes或no时，提供的并不是模型打算实施的智能体协作方案，而是示例，请修改」
+
+**思路**：两项独立修改——README 补命令参考表（此前 /topo 的各形式散落在 Activation/Tools 节，无统一清单）；确认框修复源于档位 example 的语义错位——example 在数据中明确标注"仅供参考，非固定方案"，却与待确认方案并列展示，用户确认的是一套模型从未受其约束的阵容，实际执行只遵循 guidance。
+
+**工作**：① README.md/README_CN.md Activation 节新增 "The /topo command"/「/topo 命令」参考表，罗列 6 种形式（/topo 激活+团队板、/topo <请求> 逐字转发、/topo off、/topo <档位> 直通 economic/fast/balanced/performance、/topo custom 自定义流程、/topo review [目标] 并行评审）+ headless/RPC 回退行为（balanced 直应用+隐式确认）与档位名参数补全说明。② extensions/index.ts confirmChoice 档位分支移除 example 行——确认框只展示档位标签、guidance（模型将实际遵循的策略）与"具体成员、角色、拓扑与 effort 由模型按任务实际需要决定"注脚；example 仅保留在选单（tierPickerOptions）中供选择时参考，并加注释说明原因防止回退；顺带清理冗余三元表达式。自定义分支不受影响（展示用户需求原文）。
+
+**验证**：全量冒烟全绿（18 phase + manifest + 7 live + orphan-check）；双语表格行数与结构核验；提交 84bf584。
+
+### 44. 第三轮测试验证：流程核查 + 全量自动化门 + LLM 探针 4/4（plan-82）
+
+**用户 prompt**：「请检查测试流程无误后，开始测试功能，完成后告诉我哪些功能需要我手动测试」
+
+**思路**：按 MANUAL-TESTING runbook 走完整一轮——先核查测试流程自洽性（脚本与文档互证），再执行自动化门（零 token 冒烟 + LLM 层功能探针），收尾归档还原，最后汇总仍需人工的项。LLM 探针首跑即暴露流程缺陷，修复后重跑通过。
+
+**工作**：① **流程核查发现 4 处问题**：(a) **TESTING(_CN).md 的 LLM 探针调用缺 `STEP_CODING_AGENT_DIR` 隔离**——真 bug，实测 phase4/10 全部"无探针日志行"：step 回退到 `~/.stepcode/agent`，其 packages 项已安装本插件（git 克隆副本），与 `-e extensions/index.ts` 显式加载形成 6 个工具名冲突、扩展整体加载失败、探针从未运行；双语文档补隔离导出（指向 sandbox/agent）后重跑全部通过。(b) MANUAL-TESTING(_CN).md runbook 计数陈旧 17→18 phase（phase22 加入后未同步）。(c) run-smoke.sh 重复注释行（test-hardening 批残留）。(d) 确认 cfg-deep2 fixture 的旧式 settings.json 仍按 legacy 配置层读取（config.ts 优先级链 defaults < legacy files < settings.json < config.toml < env），无需改造。② **自动化门全绿**：`npm run smoke` 18 phase（含 phase22 自愈）+ manifest + 7 live + orphan-check。③ **LLM 探针 4/4 全过**：phase4（成员回复 PONG/上下文记忆 4242/respawn 后恢复 4242/shim 消息 BETA-OK）、phase10（并行 4/4 回复、并发实测 max 4 ≤ 5）、phase11（默认配置干净 SKIP——探针检测 ambient maxRecursionDepth=1 后按设计跳过；用 sandbox/cfg-deep2 补跑：depth-2 链 LEAF-OK 回传、子团队先于派发自举、leaf 以 --no-extensions 启动的边界断言全 PASS）、phase12（oneshot+用量记录/任务链 T1→T2/Unicode 往返/SIGKILL 后重生/流式中 interim 更新）。④ **轮次收尾按 runbook**：证据归档 `sandbox/archive/20261022-222529-round3-2026-10-20/`（1.7M）、种子态还原、TEST-PLAN 双语执行记录补 A1/K8/F1 行。
+
+**验证**：冒烟与四探针全绿（见上）；探针调用修复经"首跑失败→定位冲突→补隔离→重跑通过"闭环；提交 858d0f5 推送 develop。
+
+**遗留人工项**（已向用户交付清单）：K1–K7 沙箱交互场景（K8 探针已由本轮覆盖）、M1–M6 纯手动项（真实安装/信任弹窗/TUI 选单与确认框——含档位确认框修复目验/渲染观感/译文/8 成员性能）、建议重跑 ring 剧本 Act 3（600s 超时族与无盲目重试改动直接作用于嵌套中继，2026-10-19 验证基于旧 180s 行为）。
+
+### 45. 四项请求轮：档位确认框结构化方案、沙箱日志分析加固、发版审查、安装故障定位（plan-83）
+
+**用户 prompt**：「1.目前在斜杠命令选择档位后，询问yes或no时，提供的还是类似提示词一样的文本，而不是模型给出的团队协作方案，请修改；2.请检查目前的发版方式是否合理，若不合理请给我修改建议；3.我刚刚做了沙箱测试，测试日志是 sandbox/logs/session-log-2026-10-22.md，请分析日志并优化项目；4.我在本机上 step install ~/GitProjects/Step-Code-Agent-Team 后，无法启动 step code，请定位原因」
+
+**思路**：四项独立请求并行推进——环境故障（4）优先诊断；确认框（1）从数据层改造；日志（3）先分析后优化；发版（2）纯审查出建议不改码。指定的日志文件已被此前一次未归档的还原删除（本 session 的操作失误），证据改从会话 JSONL 完整重建，分析照常完成。
+
+**工作**：① **档位确认框结构化方案**（`67efd02`）：plan.ts 的 TeamTier 增结构化 plan 字段（members/topology/effort 三行、双语、四档位齐全）+ tierPlanLines() 辅助函数；index.ts confirmChoice 把 guidance 散文行替换为结构化方案行；phase21 补 4 条断言（期间发现并修复探针 bug：裸 `performance` 标识符解析到 Node 全局对象，改用 getTier("performance")）。此版随后被用户第三轮反馈否决，演进终态见 entry 46。② **安装故障定位**（item 4，根因经隔离复现坐实）：用户 config.toml 原有 `git:github.com/...@v0.2.0-preview` 包项，`step install <本地路径>` 把本地路径**追加**进 packages 形成双副本——两个 index.ts 的六个团队工具名全部冲突（"Tool X conflicts with…"），扩展加载失败、step code 无法启动；单独任一副本启动均 0 冲突。用户配置现已只剩 git 一项（复测启动正常）；修复 = 两种安装方式只能留其一（`step remove` 摘除另一项）。该冲突由 step 扩展加载器判定，插件侧无法自去重，纳入 README 排障建议。③ **沙箱日志分析与优化**（`0c4f130`）：用户 2026-10-22 手动轮结论——§1 走查 + 三幕剧本全过；Act 1 前提已被早前请求修绿（基线 12/12），队长以 clarify_user + 只读复核任务妥善应对；Act 3 环形巡回 a→b→c 两跳成功、第 3 跳被拒并原文引用（"would reach 3 hops, over the ring loop limit (2)"），约 12 分钟链条在 600s 超时族下零超时零收割；team_set_topology 的 members 作用域正确使用；全会话仅 1 处 isError:true（即该预期拒绝）。四项优化：**restore-project.sh 删除日志前自动归档**到 sandbox/archive/<时间戳>-auto-before-restore/（根治"未归档的还原毁掉整轮证据"类事故，已功能验证）；激活指令补"用户未要求改动时保持只读，不要顺手修改文件"（双语——针对 22:47 未经要求修掉种子 bug 导致后续 Act 1 前提失效）；MANUAL-TESTING(_CN) Act 1 基线坑位提示（双语）；TEST-PLAN(_CN) U1/F2 执行记录。④ **发版方式审查**（item 2，纯建议待用户确认）：总体合理（develop/main 分离、latest 仅随正式版移动、annotated tag、发布后 hermetic 实测、约定成文）；三个实际问题——main 落后 develop 12 个提交（含 P1-1 预设信任门控安全修复）发布节奏断裂且 README"推荐安装"给新用户的是 v0.1.4 旧版、安装双副本冲突无排障文档、发版流程 8 步全手工易错。分级建议：P0（合并 develop→main 切 v0.2.0 正式版并移动 latest；README 补双副本冲突排障段）/ P1（scripts/release.sh 脚本化发版流程；npm 发布与否做明确决策并成文）/ P2（验证 step remove 对本地路径项的摘除；preview 不动 latest 约定延续）。
+
+**验证**：各代码项全量冒烟全绿；安装根因经隔离复现坐实；restore 自动归档经"造固件→还原→归档+删除确认→清理"功能验证。
+
+### 46. 档位确认框第三轮改造：展示模型生成的实际方案（plan-84）
+
+**用户 prompt**：「目前档位确认框出现的还是预设方案，但我希望能看到的是实际方案」（对 `67efd02` 结构化档位方案的反馈——该确认框的第三轮演进：非绑定 example → 策略散文 → 档位预设形态 → 模型实际方案）
+
+**思路**：前两轮内容均被否，核心诉求明确——yes/no 对话框必须展示模型针对**本次请求**真正会执行的实际方案，而非任何档位级预设。调研确认 ExtensionContext 持有 `model`（当前模型）与 `modelRegistry`，`ModelRegistry.complete(model, { systemPrompt, messages })` 支持一次性生成（密钥由 registry 解析）——"确认前让模型先出方案"路径成立。
+
+**工作**（`72e93ef`）：① forward.ts 新增 `teamPlanPrompt()`（一次性规划提示：成员名单与各自 effort、通信拓扑及理由、任务拆解与 blockedBy 依赖，≤10 行，只出方案不执行）与 `approvedPlanInstruction()`（批准方案的优先级注入）；② index.ts 新增 `generateTeamPlan()`——经 `ctx.modelRegistry.complete` 做一次性规划调用（90s 超时竞速 + clearTimeout 清理；无模型/出错/超时/空文本一律返回 null）；confirmChoice 增加 planText 参数（有实际方案时展示"模型为本次请求生成的实际方案：+方案全文"，否则回退档位标准形态）；runTeamCommand 接线：tier + 有请求 + 交互式时先 notify"正在生成本次请求的实际团队方案…"再生成 → 确认框展示之 → 批准则 pendingInjection = tierInstruction + approvedPlanInstruction（已确认方案优先级高于一般性策略描述）；③ phase21 补 4 条断言覆盖两个新构建器（再次避开 performance 全局对象坑）；④ MANUAL-TESTING(_CN) runbook 新增确认框内容说明段，TEST-PLAN(_CN) K2 行同步更新。**回退路径**：裸 /topo（无请求可规划）/ 无模型 / 规划调用失败 / headless（无对话框）均回退档位标准形态并注明"没有可展示的请求相关内容"；custom 与 review 分支不受影响。
+
+**验证**：全量冒烟全绿（18 phase + manifest + 7 live + orphan-check）；`bash test/run-smoke.sh 21` 单独通过；提交 72e93ef 推送 develop。

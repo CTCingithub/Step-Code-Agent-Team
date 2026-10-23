@@ -97,6 +97,7 @@
 ## 八、演示项目复审与修复（plan-56，2026-10-19）
 
 来源：第二轮手动验证 session（`sandbox/session-log-2026-10-19.md`，已按 restore
+策略删除；会话日志现统一写 `sandbox/logs/`）
 策略删除）的任务 2（star 三方并行审查）与任务 3（ring 巡回汇总）。复审对象为
 `sandbox/project` 演示代码（非插件本身）。
 
@@ -124,7 +125,7 @@
 
 **验证**：修复态 `npm test` 12/12；M1 复现路径（`add ""` / `done 99`）均为干净 exit 2；M2 复现路径（`{}` / `{"tasks":[]}`）均回退为空列表；restore 后 11/12 基线（种子失败）不变；project 与 project-pristine 逐文件一致。
 
-## V. 0.2.0 轮次（2026-10-19）
+## 九、0.2.0 轮次（2026-10-19）
 
 待验证新面：`/topo` 命令（档位 / 选单 / review / off）、插件专属关键词 + 强制迁移、三层防误触护栏、逐字转发与请求本地指令注入、`topo_team_msg` 成员间消息（无需 bash）、自定义角色、effort 预设。
 
@@ -132,7 +133,7 @@
 
 | # | 检查项 | 命令 / 探针 | 预期 |
 |---|---|---|---|
-| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（17 phase + manifest + 6 live + orphan-check） |
+| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（17 phase + manifest + 7 live + orphan-check） |
 | A2 | 协议探针 | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
 | A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |
@@ -142,7 +143,7 @@
 | # | 检查项 | 探针 | 缺口 |
 |---|---|---|---|
 | K1 | `/topo <请求>` 端到端 | RPC prompt 带命令 | 逐字请求落入会话日志；队长组建团队（不独自完成） |
-| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo` | 选单显示 4 档 + 自定义；所选档位指令抵达模型 |
+| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo` | 选单显示 4 档 + 自定义；带请求时确认框展示模型生成的实际方案（一次性规划调用），批准后该方案以高于档位一般性指导的优先级抵达模型 |
 | K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档 |
 | K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
 | K5 | topo_team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
@@ -165,11 +166,16 @@
 
 | # | 结果 | 说明 |
 |---|---|---|
-| A1 | ✅ all phases passed | 17 phase + manifest + 6 live（含 live-review）+ orphan-check |
+| A1 | ✅ all phases passed | 17 phase + manifest + 7 live（含 live-review）+ orphan-check |
 | A2 | ✅ PROBE OK | 零 token 协议探针 |
 | A3 | ✅ 已还原 | 种子 bug 复现；`data/` 与 `session-log-*.md` 已清除 |
 | A3b | ✅ 11/12 基线 | 还原后的项目恰好只挂种子测试（套件已在卫生轮扩至 12 条） |
 | A4 | ✅（经 A1） | live-clean-export 加载并激活归档导出物的扩展 |
+| A1 | ✅ all phases passed（2026-10-22 优化验证轮重跑） | 18 phase + manifest + 7 live + orphan-check；含 phase22 自愈探针 |
+| K8 | ✅ 四个 LLM 探针全部通过（2026-10-22） | phase4（回复/上下文记忆/respawn 恢复/shim 消息）、phase10（并行 4/4，实测 max 4 ≤ 5）、phase11（默认配置干净 SKIP 后用 `sandbox/cfg-deep2` 补跑 depth-2 链）、phase12（oneshot+用量/任务链/Unicode/SIGKILL 恢复/流式中 interim） |
+| F1 | 重跑中发现的流程修复 | TESTING(_CN)：文档化的 LLM 探针调用缺 `STEP_CODING_AGENT_DIR` 隔离——`~/.stepcode/agent` 中已安装的插件副本与 `-e` 扩展冲突，全部工具名加载失败、探针根本不运行（双语文档已补隔离导出）；MANUAL-TESTING(_CN) runbook 17→18 phase；run-smoke.sh 重复注释已删 |
+| U1 | ✅ 用户手动轮（2026-10-22；§7 日志被一次未归档的还原删除，分析证据改从会话 JSONL 重建） | §1 走查 + 三幕剧本全部完成：4 成员修复链 T1–T4 完工；Act 1 前提已被早前激活轮满足（基线 12/12），队长以 clarify_user + 只读复核任务妥善应对；Act 2 三路并行评审 T8–T10；Act 3 环形巡回 a→b→c 两跳成功、第 3 跳被拒并原文引用（"would reach 3 hops, over the ring loop limit (2)"），整链约 12 分钟在 600s 超时族下零超时完成；team_set_topology 正确使用 members 作用域；全会话仅 1 处 isError:true（即该预期拒绝） |
+| F2 | 日志丢失加固（2026-10-22） | restore-project.sh 现于删除前把 logs/（及旧位 session-log-*.md）自动归档到 sandbox/archive/<时间戳>-auto-before-restore/，未归档的还原再也不会毁掉一轮 §7 日志；MANUAL-TESTING Act 1 增加基线坑位提示（上一轮已修掉种子 bug 时先还原；队长 clarify_user 应对属正确行为）；激活指令补充“用户未要求改动时保持只读”纪律 |
 
 剩余：K1–K8 需 `STEP_API_KEY`（写入 `sandbox/TEST-KEY.md`——gitignored，或 export 环境变量）；M1–M6 为人工项（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 

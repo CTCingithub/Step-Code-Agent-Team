@@ -18,6 +18,8 @@
 
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { TeamManager } from "../../extensions/members.ts";
 import { TeamServer } from "../../extensions/team-server.ts";
@@ -93,6 +95,36 @@ export default function (pi: ExtensionAPI) {
 				server.stop();
 				return;
 			}
+
+			// 3b: project-tier presets are trust-gated — an untrusted repo must not
+			// be able to plant or shadow a role (presets carry system prompts and
+			// tool allowlists into member processes).
+			const projTmp = fs.mkdtempSync(path.join(os.tmpdir(), "scat-trust3-"));
+			const projAgents = path.join(projTmp, ".stepcode", "agents");
+			fs.mkdirSync(projAgents, { recursive: true });
+			fs.writeFileSync(
+				path.join(projAgents, "trustprobe.md"),
+				["---", "name: trustprobe", "description: Trust-gating probe preset", "---", "", "You are a trust probe preset."].join("\n"),
+			);
+			const untrustedPreset = loadPreset("trustprobe", projTmp, false);
+			const trustedPreset = loadPreset("trustprobe", projTmp, true);
+			const untrustedAgain = loadPreset("trustprobe", projTmp, false);
+			if (untrustedPreset) {
+				fail("project-tier preset loaded from an UNTRUSTED project (trust gate broken)");
+			} else {
+				log("trust gate: untrusted project tier skipped: OK");
+			}
+			if (!trustedPreset || trustedPreset.name !== "trustprobe") {
+				fail("project-tier preset not loaded from a TRUSTED project");
+			} else {
+				log("trust gate: trusted project tier loaded: OK");
+			}
+			if (untrustedAgain) {
+				fail("preset cache leaked the trusted project tier into an untrusted load");
+			} else {
+				log("trust gate: preset cache keyed on trust: OK");
+			}
+			fs.rmSync(projTmp, { recursive: true, force: true });
 
 			// 4: createMember with a preset role persists prompt + coordination section.
 			const { member } = await manager.createMember({ name: "rev1", role: "reviewer" });

@@ -94,7 +94,6 @@ posture and their topology edges stay usable. The shim remains for manual/extern
 | Cost warning | tools.ts costWarning (config.cost.warnThreshold, 0 disables) |
 | Idle reaping | members.ts reapIdleMembers (skips members with queued dispatches) |
 | Member slots (live count only) | members.ts createMemberLocked (dead records are resumable but do not occupy a slot) |
-| Messaging capability notice | members.ts memberCanMessage / messagingWarnings + tools.ts result text |
 | Shutdown cleanup | index.ts session_shutdown → manager.shutdown (set all dead + kill) |
 
 ## 6. Related documents

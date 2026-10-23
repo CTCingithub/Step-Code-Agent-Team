@@ -27,7 +27,17 @@ trap 'rm -rf "$AGENT_DIR"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-PHASES="${*:-1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21}"
+# Phase list derives from disk so a newly added phaseN.ts runs automatically;
+# OPT_OUT_PHASES (empty by default) is the only deliberate exclusion. Explicit
+# arguments still override (bash test/run-smoke.sh 9 13).
+OPT_OUT_PHASES=""
+if [ $# -gt 0 ]; then
+  PHASES="$*"
+else
+  PHASES="$(cd "$ROOT/test/smoke" && ls phase*.ts 2>/dev/null | sed -E 's/^phase([0-9]+)\.ts$/\1/' | sort -n | tr '\n' ' ')"
+  for opt in $OPT_OUT_PHASES; do PHASES="$(echo " $PHASES " | sed "s/ $opt / /")"; done
+  PHASES="${PHASES# }"; PHASES="${PHASES% }"
+fi
 # Pure-logic probes (render/tools helpers) run standalone — without
 # extensions/index.ts. Importing them transitively pulls @step-harness/pi-tui,
 # which makes step stage the repo package into the agent dir and load a second
@@ -60,11 +70,12 @@ for p in $PHASES; do
   else
     ext_args=(-e "$ROOT/extensions/index.ts" -e "$probe")
   fi
+  rc=0
   out="$(printf '{"id":"1","type":"get_state"}\n' \
     | STEP_CODING_AGENT_DIR="$AGENT_DIR" \
       timeout 240 "$STEP_BIN" "${ext_args[@]}" \
       --mode rpc --session-id "smoke-$p" --session-dir "$SESSION_DIR" \
-      --approval-mode auto 2>&1)" || true
+      --approval-mode auto 2>&1)" || rc=$?
   # Structural verdict on the probe's own log lines only (step's stderr can
   # contain unrelated "fail" text): a phase passes iff it logged DONE and no
   # FAIL/failed/SKIP-marker line — never rely on substring counting.
@@ -72,7 +83,13 @@ for p in $PHASES; do
   fails="$(echo "$probe_log" | grep -cE 'FAIL |FAILED' || true)"
   skips="$(echo "$probe_log" | grep -cE 'SKIP ' || true)"
   done="$(echo "$probe_log" | grep -cE 'DONE' || true)"
-  if [ "$done" -ge 1 ] && [ "$fails" -eq 0 ]; then
+  if [ "$rc" -eq 124 ]; then
+    # A 240s SIGTERM kill is a hang, not an assertion failure — say so instead
+    # of the indistinguishable "(fails=0)".
+    echo "phase$p: FAILED (timed out after 240s — the probe hung before DONE)"
+    echo "$probe_log" | tail -20
+    FAILED+=("$p")
+  elif [ "$done" -ge 1 ] && [ "$fails" -eq 0 ]; then
     echo "phase$p: OK (fails=0, skips=$skips)"
   else
     echo "phase$p: FAILED (fails=$fails)"
@@ -235,15 +252,25 @@ fi
 rm -rf "$EXPORT_DIR" "$NEUTRAL"
 
 # Orphan processes: a member spawned by phase17 must not outlive its leader.
+# Always report: a silently-skipped check is indistinguishable from a passing one.
 if [ -f "$AGENT_DIR/orphan.pid" ]; then
   orphan_pid="$(cat "$AGENT_DIR/orphan.pid")"
-  sleep 3
-  if kill -0 "$orphan_pid" 2>/dev/null; then
-    echo "orphan-check: FAILED (member pid $orphan_pid still alive after leader exit)"
-    FAILED+=("orphan-check")
-  else
+  # Poll up to ~15s instead of a fixed 3s: on a loaded machine a member can
+  # take longer to notice stdin EOF/SIGTERM, and a too-short wait would
+  # report OK for a process that is still shutting down.
+  orphan_gone=""
+  for _ in $(seq 1 15); do
+    if ! kill -0 "$orphan_pid" 2>/dev/null; then orphan_gone=1; break; fi
+    sleep 1
+  done
+  if [ -n "$orphan_gone" ]; then
     echo "orphan-check: OK"
+  else
+    echo "orphan-check: FAILED (member pid $orphan_pid still alive 15s after leader exit)"
+    FAILED+=("orphan-check")
   fi
+else
+  echo "orphan-check: SKIPPED (phase17 did not run — no orphan.pid)"
 fi
 
 if [ "${#FAILED[@]}" -gt 0 ]; then

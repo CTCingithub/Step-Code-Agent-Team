@@ -48,7 +48,7 @@ anything.
 2. 角色自己的 frontmatter `effort`；
 3. 默认值（`high`）。
 
-当 `models.autonomousThinking = true` 时由队长逐成员选择 effort，预设 effort
+当 `models.autonomousEffort = true` 时由队长逐成员选择 effort，预设 effort
 （frontmatter 与配置）一律不生效。
 
 ## 使用方式

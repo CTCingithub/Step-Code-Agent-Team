@@ -11,20 +11,67 @@
 > **包安装路径**（live-package-install：settings 的 `packages` 条目指向仓库即可加载
 > 扩展并激活）。
 >
-> 以下仅剩**不可约**的人工项——按优先级排列。每项都给了**可直接复制粘贴的命令 /
-> prompt**。TUI 渲染清单（只剩观感；内容层已被 phase15 断言）见下方第 1 节。
+> 以下仅剩**不可约**的人工项。先看下方**单轮测试 runbook** 获取一轮完整顺序；其余各节是
+> 分场景明细，均含**可直接复制粘贴的命令 / prompt**。TUI 渲染清单（只剩观感；内容层已被
+> phase15 断言）见第 1 节。
 
-## 状态总览（2026-10-19）
+## 状态总览（2026-10-20）
 
 | # | 项目 | 状态 |
 |---|---|---|
 | 1 | 交互 TUI 观感 | ✅ 2026-10-19 实测通过（渲染无问题） |
-| 2 | 真实安装（干净导出物 `step install`） | ⬜ 待用户执行 |
-| 3 | 信任弹窗交互 UX | ⬜ 待用户执行 |
-| 4 | LLM 行为遵循度（ring） | ✅ 2026-10-19 实测通过（第三跳规避 + 最终报告交回队长） |
+| 2 | 真实安装（干净导出物 `step install`） | ➖ 机制部分已由 `live-package-install` / `live-clean-export` 覆盖；交互残留 ⬜ 待用户执行 |
+| 3 | 信任弹窗交互 UX | ➖ 拒绝路径已由 `live-untrusted-config` 覆盖；弹窗本身 ⬜ 待用户执行 |
+| 4 | LLM 行为遵循度（ring） | ✅ 2026-10-19 实测通过（第三跳规避 + 最终报告交回队长）；第三跳本身 / `maxLoopCount` 拒绝仍未实测 ⬜ |
 | 5 | 沙箱演示剧本（三幕） | ✅ 2026-10-19 实测通过 |
 | 6 | 性能主观项（8 成员满编） | ➖ 可选，主观无判定标准 |
-| — | 英文版文档译文审阅 | ⬜ 建议过目（本轮新增双语文档） |
+| — | 英文版文档译文审阅 | ⬜ 建议过目 |
+
+## 单轮测试 runbook（一轮完整测试）
+
+一轮测试的完整顺序——本文档其余章节都是其中某一步的明细。所有命令与 prompt 均可直接复制粘贴。
+
+### 第 0 步 — 预检（启动会话前）
+
+```bash
+# 先归档上一轮的证据——restore 会删除 logs/（§7 日志的所在地）
+bash sandbox/archive-round.sh <上一轮标签>
+# 还原沙箱：种子 bug 复位，data/ 与 logs/ 清空
+bash sandbox/restore-project.sh
+```
+
+密钥：写入 `sandbox/TEST-KEY.md`（gitignored）即可——`./sandbox/run.sh` 会自动读取
+（环境里已 export 的 `STEP_API_KEY` 优先）。§1 第 5 步起需要 key；没有 key 这些步骤会失败。
+
+### 第 1 步 — 自动化门（任何人工操作前必须全绿）
+
+```bash
+npm run smoke   # 18 phase + manifest + 7 个 live 检查；任何失败先停下修复
+```
+
+### 第 2 步 — 交互场景（按顺序，一次粘贴一条）
+
+| # | 场景 | 操作 | 明细 | 注意 |
+|---|---|---|---|---|
+| 1 | 激活 + 团队板 | §1 第 1–2 步 | §1 | — |
+| 2 | 建成员 + pipeline + 任务板 | §1 第 3–8 步 | §1 | — |
+| 3 | `topo_team_msg` E2E | 粘贴：`让 scout1 通过 topo_team_msg 给 worker1 发一条一句话自我介绍，并原样报告工具的返回文本` | §1、§4 | 回复为尽力语义：投递回执（"Delivered to …"）不是队友的答复——产出经队长收集 |
+| 4 | ring 快巡（小步快跑） | §4 的 ring prompt | §4 | 每一跳保持小工作量（一个文件一个问题），使每跳都能在 600s 默认 `dispatch.timeoutMs`（覆盖成员整回合，含嵌套中继）内 settle——且超时不再触发盲目重试：任务会带着收割指引失败。只跑一圈；最终清单由队长收集 |
+| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置 |
+| 6 | 并行评审 | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
+
+**档位确认框内容（实际方案改造）**：`/topo` 带请求文本并选定档位后，插件先让模型
+做一次性规划调用（只出方案不执行），为该请求起草实际组队方案；yes/no 确认框随后展示
+该方案，批准后以高于档位一般性指导的优先级注入。裸 `/topo`（无请求）或规划调用失败时
+回退为该档位的标准方案形态——此时没有可展示的请求相关内容。
+
+### 第 3 步 — 收尾
+
+1. `汇报一下团队当前状态`，完工后解散团队。
+2. 生成会话日志：粘贴 §7 的 prompt（写入 `sandbox/logs/session-log-<日期>.md`）。
+3. 归档本轮：`bash sandbox/archive-round.sh <本轮标签>`。
+4. `bash sandbox/restore-project.sh`。
+5. 在 `docs/TEST-PLAN.md` 的执行记录中追加一行（日期、跑了什么、结果、异常）。
 
 ## 0. 通用：沙箱环境与还原
 
@@ -35,7 +82,8 @@
 |---|---|---|
 | 演示项目 | `sandbox/project/`（含种子 bug 的演示态） | `bash sandbox/restore-project.sh` |
 | 运行时数据 | `sandbox/agent/{sessions,teams,plans,live-context}`、`sandbox/project/data/`（全部 gitignored） | 可选彻底清场，见下 |
-| 会话日志 | `sandbox/logs/session-log-*.md`（按需生成，prompt 见 [sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)） | `restore-project.sh` 自动删除 |
+| 会话日志 | `sandbox/logs/session-log-*.md`（按需生成，prompt 见 [sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)） | `restore-project.sh` 自动删除——先跑 `archive-round.sh` 可保留 |
+| 项目信任 | `sandbox/agent/trust.json`（gitignored） | 快速还原**不会**重置——删掉它可让 §3 信任弹窗重新触发 |
 
 **快速还原（每轮测试后必做）**：
 
@@ -187,6 +235,11 @@ M1/M2 已修复，其余记录于 `docs/TEST-PLAN_CN.md` 第八节）；ring 巡
 全程未被任何成员读取。（reviewer 预设只读：审查结论为静态 trace，`npm test`
 由队长实跑复核。）**幕间还原**：`bash sandbox/restore-project.sh`。
 
+**基线坑位（2026-10-22 实测）**：若同一沙箱内早前的请求已修掉种子 bug，Act 1
+开始前 `npm test` 就是 12/12，“修复失败的测试”前提不再成立——先执行
+`bash sandbox/restore-project.sh` 复位。若队长发现前提不符后向你询问
+（clarify_user）或改为只读复核，属正确行为，不是缺陷。
+
 ### 第二幕 · star 并行审查（复制粘贴）
 
 ```text
@@ -208,11 +261,16 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 直接输出汇总报告沿回复链返回。
 
 **已知运行时现象（嵌套链超时）**：队长侧 `team_send` 的等待超时
-（`dispatch.timeoutMs`，默认 180s）覆盖**整条嵌套接力链**——三名 high-effort
-reviewer 的链超过 180s 时，队长侧超时返回，而接力仍在服务器侧继续（被派发成员
-已按失败即杀语义回收；错误信息会提示接力可能仍在途并列出成员状态）。恢复路径：
-`team_status` 看谁还活着 → 直达仍在运行的成员收取汇总。要避免超时：会话前在
-`sandbox/config.toml` 调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
+（`dispatch.timeoutMs`，默认 600s）覆盖**整条嵌套接力链**——reviewer 链超过该
+值时，队长侧超时返回，而接力仍在服务器侧继续（被派发成员已按失败即杀语义回收；
+错误信息会提示接力可能仍在途并列出成员状态）。失败的任务携带收割指引：成员的
+上下文可能已包含成果，应改派短收割 prompt（如「汇报你目前已完成的内容」）而非
+重跑任务——自动重试会重复工作。要避免超时：会话前在 `sandbox/config.toml`
+调大 `dispatch.timeoutMs`（配置只在会话启动时读取一次）。
+
+**等待期间的进度信号**：长派发会把成员的 interim 文本流式送入工具结果
+（`team_send` / `team_task start` 转发 `onUpdate`），`team_status` 则展示每个
+成员的实时状态——用它们区分"合法的长审查"与"卡死"，不必干等超时。
 
 **收尾还原**：`bash sandbox/restore-project.sh`。
 
@@ -244,7 +302,7 @@ reviewer 的链超过 180s 时，队长侧超时返回，而接力仍在服务�
   session-id 上新旧 run 交错，见 docs/TESTING-OPTIMIZATION-PLAN.md P0-2）；
 - **项目级配置每会话只应用一次**：信任在启动时解析，运行中授予信任不会补应用；
 - **registry 版本不匹配即重建**：`schemaVersion !== 1` 时按新团队覆盖旧数据；
-- **纯逻辑探针须独立运行**：phase15/16/17 传递导入 `@step-harness/pi-tui` 会触发
+- **纯逻辑探针须独立运行**：phase15/16 传递导入 `@step-harness/pi-tui` 会触发
   step 对仓库包的暂存加载，与 `-e` 原始副本冲突——runner 的 `STANDALONE_PHASES`
   机制不挂载 index.ts（见 run-smoke.sh 注释）；
 - **depth≥3 未做真实 LLM 链测试**（进程级自举已验证）。

@@ -19,8 +19,9 @@
 
 | 路径 | 说明 |
 |---|---|
-| `run.sh` | 沙箱启动器：隔离 agentDir/session/plan，cwd 指向 `project/` |
+| `run.sh` | 沙箱启动器：隔离 agentDir/session/plan，cwd 指向 `project/`（自动读取 `TEST-KEY.md` 中的 key） |
 | `probe.sh` | 零 token 协议探针（期望输出 `PROBE OK`） |
+| `archive-round.sh` | 归档本轮测试证据（会话 JSONL、团队注册表、`logs/`、项目 diff）到 `archive/<时间戳>-<标签>/`（gitignored）——在 `restore-project.sh` 之前运行 |
 | `restore-project.sh` | 还原沙箱测试环境：`project/` 复位为初始种子态（含 off-by-one 种子 bug），清除运行时数据与会话日志（`session-log-*.md`、`logs/`） |
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`：12 条测试，种子 bug 在位时 11 条通过） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
@@ -72,7 +73,8 @@ git submodule，钉住本沙箱跟踪的 Step Code 版本——step 升级时只
 ## 会话日志
 
 每轮沙箱测试结束后，让 agent 把过程写入 `sandbox/logs/session-log-<日期>.md`
-（gitignored，本地留存；`restore-project.sh` 还原种子态时一并清除）。
+（gitignored，本地留存；`restore-project.sh` 还原种子态时一并清除——先跑
+`bash sandbox/archive-round.sh <标签>` 可保留证据）。
 把下面这段 prompt 粘进会话（或在该轮结束时交给队长）：
 
 ```text

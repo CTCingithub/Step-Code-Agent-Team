@@ -307,7 +307,7 @@ function seedBlock(): string {
 		"#",
 		"# [stepcodeAgentTeam.dispatch]",
 		line(`maxConcurrent = ${d.dispatch.maxConcurrent}`, "parallel member cap (1-16); extra dispatches queue"),
-		line(`timeoutMs = ${d.dispatch.timeoutMs}`, "per-dispatch timeout (ms)"),
+		line(`timeoutMs = ${d.dispatch.timeoutMs}`, "per-dispatch timeout (ms) — covers the member's whole turn, nested relays included"),
 		line(`handshakeTimeoutMs = ${d.dispatch.handshakeTimeoutMs}`, "member spawn handshake timeout (ms)"),
 		line(`retries = ${d.dispatch.retries}`, "task retry count (0-5)"),
 		"#",
@@ -407,8 +407,8 @@ export function defaultConfig(): PluginConfig {
 			autonomousEffort: false,
 		},
 		members: { max: 8, defaultRole: "worker", defaultTools: null, maxRecursionDepth: 1 },
-		dispatch: { maxConcurrent: 5, timeoutMs: 180_000, handshakeTimeoutMs: 15_000, retries: 1 },
-		oneshot: { timeoutMs: 180_000 },
+		dispatch: { maxConcurrent: 5, timeoutMs: 600_000, handshakeTimeoutMs: 15_000, retries: 1 },
+		oneshot: { timeoutMs: 600_000 },
 		cost: { warnThreshold: 1 },
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
@@ -648,9 +648,24 @@ function validate(config: PluginConfig): string[] {
 			(k) => !(DEPRECATED_KEYWORDS as readonly string[]).includes(k.trim().toLowerCase()),
 		);
 		if (kept.length !== config.activation.keywords.length) {
-			lastKeywordMigration = config.activation.keywords.filter((k) => !kept.includes(k));
-			config.activation.keywords = kept.length > 0 ? kept : d.activation.keywords;
-			warnings.push("activation.keywords (deprecated terms removed)");
+			// Report the user's own terms, trimmed and deduped: the strip above
+			// matches on the normalized form, so a list like
+			// ["agent team", "agent team "] must not notify the same term twice.
+			lastKeywordMigration = [
+				...new Set(config.activation.keywords.filter((k) => !kept.includes(k)).map((k) => k.trim())),
+			];
+			if (kept.length > 0) {
+				config.activation.keywords = kept;
+				warnings.push("activation.keywords (deprecated terms removed)");
+			} else {
+				// Every configured term was deprecated: keyword activation stays
+				// OFF instead of silently re-adding the full default list (which
+				// would widen the user's activation surface, not narrow it).
+				config.activation.keywords = [];
+				warnings.push(
+					"activation.keywords (all terms deprecated; keyword activation disabled — set plugin-specific keywords to re-enable)",
+				);
+			}
 		}
 	}
 

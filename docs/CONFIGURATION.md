@@ -40,12 +40,12 @@ maxRecursionDepth = 1                # team-tree depth bound (1–4)
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5                    # parallel member cap (1–16); extra dispatches queue
-timeoutMs = 180000                   # per-dispatch timeout
+timeoutMs = 600000                   # per-dispatch timeout
 handshakeTimeoutMs = 15000           # member spawn handshake timeout
 retries = 1                          # task retry count (0–5)
 
 [stepcodeAgentTeam.oneshot]
-timeoutMs = 180000                   # stateless dispatch timeout
+timeoutMs = 600000                   # stateless dispatch timeout
 
 [stepcodeAgentTeam.cost]
 warnThreshold = 1                    # cumulative spend warning (USD); 0 = off
@@ -84,7 +84,7 @@ debug = false                        # debug logging
 
 | Section | Controls |
 |---|---|
-| `activation` | Default-off gate: the `/topo` command (`/topo off` deactivates and re-hides the tools) or a keyword mention (case-insensitive) activates the plugin; sticky for the session. With `enabled: false` neither trigger works and the command reports the config disable. Deprecated keywords (the old "agent team" / "智能体团队" style terms) are stripped from the effective list on load — forced migration, reported once on activation. `guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` layer the false-trigger guard — slash commands bypass it |
+| `activation` | Default-off gate: the `/topo` command (`/topo off` deactivates and re-hides the tools) or a keyword mention (case-insensitive) activates the plugin; sticky for the session. With `enabled: false` neither trigger works and the command reports the config disable. Deprecated keywords (the old "agent team" / "智能体团队" style terms) are stripped from the effective list on load — forced migration, reported once on activation. If every configured term is deprecated the effective list becomes empty and keyword activation stays off until you set plugin-specific keywords. `guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` layer the false-trigger guard — slash commands bypass it |
 | `models` | Member model pool. `autonomousSelection` off (default) pins every member to the conversation model (preset/explicit `model` ignored); on, resolution is explicit `model` → preset → conversation model (unknown explicit model errors with the available list; unknown preset model falls back to `available[0]`). `autonomousEffort` off resolves effort as: explicit param → `presets.effort` override → preset frontmatter `effort` → `high`; on lets the leader choose per member (all preset efforts inert) |
 | `members` | `max` counts **live** members only (dead records stay resumable without occupying a slot). `maxRecursionDepth`: 1 = members cannot spawn sub-teams (fully inert in their sessions); 2+ grants sub-leaders their own independent team (registry + socket), bounded at 4 |
 | `dispatch` | `maxConcurrent` gates **before process start** (queue-before-start); oneshot dispatches share the budget; nested member-to-member relays bypass the global gate to avoid chain deadlock |

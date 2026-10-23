@@ -96,7 +96,7 @@ serving as the vehicle for team members doing real work inside the sandbox (memb
 
 ## VIII. Demo project review and fixes (plan-56, 2026-10-19)
 
-Source: task 2 (star three-way parallel review) and task 3 (ring round-robin summary) of the second manual verification session (`sandbox/session-log-2026-10-19.md`, deleted per the restore
+Source: task 2 (star three-way parallel review) and task 3 (ring round-robin summary) of the second manual verification session (`sandbox/session-log-2026-10-19.md`, deleted per the restore strategy; session logs now live in `sandbox/logs/`)
 strategy). The review target is the `sandbox/project` demo code (not the plugin itself).
 
 **Fixed (project and project-pristine in sync; the buggy 7/8 and fixed 8/8 baselines unchanged)**:
@@ -123,7 +123,7 @@ strategy). The review target is the `sandbox/project` demo code (not the plugin 
 
 **Verification**: fixed state `npm test` 12/12; M1 reproduction paths (`add ""` / `done 99`) all exit cleanly with code 2; M2 reproduction paths (`{}` / `{"tasks":[]}`) all fall back to an empty list; the post-restore 11/12 baseline (seeded failure) unchanged; project and project-pristine file-for-file identical.
 
-## V. 0.2.0 round (2026-10-19)
+## IX. 0.2.0 round (2026-10-19)
 
 New surface to verify: the `/topo` command (tiers / picker / review / off), plugin-specific keywords + forced migration, the three-layer false-trigger guard, verbatim forwarding with request-local instruction injection, `topo_team_msg` member messaging (no bash), custom roles, effort presets.
 
@@ -131,7 +131,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Check | Command / probe | Expected |
 |---|---|---|---|
-| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 6 live checks + orphan-check) |
+| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 7 live checks + orphan-check) |
 | A2 | Protocol probe | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
 | A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |
@@ -141,7 +141,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | # | Check | Probe | Gap |
 |---|---|---|---|
 | K1 | `/topo <request>` end-to-end | RPC prompt with the command | the verbatim request lands in the session log; the leader forms a team (no solo completion) |
-| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; the chosen tier's instruction reaches the model |
+| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; with a request attached the confirmation shows the model-generated actual plan (one-off planning call), and on approval that plan reaches the model with precedence over the tier's general guidance |
 | K3 | `plan.tier` pinned mode | config `tier="fast"` | no picker; the tier applies on every activation (command and keyword paths) |
 | K4 | `/topo review <target>` | sandbox session | three reviewers + worker merge protocol executed |
 | K5 | topo_team_msg success dispatch | two members + a declared edge; the upstream messages the downstream | the reply returns over the socket — the E2E gap left by the topology fix |
@@ -164,11 +164,16 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Result | Notes |
 |---|---|---|
-| A1 | ✅ all phases passed | 17 phases + manifest + 6 live checks (incl. live-review) + orphan-check |
+| A1 | ✅ all phases passed | 17 phases + manifest + 7 live checks (incl. live-review) + orphan-check |
 | A2 | ✅ PROBE OK | zero-token protocol probe |
 | A3 | ✅ restored | seeded bug back in place; `data/` and `session-log-*.md` cleared |
 | A3b | ✅ 11/12 baseline | the restored project fails exactly the seeded test (the suite grew to 12 in the hygiene round) |
 | A4 | ✅ (via A1) | live-clean-export loads and activates the archived extension |
+| A1 | ✅ all phases passed (2026-10-22 optimization-verification re-run) | 18 phases + manifest + 7 live checks + orphan-check; includes the phase22 self-heal probe |
+| K8 | ✅ all four LLM probes passed (2026-10-22) | phase4 (replies / context memory / resume after respawn / shim messaging), phase10 (parallel 4/4, observed max 4 ≤ 5), phase11 (depth-2 chain, re-run under `sandbox/cfg-deep2` after a clean SKIP on the default config), phase12 (oneshot + usage, task chain, unicode, SIGKILL recovery, streaming with interim updates) |
+| F1 | Flow fixes found while re-running | TESTING(_CN): the documented LLM-probe invocation lacked `STEP_CODING_AGENT_DIR` isolation — an installed copy under `~/.stepcode/agent` conflicts with the `-e` extension, so every tool name failed to load and the probes never ran (isolation export added to both docs); MANUAL-TESTING(_CN) runbook 17→18 phases; run-smoke.sh duplicate comment removed |
+| U1 | ✅ user manual round (2026-10-22; the §7 log was lost to an unarchived restore — analysis reconstructed from the session JSONL) | §1 walkthrough + demo Acts 1–3 all completed: the 4-member fix chain (T1–T4) finished; Act 1's premise had already been met (baseline 12/12 from the earlier activation run) and the leader adapted via clarify_user + verify-only tasks; Act 2 three-way parallel review (T8–T10); Act 3 ring tour a→b→c with the third hop rejected verbatim ("would reach 3 hops, over the ring loop limit (2)"), the whole chain finishing in ~12 min with zero timeouts under the 600s family; members scoping used in team_set_topology; exactly one isError:true in the session (the expected ring rejection) |
+| F2 | Log-loss hardening (2026-10-22) | restore-project.sh now auto-archives logs/ (and legacy session-log-*.md) to sandbox/archive/<ts>-auto-before-restore/ before deleting them, so an unarchived restore can never destroy a round's §7 log again; MANUAL-TESTING Act 1 gained the baseline-pitfall note (restore first when a previous run already fixed the bug; the leader's clarify_user adaptation is correct behavior); the activation instruction now tells the model to stay read-only when the user did not ask for changes |
 
 Remaining: K1–K8 need `STEP_API_KEY` (set it in `sandbox/TEST-KEY.md`, gitignored, or export it); M1–M6 are manual (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
 

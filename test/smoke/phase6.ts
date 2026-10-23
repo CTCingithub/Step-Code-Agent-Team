@@ -145,6 +145,28 @@ export default function (pi: ExtensionAPI) {
 				migratedTerms.length === 2 && migratedTerms.includes("智能体团队") && migratedTerms.includes("agent team"),
 				`got ${migratedTerms.join(",")}`,
 			);
+			// All-deprecated: the effective list becomes empty (keyword activation
+			// disabled) instead of silently re-widening to the default list, the
+			// stripped terms are still reported, and detection is off end-to-end.
+			fs.writeFileSync(
+				path.join(tmp, "settings.json"),
+				JSON.stringify({ stepcodeAgentTeam: { activation: { keywords: ["agent team"] } } }),
+			);
+			const cMigAll = loadConfig({ agentDir: tmp });
+			check(
+				"migration: all-deprecated → keyword activation disabled",
+				cMigAll.activation.keywords.length === 0,
+				`got ${JSON.stringify(cMigAll.activation.keywords)}`,
+			);
+			const migratedAll = consumeKeywordMigration();
+			check(
+				"migration: all-deprecated reports every stripped term",
+				migratedAll.length === 1 && migratedAll[0] === "agent team",
+				`got ${migratedAll.join(",")}`,
+			);
+			initActivation(cMigAll, pi, () => {});
+			check("migration: all-deprecated → detectKeyword off", !detectKeyword("let's spin up a topo team"));
+			initActivation(cfg, pi, () => {});
 			fs.rmSync(tmp, { recursive: true, force: true });
 
 			// 3. detection
@@ -161,6 +183,17 @@ export default function (pi: ExtensionAPI) {
 			// 3b. L1 false-positive guard (0.2.0): negation / meta-discussion /
 			// code references must not activate; real requests still do.
 			check("guard: negation suppressed", !detectKeyword("不用组小队，先跑单智能体"));
+			// Negation separated from the keyword by several words must still be
+			// suppressed — the old fixed 6-char window missed the README's own
+			// example ("don't use an agent squad" activated the plugin). A
+			// negation in a PREVIOUS clause must NOT over-suppress a real
+			// request that follows the boundary.
+			check("guard: distant negation suppressed (en)", !detectKeyword("don't use an agent squad"));
+			check("guard: distant negation suppressed (en, no need)", !detectKeyword("no need to spin up a topo team"));
+			check(
+				"guard: clause-separated negation still activates",
+				detectKeyword("there are no tests here, use an agent squad to review this repo"),
+			);
 			check("guard: meta-discussion suppressed", !detectKeyword("什么是智能体小队？"));
 			check("guard: code reference suppressed", !detectKeyword("把 `智能体小队` 加进 keywords"));
 			check("guard: bare topo is not a keyword", !detectKeyword("topo"));

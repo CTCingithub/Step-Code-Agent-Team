@@ -72,14 +72,14 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 
 | 探针 | 覆盖 | 成本 |
 |---|---|---|
-| phase1 | 成员生命周期（spawn/握手/disband/重建） | 零 token |
+| phase1 | 成员生命周期断言（spawn/握手/注册表持久化/disband 复位/幂等恢复——kill 路径实例身份回归） | 零 token |
 | phase2 | 任务板状态机（DAG/环/ready-set/持久化） | 零 token |
 | phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
 | phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token（无 key 时 SKIP） |
-| phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 | 零 token |
+| phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 + 强制关键词迁移（剥离/上报/全旧词禁用）+ L1 否定护栏矩阵 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
-| phase9 | 配置边界（storage.dir/项目级/非法回退） | 零 token |
+| phase9 | 配置边界（storage.dir/项目级/非法回退）+ [tasks] 节校验 | 零 token |
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
 | phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
@@ -90,11 +90,14 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议） | 零 token |
 
-LLM 路径探针（phase4/10/11/12）需要测试 key，仍留在 gitignore 的 `sandbox/` 内（见 C 层）。
+LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——探针本身已跟踪入库，仅沙箱运行时状态在 .gitignore 内（见 C 层）。
 
 ## 3. C 层 — LLM 路径测试（测试 key，沙箱内，每条成本极小）
 
 ```bash
+# 先隔离 agent 目录：不设置时 step 回退到 ~/.stepcode/agent，其 packages 项里
+# 安装的本插件副本会与下面的 -e 扩展冲突——全部工具名加载失败，探针根本不运行。
+export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
   -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
@@ -120,7 +123,7 @@ prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](
 队长崩溃恢复（registry 无 `.tmp-*` 残留、resume 后视图与磁盘一致）、Unicode/emoji 往返、
 参数校验（空 message/非法成员名/未知 task id/未知 member 均得明确错误）、
 目录不存在（sessions 目录删后 createMember 仍正常）、大规模（8 成员上限 / 999 任务上限 /
-单任务 detail 50KB）。
+单任务 detail 50KB——均为可配置默认值，见 [CONFIGURATION.md](CONFIGURATION_CN.md)）。
 
 TUI 渲染（renderCall/renderResult、`/topo` 面板、流式进度、激活 notify）只在交互 TUI
 生效，探针覆盖不到，按 [MANUAL-TESTING.md](MANUAL-TESTING_CN.md) 第 1 节人工验证——该文档

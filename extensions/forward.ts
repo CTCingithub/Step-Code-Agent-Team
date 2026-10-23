@@ -40,14 +40,14 @@ export function teamActivationInstruction(lang: Lang): string {
 	return lang === "zh"
 		? [
 				"[智能体团队已启用] 请用团队工具完成用户的请求，并遵守以下协议：",
-				"1. 组队判据：任务有独立并行 strand 才组队；2–4 成员为宜，每人一个明确焦点；单点小改动不要过度拆分。",
+				"1. 组队判据：任务有独立并行 strand 才组队；2–4 成员为宜，每人一个明确焦点；单点小改动不要过度拆分。熟悉/了解/介绍类请求 1–2 名只读成员即可；用户未要求改动时保持只读，不要顺手修改文件。",
 				"2. 拓扑先行：建成员后、派活前用 team_set_topology 声明拓扑——默认 star（队长中转）；顺序精炼用 pipeline；同伴互查用 mesh/ring。成员经内置 topo_team_msg 工具直达通信（无需 bash，只读角色同样可用）；依赖请用任务板 blockedBy 表达。",
 				"3. 运行流程：team_create_member 建成员 → team_set_topology 声明拓扑 → team_task 拆解任务（blockedBy 表达依赖）→ team_send / team_task start 派活（指令短小自包含，成员看不到你的对话）→ 自己合并各成员结论 → 完工后 team_disband。",
 				'4. 成本纪律：不要把同一任务分给两个成员"求保险"；无状态扇出用 mode: "oneshot"；留意 team_status 的累计花费。',
 			].join("\n")
 		: [
 				"[Agent team active] Use the team tools for the user's request, following this protocol:",
-				"1. When to form a team: only when the work has independent parallel strands; 2–4 members is the sweet spot, each with a distinct focus; do not over-split a single small edit.",
+				"1. When to form a team: only when the work has independent parallel strands; 2–4 members is the sweet spot, each with a distinct focus; do not over-split a single small edit. Familiarization/overview requests need only 1–2 read-only members; when the user did not ask for changes, stay read-only — do not modify files as a side effect.",
 				"2. Topology first: after creating members and before dispatching, declare the topology with team_set_topology — star by default (leader relays); pipeline for sequential refinement; mesh/ring for cross-checking. Members message teammates through the built-in topo_team_msg tool (no bash needed — read-only roles included); express dependencies with the task board's blockedBy.",
 				"3. Run loop: team_create_member → team_set_topology → team_task with blockedBy → team_send / team_task start (short, self-contained instructions; members do not see your conversation) → merge the results yourself → team_disband when done.",
 				'4. Cost discipline: never give two members the same task "for safety"; use mode: "oneshot" for stateless fan-out; watch cumulative spend in team_status.',
@@ -68,6 +68,60 @@ export function tierInstruction(tier: TeamTier, lang: Lang): string {
 		`[Team plan · ${label}] ${tier.guidance.en}`,
 		tier.example.en,
 		"Member names, counts, roles, topology, and effort are yours to decide from the task — the example above is a suggestion only, do not copy it verbatim.",
+	].join("\n");
+}
+
+/**
+ * One-off planning prompt for the tier confirmation: the model drafts the
+ * ACTUAL team plan for this specific request — what the user is about to
+ * approve — replacing the tier's preset shape in the yes/no dialog. Plan
+ * only: no tools, no execution.
+ */
+export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { system: string; user: string } {
+	const label = tier.label[lang] ?? tier.label.zh;
+	if (lang === "zh") {
+		return {
+			system: "你是智能体小队的方案规划器。根据用户请求与既定策略，输出具体的组队方案。只输出方案本身：不要执行、不要调用工具、不要解释流程。",
+			user: [
+				`用户请求：${request}`,
+				`既定策略：[团队方案 · ${label}] ${tier.guidance.zh}`,
+				"请输出实际方案，依次包含：",
+				"1. 成员名单：每个成员的名字、角色与各自 effort；",
+				"2. 通信拓扑（star/pipeline/mesh/ring/custom）及选择理由；",
+				"3. 任务拆解：每个任务分配给谁、先后依赖（用任务板 blockedBy 表达）。",
+				"控制在 10 行以内，直接给出方案。",
+			].join("\n"),
+		};
+	}
+	return {
+		system: "You are the team planner for an agent squad. Given the user's request and the chosen strategy, output the concrete team plan. Output the plan only: no execution, no tool calls, no process commentary.",
+		user: [
+			`User request: ${request}`,
+			`Chosen strategy: [Team plan · ${label}] ${tier.guidance.en}`,
+			"Output the actual plan, covering:",
+			"1. Roster: each member's name, role, and effort;",
+			"2. Communication topology (star/pipeline/mesh/ring/custom) and why;",
+			"3. Task breakdown: who does what, and the order dependencies (expressed as task-board blockedBy edges).",
+			"Keep it within 10 lines; give the plan directly.",
+		].join("\n"),
+	};
+}
+
+/**
+ * Instruction injected after the user confirms the model-generated plan:
+ * the approved plan takes precedence over the tier's general guidance.
+ */
+export function approvedPlanInstruction(tier: TeamTier, plan: string, lang: Lang): string {
+	const label = tier.label[lang] ?? tier.label.zh;
+	if (lang === "zh") {
+		return [
+			`[团队方案 · ${label}] 用户已确认以下实际方案——优先级高于一般性策略描述，请严格按它组建（成员、角色、拓扑、effort、任务拆解）：`,
+			plan,
+		].join("\n");
+	}
+	return [
+		`[Team plan · ${label}] The user confirmed this actual plan — it takes precedence over the general strategy; build exactly this (members, roles, topology, effort, task breakdown):`,
+		plan,
 	].join("\n");
 }
 

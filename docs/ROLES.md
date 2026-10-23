@@ -52,7 +52,7 @@ An explicit `effort` argument to `team_create_member` always wins. Otherwise:
 2. the role's own frontmatter `effort`;
 3. the default (`high`).
 
-When `models.autonomousThinking = true` the leader chooses the effort per
+When `models.autonomousEffort = true` the leader chooses the effort per
 member, so preset efforts — frontmatter and config alike — are inert.
 
 ## Usage

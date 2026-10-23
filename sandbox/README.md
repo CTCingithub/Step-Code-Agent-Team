@@ -22,8 +22,9 @@ agent team.
 
 | Path | Description |
 |---|---|
-| `run.sh` | Sandbox launcher: isolates agentDir/session/plan, cwd points at `project/` |
+| `run.sh` | Sandbox launcher: isolates agentDir/session/plan, cwd points at `project/` (reads the key from `TEST-KEY.md`) |
 | `probe.sh` | Zero-token protocol probe (expects `PROBE OK`) |
+| `archive-round.sh` | Archives a round's evidence (sessions JSONL, team registries, `logs/`, project diff) to `archive/<timestamp>-<label>/` (gitignored) — run it BEFORE `restore-project.sh` |
 | `restore-project.sh` | Restores the sandbox test environment: resets `project/` to its initial seeded state (including the off-by-one seeded bug), clears runtime data and session logs (`session-log-*.md`, `logs/`) |
 | `project/` | Demo project: zero-dependency Node.js task manager (`npm test`: 12 tests, 11 pass with the seeded bug in place) |
 | `project-pristine/` | Initial snapshot of the demo project (the source for restore; do not modify) |
@@ -85,8 +86,10 @@ path-protection guardrail (members must not read or exfiltrate it).
 
 After each sandbox test round, have the agent write the process to
 `sandbox/logs/session-log-<date>.md` (gitignored, kept locally; cleared
-together with the seeded state by `restore-project.sh`). Paste this prompt
-into the session (or hand it to the leader at the end of the round):
+together with the seeded state by `restore-project.sh` — run
+`bash sandbox/archive-round.sh <label>` first to preserve the evidence).
+Paste this prompt into the session (or hand it to the leader at the end of
+the round):
 
 ```text
 Record this session's team collaboration into sandbox/logs/session-log-<today's date>.md with

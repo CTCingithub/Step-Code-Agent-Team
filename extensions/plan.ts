@@ -43,6 +43,18 @@ export interface TeamTier {
 	guidance: Record<Lang, string>;
 	/** Non-binding example roster/topology, localized. */
 	example: Record<Lang, string>;
+	/**
+	 * The tier's standard plan shape — what the tier directs the model to
+	 * build. Rendered as labeled lines in the confirmation dialog so the
+	 * user approves a concrete plan, not strategy prose. Member names,
+	 * counts, and division of labor still adapt to the task (the model is
+	 * told so in its instruction); the shape itself is the tier's.
+	 */
+	plan: {
+		members: Record<Lang, string>;
+		topology: Record<Lang, string>;
+		effort: Record<Lang, string>;
+	};
 }
 
 const TIERS: Record<PlanTierId, TeamTier> = {
@@ -52,6 +64,20 @@ const TIERS: Record<PlanTierId, TeamTier> = {
 		guidance: {
 			zh: "以最低成本完成用户的请求：少成员、低 effort，省去不必要的规划与审查环节。",
 			en: "Complete the request at the lowest cost: few members, low effort, skip unnecessary planning and review stages.",
+		},
+		plan: {
+			members: {
+				zh: "1–2 名：scout 只读调研 + worker 执行",
+				en: "1–2: one scout for read-only research + one worker to execute",
+			},
+			topology: {
+				zh: "star；省去规划与审查环节，直击执行",
+				en: "star; planning and review stages skipped, straight to execution",
+			},
+			effort: {
+				zh: "low/medium——以最低成本完成请求",
+				en: "low/medium — complete the request at the lowest cost",
+			},
 		},
 		example: {
 			zh: "示例（仅供参考，非固定方案）：1 名 scout 只读调研 + 1 名 worker 执行，effort 取 low/medium，拓扑用 star，任务依赖用任务板 blockedBy 表达。",
@@ -65,6 +91,20 @@ const TIERS: Record<PlanTierId, TeamTier> = {
 			zh: "以最短耗时完成用户的请求：立即并行开工，尽量减少中间环节。",
 			en: "Complete the request as fast as possible: start in parallel immediately and minimize intermediate stages.",
 		},
+		plan: {
+			members: {
+				zh: "2 名 worker 并行分治",
+				en: "2 workers splitting the work in parallel",
+			},
+			topology: {
+				zh: "star；立即并行开工，无中间环节",
+				en: "star; start in parallel immediately, no intermediate stages",
+			},
+			effort: {
+				zh: "low——以最短耗时完成请求",
+				en: "low — complete the request as fast as possible",
+			},
+		},
 		example: {
 			zh: "示例（仅供参考，非固定方案）：2 名 worker 并行分治，effort 取 low，拓扑用 star。",
 			en: "Example (a suggestion, not a fixed plan): 2 workers splitting the work in parallel, effort low, star topology.",
@@ -77,6 +117,20 @@ const TIERS: Record<PlanTierId, TeamTier> = {
 			zh: "在成本与质量之间平衡地完成用户的请求：覆盖勘察、规划、执行、审查各环节。",
 			en: "Complete the request balancing cost and quality: cover the exploration, planning, execution, and review stages.",
 		},
+		plan: {
+			members: {
+				zh: "scout + planner + 2 worker + reviewer",
+				en: "scout + planner + 2 workers + reviewer",
+			},
+			topology: {
+				zh: "star；依赖用任务板 blockedBy 表达",
+				en: "star; dependencies via the task board's blockedBy",
+			},
+			effort: {
+				zh: "low/medium——成本与质量平衡，覆盖勘察→规划→执行→审查",
+				en: "low/medium — balance cost and quality; exploration → planning → execution → review",
+			},
+		},
 		example: {
 			zh: "示例（仅供参考，非固定方案）：scout + planner + 2 名 worker + reviewer，effort 取 low/medium，拓扑用 star，任务依赖用任务板 blockedBy 表达。",
 			en: "Example (a suggestion, not a fixed plan): scout + planner + 2 workers + reviewer, effort low/medium, star topology, task dependencies via the task board's blockedBy.",
@@ -88,6 +142,20 @@ const TIERS: Record<PlanTierId, TeamTier> = {
 		guidance: {
 			zh: "以最高质量完成用户的请求，不计较成本：多成员、高 effort 深度协作，可并行竞速后择优。",
 			en: "Complete the request at the highest quality regardless of cost: many members, high effort, deep collaboration — parallel racing with a final pick is fine.",
+		},
+		plan: {
+			members: {
+				zh: "scout + planner + 3 worker + 2 reviewer，可并行竞速后择优",
+				en: "scout + planner + 3 workers + 2 reviewers; parallel racing with a final pick is fine",
+			},
+			topology: {
+				zh: "star 或 custom 表达依赖方向；成员经内置 topo_team_msg 直达通信",
+				en: "star or custom to express dependency direction; members message teammates via the built-in topo_team_msg",
+			},
+			effort: {
+				zh: "high/xhigh——深度协作，不计较成本",
+				en: "high/xhigh — deep collaboration, cost is no object",
+			},
 		},
 		example: {
 			zh: "示例（仅供参考，非固定方案）：scout + planner + 3 名 worker + 2 名 reviewer，effort 取 high/xhigh；可用 custom 拓扑表达依赖方向——成员经内置 topo_team_msg 工具直达通信（只读角色无需 bash 也可用），依赖请同时用任务板 blockedBy 表达。",
@@ -108,6 +176,19 @@ export function getTier(id: string | undefined | null): TeamTier {
 /** Localized label for the picker / summaries. */
 export function tierLabel(tier: TeamTier, lang: Lang): string {
 	return tier.label[lang] ?? tier.label.zh;
+}
+
+/**
+ * Labeled plan lines for the confirmation dialog — the tier's standard shape
+ * (members / topology / effort), labels defined once per language.
+ */
+export function tierPlanLines(tier: TeamTier, lang: Lang): string[] {
+	const l = (zh: string, en: string): string => (lang === "zh" ? zh : en);
+	return [
+		`${l("成员", "Members")}${l("：", ": ")}${tier.plan.members[lang]}`,
+		`${l("拓扑", "Topology")}${l("：", ": ")}${tier.plan.topology[lang]}`,
+		`${l("effort", "Effort")}${l("：", ": ")}${tier.plan.effort[lang]}`,
+	];
 }
 
 /** Picker option strings (localized, no cost multipliers). */

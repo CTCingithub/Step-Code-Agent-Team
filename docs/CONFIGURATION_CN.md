@@ -40,12 +40,12 @@ maxRecursionDepth = 1                # 团队树深度上限（1–4）
 
 [stepcodeAgentTeam.dispatch]
 maxConcurrent = 5                    # 并行成员上限（1–16）；超出的派活排队
-timeoutMs = 180000                   # 单次派发超时
+timeoutMs = 600000                   # 单次派发超时
 handshakeTimeoutMs = 15000           # 成员 spawn 握手超时
 retries = 1                          # 任务重试次数（0–5）
 
 [stepcodeAgentTeam.oneshot]
-timeoutMs = 180000                   # 无状态派发超时
+timeoutMs = 600000                   # 无状态派发超时
 
 [stepcodeAgentTeam.cost]
 warnThreshold = 1                    # 累计花费告警阈值（美元）；0 = 禁用
@@ -84,7 +84,7 @@ debug = false                        # 调试日志
 
 | 配置节 | 控制内容 |
 |---|---|
-| `activation` | 默认关闭门：`/topo` 命令（`/topo off` 停用并重新隐藏工具）或关键词提及（大小写不敏感）即激活，会话内粘性。`enabled: false` 时两种触发都无效，命令会提示已被配置禁用。旧版关键词（"agent team"/"智能体团队" 等裸词）会在加载时从生效清单中剥离——强制迁移，激活时提示一次。`guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` 三层防误触——斜杠命令不经过防护 |
+| `activation` | 默认关闭门：`/topo` 命令（`/topo off` 停用并重新隐藏工具）或关键词提及（大小写不敏感）即激活，会话内粘性。`enabled: false` 时两种触发都无效，命令会提示已被配置禁用。旧版关键词（"agent team"/"智能体团队" 等裸词）会在加载时从生效清单中剥离——强制迁移，激活时提示一次。若配置的全部都是旧词，生效清单将变为空、关键词激活保持关闭，直至设置插件专属关键词。`guardEnabled` / `confirmBeforeActivate` / `headlessAutoActivate` 三层防误触——斜杠命令不经过防护 |
 | `models` | 成员模型池。`autonomousSelection` 关（默认）时所有成员强制使用对话当前模型（预设/显式 `model` 忽略）；开时解析链为显式 `model` → 预设 → 对话当前模型（显式模型不在列表则报错并列出可用模型，预设模型不在列表则回退 `available[0]`）。`autonomousEffort` 关时 effort 解析链为：显式参数 → `presets.effort` 配置覆盖 → 预设 frontmatter `effort` → `high`；开时由队长逐成员选择（所有预设 effort 不生效） |
 | `members` | `max` 只计**存活**成员（dead 记录可恢复但不占名额）。`maxRecursionDepth`：1 = 成员不能组建团队（其会话中扩展完全惰性）；2+ 授予子队长独立团队（独立注册表与 socket），上限 4 |
 | `dispatch` | `maxConcurrent` 在**进程启动前**门控（排队启动）；oneshot 共享同一预算；嵌套成员间接力绕过全局门以避免链式死锁 |

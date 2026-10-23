@@ -47,7 +47,9 @@ import {
 import {
 	customTierInstruction,
 	detectLang,
+	approvedPlanInstruction,
 	teamActivationInstruction,
+	teamPlanPrompt,
 	teamReviewInstruction,
 	tierInstruction,
 	type Lang,
@@ -60,6 +62,7 @@ import {
 	PLAN_TIER_IDS,
 	tierLabel,
 	tierPickerOptions,
+	tierPlanLines,
 	type CustomPicks,
 	type TeamTier,
 } from "./plan.ts";
@@ -121,7 +124,13 @@ export default function (pi: ExtensionAPI) {
 
 	const getManager = (ctx: ExtensionContext): TeamManager => {
 		if (shutDown) throw new Error("Agent team plugin has shut down for this session.");
-		if (!manager) manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
+		if (!manager) {
+			// Project-tier presets load only for trusted projects (the same gate
+			// as the project-level config); the trust probe lives on the context.
+			const trust = ctx as { isProjectTrusted?: () => boolean };
+			const trusted = typeof trust.isProjectTrusted === "function" ? trust.isProjectTrusted() : false;
+			manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd, trusted);
+		}
 		return manager;
 	};
 
@@ -315,17 +324,69 @@ export default function (pi: ExtensionAPI) {
 		}
 	};
 
+	/**
+	 * One-off planning call: the model drafts the ACTUAL team plan for this
+	 * request — what the user is about to approve in the confirmation. Plan
+	 * only (no tools). Returns null on any failure (no model, error, timeout,
+	 * empty text); callers then fall back to the tier's standard shape.
+	 */
+	const generateTeamPlan = async (ctx: ExtensionContext, tier: TeamTier, request: string, lang: Lang): Promise<string | null> => {
+		const model = ctx.model;
+		if (!model) return null;
+		const prompt = teamPlanPrompt(request, tier, lang);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const msg = await Promise.race([
+				ctx.modelRegistry.complete(model, {
+					systemPrompt: prompt.system,
+					messages: [{ role: "user", content: prompt.user, timestamp: Date.now() }],
+				}),
+				new Promise<null>((resolve) => {
+					timer = setTimeout(() => resolve(null), 90_000);
+				}),
+			]);
+			if (!msg) return null;
+			const text = msg.content
+				.map((c) => (c.type === "text" ? (c as { text: string }).text : ""))
+				.filter(Boolean)
+				.join("\n")
+				.trim();
+			return text || null;
+		} catch {
+			return null;
+		} finally {
+			if (timer) clearTimeout(timer);
+		}
+	};
+
 	/** Shows the plan summary and asks for confirmation (headless: implicit yes). */
-	const confirmChoice = async (ctx: ExtensionContext, choice: PlanChoice, lang: Lang): Promise<boolean> => {
+	const confirmChoice = async (
+		ctx: ExtensionContext,
+		choice: PlanChoice,
+		lang: Lang,
+		planText?: string | null,
+	): Promise<boolean> => {
 		const lines =
 			choice.kind === "tier"
 				? [
 						lang === "zh" ? `团队方案 · ${tierLabel(choice.tier, "zh")}` : `Team plan · ${tierLabel(choice.tier, "en")}`,
-						choice.kind === "tier" ? choice.tier.guidance[lang] : "",
-						choice.kind === "tier" ? choice.tier.example[lang] : "",
-						lang === "zh"
-							? "具体成员、角色、拓扑与 effort 由模型按任务实际需要决定。"
-							: "Actual members, roles, topology, and effort are decided by the model from the task.",
+						// The tier's standard plan shape (members / topology / effort) —
+						// what the tier directs the model to build. Strategy prose stays
+						// out of the dialog: the user approves a concrete plan, not an
+						// instruction.
+						planText
+							? [
+									lang === "zh" ? "模型为本次请求生成的实际方案：" : "The model's actual plan for this request:",
+									planText,
+								].join("\n")
+							: [
+									// Fallback (bare /topo, or the planning call failed): the tier's
+									// standard shape — there is no request-specific plan to show yet.
+									...tierPlanLines(choice.tier, lang),
+									lang === "zh"
+										? "以上为该档位的标准方案形态；具体成员名、数量与分工由模型按任务实际需要调整。"
+										: "The above is this tier's standard plan shape; the model adjusts member names, counts, and division of labor to the task.",
+								].join("\n"),
 					].filter(Boolean)
 				: [
 						lang === "zh" ? "团队方案 · 自定义" : "Team plan · Custom",
@@ -395,13 +456,25 @@ export default function (pi: ExtensionAPI) {
 		} else if (planEnabled) {
 			({ choice, request: extraRequest } = await pickChoice(ctx, request.length > 0, lang));
 		}
+		const effectiveRequest = request || extraRequest;
+		let approvedPlan: string | null = null;
 		if (choice) {
 			// The review protocol is deterministic — no summary confirm needed.
-			const confirmed = choice.kind === "review" ? true : await confirmChoice(ctx, choice, lang);
+			// For a tier with a request, the model drafts the ACTUAL plan first
+			// (one-off, plan only) so the confirmation shows what will really be
+			// built — not the tier's preset shape.
+			let planText: string | null = null;
+			if (choice.kind === "tier" && effectiveRequest && isInteractive(ctx)) {
+				ctx.ui.notify(lang === "zh" ? "正在生成本次请求的实际团队方案…" : "Generating the actual team plan for this request…", "info");
+				planText = await generateTeamPlan(ctx, choice.tier, effectiveRequest, lang);
+			}
+			const confirmed = choice.kind === "review" ? true : await confirmChoice(ctx, choice, lang, planText);
 			if (!confirmed) choice = null;
-			else if (!request && !extraRequest) activeChoice = choice; // applies to the next message
+			else {
+				approvedPlan = planText;
+				if (!request && !extraRequest) activeChoice = choice; // applies to the next message
+			}
 		}
-		const effectiveRequest = request || extraRequest;
 
 		const team = getManager(ctx);
 		const reg = team.snapshot();
@@ -446,8 +519,10 @@ export default function (pi: ExtensionAPI) {
 				// while streaming unless a delivery mode is given; queue behind
 				// the current turn in that case.
 				pendingInjection = choice
-					? choiceInstruction(choice, lang)
-					: teamActivationInstruction(lang);
+					? approvedPlan && choice.kind === "tier"
+						? [choiceInstruction(choice, lang), approvedPlanInstruction(choice.tier, approvedPlan, lang)].join("\n\n")
+						: choiceInstruction(choice, lang)
+						: teamActivationInstruction(lang);
 				if (ctx.isIdle()) pi.sendUserMessage(effectiveRequest);
 				else pi.sendUserMessage(effectiveRequest, { deliverAs: "followUp" });
 			} catch (err) {
@@ -529,6 +604,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		currentCtx = ctx;
 		applyProjectConfigFromCtx(ctx);
+		// Forced keyword migration (0.2.0): report stripped terms on a path that
+		// runs whether or not an activation follows — a user whose whole list was
+		// deprecated can never trigger activation (the effective list is now
+		// empty), so the report must not wait for one; the config-level warning
+		// is debug-gated only.
+		const migratedOnStart = consumeKeywordMigration();
+		if (migratedOnStart.length > 0) {
+			ctx.ui.notify(
+				`Migrated activation config: removed deprecated keywords (${migratedOnStart.join(", ")}). Use current keywords like 智能体小队 / topo team.`,
+				"info",
+			);
+		}
 		// Sub-leader members are granted their own team by their parent process
 		// (STEPCODE_TEAM_AUTOACTIVATE is set only when the depth budget allows).
 		if (process.env.STEPCODE_TEAM_AUTOACTIVATE === "1") {

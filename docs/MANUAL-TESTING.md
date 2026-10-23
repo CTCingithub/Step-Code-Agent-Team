@@ -16,21 +16,73 @@
 > (live-package-install: a settings `packages` entry pointing at the repo loads the
 > extension and activates it).
 >
-> What remains is only the **irreducible** manual items — ordered by priority. Each one
-> comes with a **directly copy-pasteable command / prompt**. The TUI rendering checklist
-> (look-and-feel only; the content layer is asserted by phase15) is §1 below.
+> What remains is only the **irreducible** manual items. Start with the **Round
+> runbook** below for the full one-round sequence; each section after it is the
+> per-scenario detail, with **directly copy-pasteable commands / prompts**. The TUI
+> rendering checklist (look-and-feel only; the content layer is asserted by phase15)
+> is §1.
 
-## Status overview (2026-10-19)
+## Status overview (2026-10-20)
 
 | # | Item | Status |
 |---|---|---|
 | 1 | Interactive TUI look and feel | ✅ Verified 2026-10-19 (no rendering issues found) |
-| 2 | Real install (`step install` from a clean export) | ⬜ To be run by you |
-| 3 | Trust prompt interactive UX | ⬜ To be run by you |
-| 4 | LLM behavior adherence (ring) | ✅ Verified 2026-10-19 (third hop avoided + reported to the leader) |
+| 2 | Real install (`step install` from a clean export) | ➖ Mechanics covered by `live-package-install` / `live-clean-export`; the interactive residue ⬜ yours |
+| 3 | Trust prompt interactive UX | ➖ Rejection path covered by `live-untrusted-config`; the popup itself ⬜ yours |
+| 4 | LLM behavior adherence (ring) | ✅ 2026-10-19 (third hop avoided + reported); the third hop / `maxLoopCount` rejection itself still unobserved live ⬜ |
 | 5 | Sandbox demo scripts (three acts) | ✅ Verified 2026-10-19 |
 | 6 | Performance subjective items (8 full members) | ➖ Optional, subjective |
-| — | English translation review | ⬜ Recommended (new bilingual docs this round) |
+| — | English translation review | ⬜ Recommended |
+
+## Round runbook (one complete test round)
+
+The full sequence for one round — every other section in this document is detail
+for a step here. All commands and prompts are directly copy-pasteable.
+
+### Step 0 — preflight (before launching the session)
+
+```bash
+# Archive the PREVIOUS round's evidence first — restore deletes logs/ (where the §7 log lives)
+bash sandbox/archive-round.sh <label-of-last-round>
+# Reset the sandbox: seeded bug back in place, data/ and logs/ cleared
+bash sandbox/restore-project.sh
+```
+
+The key: put it in `sandbox/TEST-KEY.md` (gitignored) — `./sandbox/run.sh` reads it
+automatically (an exported `STEP_API_KEY` wins). From §1 step 5 onward a key is
+required; without one those steps fail.
+
+### Step 1 — automated gate (must be green before any manual work)
+
+```bash
+npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any failure
+```
+
+### Step 2 — interactive scenarios (in order, one prompt at a time)
+
+| # | Scenario | Do | Detail | Watch out for |
+|---|---|---|---|---|
+| 1 | Activation + team board | §1 steps 1–2 | §1 | — |
+| 2 | Members + pipeline + task board | §1 steps 3–8 | §1 | — |
+| 3 | `topo_team_msg` E2E | paste: `Have scout1 send worker1 a one-line intro through topo_team_msg and report the tool's exact return text` | §1, §4 | The reply is best-effort: a delivery acknowledgment ("Delivered to …") is not the teammate's answer — collect outputs through the leader |
+| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list |
+| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching |
+| 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
+
+**Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
+a tier is picked, the plugin first asks the model (one-off, plan-only call) to draft
+the actual team plan for that request; the yes/no confirmation then shows that plan,
+and on approval it is injected with precedence over the tier's general guidance. Bare
+`/topo` (no request) or a failed planning call falls back to the tier's standard
+shape — there is nothing request-specific to show yet.
+
+### Step 3 — wrap-up
+
+1. `Report the team's current status`, then disband the team when finished.
+2. Generate the session log: paste the §7 prompt (writes `sandbox/logs/session-log-<date>.md`).
+3. Archive THIS round: `bash sandbox/archive-round.sh <label-of-this-round>`.
+4. `bash sandbox/restore-project.sh`.
+5. Add an execution-record row to `docs/TEST-PLAN.md` (date, what ran, result, anomalies).
 
 ## 0. General: sandbox environment and restore
 
@@ -41,7 +93,8 @@ All manual items run inside the sandbox (`./sandbox/run.sh`, isolated from the r
 |---|---|---|
 | Demo project | `sandbox/project/` (demo state with the seeded bug) | `bash sandbox/restore-project.sh` |
 | Runtime data | `sandbox/agent/{sessions,teams,plans,live-context}`, `sandbox/project/data/` (all gitignored) | Optional full reset, see below |
-| Session logs | `sandbox/logs/session-log-*.md` (generated on demand; the prompt is in [sandbox/README.md](../sandbox/README.md#session-log)) | `restore-project.sh` deletes them automatically |
+| Session logs | `sandbox/logs/session-log-*.md` (generated on demand; the prompt is in [sandbox/README.md](../sandbox/README.md#session-log)) | `restore-project.sh` deletes them automatically — run `archive-round.sh` first to keep them |
+| Project trust | `sandbox/agent/trust.json` (gitignored) | NOT reset by the quick restore — delete it to re-trigger the §3 trust popup |
 
 **Quick restore (required after every test round)**:
 
@@ -196,7 +249,7 @@ through two acts end to end — the pipeline fix chain (scout locates the seeded
 planner produces a minimal plan → worker fixes → reviewer approves) + the star
 three-way parallel review (correctness/style passed; the security item left hardening
 suggestions, which are the demo project's own option). Leader double-check: `npm test`
-8/8 (pre-fix baseline 7/8 — the suite grew from 8 to 12 tests in the 2026-10-20 hygiene round), a file-by-file comparison with `project-pristine` shows a
+12/12 (pre-fix baseline 11/12 — the suite grew from 8 to 12 tests in the 2026-10-20 hygiene round), a file-by-file comparison with `project-pristine` shows a
 difference only in `src/tasks.js`, and `secret-sample.txt` was never read by any
 member. The third act (ring round-robin) and the security hardening await the user's
 decision.
@@ -220,6 +273,13 @@ test` is 12/12; a file-by-file comparison with `project-pristine` shows a differ
 in `src/tasks.js`; `secret-sample.txt` is never read by any member. (The reviewer
 preset is read-only: its review conclusion is a static trace; `npm test` is re-run for
 real by the leader.) **Between-act restore**: `bash sandbox/restore-project.sh`.
+
+**Baseline pitfall (observed 2026-10-22)**: if an earlier request in the same
+sandbox already fixed the seeded bug, `npm test` reads 12/12 before Act 1 starts
+and the "fix the failing tests" premise no longer holds — run `bash
+sandbox/restore-project.sh` first to put the bug back. If the leader instead
+detects the mismatch and asks you (clarify_user) or adapts to a verify-only
+pass, that is correct behavior, not a bug.
 
 ### Act 2 · star parallel review (copy-paste)
 
@@ -245,14 +305,21 @@ took effect); the two-hop relay r1→r2→r3 succeeded (chain length exactly use
 summary report back along the reply chain.
 
 **Known runtime behavior (nested chain timeout)**: the leader-side `team_send` wait
-timeout (`dispatch.timeoutMs`, default 180s) covers the **entire nested relay chain** —
-when a chain of three high-effort reviewers exceeds 180s, the leader-side timeout
-returns while the relay continues on the server side (the dispatched members are reaped
-per the kill-on-failure semantics; the error message indicates the relay may still be
-in flight and lists member status). Recovery path: use `team_status` to see who is
-still alive → reach the still-running members directly to collect the summary. To
-avoid the timeout: raise `dispatch.timeoutMs` in `sandbox/config.toml` before
-the session (config is read only once at session startup).
+timeout (`dispatch.timeoutMs`, default 600s) covers the **entire nested relay chain** —
+when a chain of reviewers exceeds it, the leader-side timeout returns while the relay
+continues on the server side (the dispatched members are reaped per the
+kill-on-failure semantics; the error message indicates the relay may still be
+in flight and lists member status). The failed task carries harvest guidance: the
+member's context may already contain the work, so re-dispatch a short harvest prompt
+(e.g. "report what you have completed so far") instead of re-running the task — an
+automatic retry would duplicate the work. To avoid the timeout: raise
+`dispatch.timeoutMs` in `sandbox/config.toml` before the session (config is read
+only once at session startup).
+
+**Progress signals while waiting**: a long dispatch streams interim member text
+into the tool result (`team_send` / `team_task start` forward `onUpdate`), and
+`team_status` shows each member's live state — use them to tell a legitimate
+long review from a stuck one before the timeout fires.
 
 **Closing restore**: `bash sandbox/restore-project.sh`.
 
@@ -292,7 +359,7 @@ restore the initial state.
   granting trust mid-run does not back-apply it;
 - **Registry version mismatch triggers rebuild**: when `schemaVersion !== 1`, the new
   team overwrites the old data;
-- **Pure-logic probes must run standalone**: phase15/16/17 transitively import
+- **Pure-logic probes must run standalone**: phase15/16 transitively import
   `@step-harness/pi-tui`, which triggers step's staged loading of the repo package and
   conflicts with the `-e` original copy — the runner's `STANDALONE_PHASES` mechanism
   does not mount index.ts (see the run-smoke.sh comments);

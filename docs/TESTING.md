@@ -89,14 +89,14 @@ either set, phase5 is part of the regression run.
 
 | Probe | Coverage | Cost |
 |---|---|---|
-| phase1 | Member lifecycle (spawn / handshake / disband / rebuild) | zero token |
+| phase1 | Member lifecycle with assertions (spawn / handshake / registry persistence / disband reset / idempotent resume — kill-path instance-identity regression) | zero token |
 | phase2 | Task board state machine (DAG / cycles / ready set / persistence) | zero token |
 | phase3 | Messaging service + shim status round-trip + preset loading | zero token |
 | phase5 | Concurrent creation races / fail-fast kill / state machine / socket 0600 / abort / shutdown | 1 token (SKIP without a key) |
-| phase6 | Default-off activation + config pure functions + model/effort resolution | zero token |
+| phase6 | Default-off activation + config pure functions + model/effort resolution + forced keyword migration (strip / report / all-deprecated disables) + L1 negation guard matrix | zero token |
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero token |
 | phase8 | Recursion depth /proc inspection + sub-team self-bootstrap + concurrent defaults | zero token |
-| phase9 | Config boundaries (storage.dir / project-level / invalid fallback) | zero token |
+| phase9 | Config boundaries (storage.dir / project-level / invalid fallback) + [tasks] section validation | zero token |
 | phase13 | Project-level config (trust gate / deep merge / precedence / env / MAXDEPTH) | zero token |
 | phase14 | Ring loop cap (config surface / immediate throw at the manager layer / rejection at the server layer via the shim / topology precedence / boundary allowed through) | zero token |
 | phase15 | TUI render assertions (render.ts, the six tools' call/result, including collapse/expand / usage rows / status icons) | zero token (standalone run) |
@@ -107,12 +107,17 @@ either set, phase5 is part of the regression run.
 | phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
 | phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) | zero token |
 
-The LLM-path probes (phase4/10/11/12) need a test key and still live in the
-gitignored `sandbox/` (see Layer C).
+The LLM-path probes (phase4/10/11/12) need a test key and live in `sandbox/` —
+the probes themselves are tracked; only sandbox runtime state is gitignored (see
+Layer C).
 
 ## 3. Layer C — LLM-path tests (test key, inside the sandbox, minimal cost per probe)
 
 ```bash
+# Isolate the agent dir first: without this, step falls back to ~/.stepcode/agent,
+# whose packages entry (an installed copy of this plugin) conflicts with the -e
+# extension below — every tool name fails to load and the probe never runs.
+export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
   -e "$PWD/sandbox/smoke-phase4.ts" \
   --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
@@ -142,7 +147,7 @@ Leader crash recovery (no `.tmp-*` residue in the registry, the view matches dis
 after resume), Unicode/emoji round-trips, parameter validation (empty message /
 invalid member name / unknown task id / unknown member all get explicit errors),
 missing directories (createMember still works after the sessions directory is
-deleted), and scale (8-member cap / 999-task cap / 50KB per-task detail).
+deleted), and scale (8-member cap / 999-task board / 50KB per-task detail — configurable defaults, see [CONFIGURATION.md](CONFIGURATION.md)).
 
 TUI rendering (renderCall/renderResult, the `/topo` panel, streaming
 progress, activation notify) only takes effect in the interactive TUI and is not

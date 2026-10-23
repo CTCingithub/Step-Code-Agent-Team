@@ -190,6 +190,9 @@ export class TeamManager {
 	/** Member → the member it is currently waiting on (nested dispatch in flight). */
 	private waitingOn = new Map<string, string>();
 
+	/** Project trust (gates project-tier preset loading); set by forSession. */
+	private projectTrusted = false;
+
 	private constructor(
 		private reg: TeamRegistry,
 		private readonly cwd: string,
@@ -198,7 +201,7 @@ export class TeamManager {
 	) {}
 
 	/** Load (or create) the team bound to the leader session. */
-	static forSession(sessionFile: string | null, cwd: string): TeamManager {
+	static forSession(sessionFile: string | null, cwd: string, projectTrusted = false): TeamManager {
 		let teamId: string;
 		if (sessionFile) {
 			const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
@@ -212,7 +215,9 @@ export class TeamManager {
 		const reg = existing ?? createRegistry(teamId, cwd);
 		reg.cwd = cwd;
 		if (!existing) saveRegistry(reg);
-		return new TeamManager(reg, cwd);
+		const manager = new TeamManager(reg, cwd);
+		manager.projectTrusted = projectTrusted;
+		return manager;
 	}
 
 	get teamId(): string {
@@ -301,14 +306,16 @@ export class TeamManager {
 			const last = this.lastActivity.get(member.name) ?? 0;
 			if (now - last < maxIdleMs) continue;
 			const rpc = this.rpcs.get(member.name);
-			if (rpc) {
-				// Wait for the exit so the registry's "dead" is truthful and the
-				// next dispatch cannot respawn a duplicate on the same session id.
-				await rpc.killAndWait();
-				this.rpcs.delete(member.name);
-			}
+			// Mark dead and drop the entry BEFORE awaiting the exit: a dispatch
+			// landing in the kill window must see "dead" and spawn a fresh
+			// process instead of attaching to the dying one (which fails with
+			// "exited during run" and triggers a duplicate re-dispatch).
 			member.status = "dead";
 			member.pid = -1;
+			if (rpc) {
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
+				await rpc.killAndWait();
+			}
 			reaped.push(member.name);
 		}
 		if (reaped.length > 0) this.save();
@@ -363,7 +370,7 @@ export class TeamManager {
 		// A role may reference a bundled preset (agents/<role>.md); explicit params win.
 		// Without an explicit role, members default to the configured role.
 		const role = params.role?.trim() || config.members.defaultRole;
-		const preset = loadPreset(role, this.cwd);
+		const preset = loadPreset(role, this.cwd, this.projectTrusted);
 		const systemPrompt = params.systemPrompt?.trim() || preset?.systemPrompt;
 
 		const record: MemberRecord = {
@@ -506,6 +513,11 @@ export class TeamManager {
 			// Effective depth bound (it may come from a project-level config the
 			// child cannot read at load time); the child's config loader honors it.
 			STEPCODE_TEAM_MAXDEPTH: String(getConfig().members.maxRecursionDepth),
+			// Effective dispatch timeout: the member-side topo_team_msg reply wait
+			// must not give up before the leader-side dispatch that contains it
+			// (a nested relay outliving its outer dispatch produced the recurring
+			// "timeout waiting for member to settle" loop).
+			STEPCODE_TEAM_REPLY_TIMEOUT_MS: String(getConfig().dispatch.timeoutMs),
 		};
 		if (canOrchestrate) {
 			args.push("-e", extensionEntryPath(), "-e", memberMessagingEntryPath());
@@ -540,7 +552,9 @@ export class TeamManager {
 	 */
 	private ensureLive(member: MemberRecord): Promise<MemberRpc> {
 		const existing = this.rpcs.get(member.name);
-		if (existing && !existing.isClosed()) return Promise.resolve(existing);
+		// A record marked dead is being torn down; reusing its dying RPC fails
+		// mid-dispatch — fall through to a fresh spawn.
+		if (existing && !existing.isClosed() && member.status !== "dead") return Promise.resolve(existing);
 
 		const inFlight = this.spawning.get(member.name);
 		if (inFlight) return inFlight;
@@ -554,12 +568,16 @@ export class TeamManager {
 
 	private async doSpawn(member: MemberRecord): Promise<MemberRpc> {
 		fs.mkdirSync(memberSessionsDir(this.reg.teamId), { recursive: true });
+		let rpc: MemberRpc | undefined;
 		const handlers: MemberRpcHandlers = {
 			onClose: () => {
-				this.rpcs.delete(member.name);
+				// Evict by instance identity: a losing duplicate spawn's exit
+				// must not delete the winner's entry or mark a live member dead.
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 				// Any exit (including an external kill) means the process is
-				// gone; keep the registry honest instead of a stale "idle".
-				if (member.status !== "dead") {
+				// gone; keep the registry honest instead of a stale "idle" —
+				// but only when no newer process owns the slot.
+				if (this.rpcs.get(member.name) === undefined && member.status !== "dead") {
 					member.status = "dead";
 					this.save();
 				}
@@ -567,7 +585,7 @@ export class TeamManager {
 		};
 		const config = getConfig();
 		const { args, env } = this.buildSpawnArgs(member);
-		const rpc = await MemberRpc.spawn(args, this.cwd, {
+		rpc = await MemberRpc.spawn(args, this.cwd, {
 			handlers,
 			env,
 			handshakeTimeoutMs: config.dispatch.handshakeTimeoutMs,
@@ -657,8 +675,12 @@ export class TeamManager {
 			// for exit so the next dispatch respawns a clean process instead of
 			// interleaving runs on one session id.
 			if (rpc) {
-				this.rpcs.delete(member.name);
+				// Kill first and wait for the exit, and only then evict by
+				// instance identity: deleting before the kill lets ensureLive
+				// spawn a second process on the same deterministic session id
+				// while this one is still dying (double-run on one session).
 				await rpc.killAndWait();
+				if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 			}
 			throw augmentDispatchError(err, this.reg.members, options.nested === true);
 		} finally {
@@ -760,11 +782,26 @@ export class TeamManager {
 			} catch (err) {
 				lastError = err;
 				if (options.signal?.aborted) break;
+				// Only retry failures that prove the work never started (spawn /
+				// handshake). A settle timeout or a mid-run exit means the member
+				// may already have done the work — re-sending the same prompt to
+				// the respawned member duplicates it (its resumed context holds
+				// the result), which is what made timeouts recur in a loop.
+				const msg = err instanceof Error ? err.message : String(err);
+				if (!/aborted before start|handshake|spawn|failed to start/i.test(msg)) break;
 			}
 		}
 		const aborted = options.signal?.aborted === true;
+		const failure = lastError instanceof Error ? lastError.message : String(lastError);
 		try {
-			this.failTask(id, aborted ? "aborted by leader" : lastError instanceof Error ? lastError.message : String(lastError));
+			this.failTask(
+				id,
+				aborted
+					? "aborted by leader"
+					: /timeout waiting for member to settle|exited during run/.test(failure)
+						? `${failure} — the member's context may already contain the work; re-dispatch a short harvest prompt (e.g. "report what you have completed so far") instead of re-running the task`
+						: failure,
+			);
 		} catch {
 			// Already terminal via another path; the original error matters more.
 		}
@@ -897,6 +934,23 @@ export class TeamManager {
 	 * fire-and-forget work where context continuity does not matter.
 	 */
 	async sendOneshot(name: string, message: string, options: SendOptions = {}): Promise<SendResult> {
+		// Serialize per member like persistent dispatches: a oneshot and a
+		// persistent run to the same member must not interleave — both mutate
+		// the same MemberRecord (status, usage), and an interleaved oneshot
+		// would mark a running member idle and drop a usage update (the cost
+		// guardrail then under-reports).
+		const prev = this.queues.get(name) ?? Promise.resolve();
+		const run = prev
+			.catch(() => {})
+			.then(() => this.runOneshotDispatch(name, message, options))
+			.finally(() => {
+				if (this.queues.get(name) === run) this.queues.delete(name);
+			});
+		this.queues.set(name, run);
+		return run;
+	}
+
+	private async runOneshotDispatch(name: string, message: string, options: SendOptions): Promise<SendResult> {
 		const member = this.findMember(name);
 		if (!member) {
 			const available = this.reg.members.map((m) => m.name).join(", ") || "none";
@@ -1051,7 +1105,7 @@ export class TeamManager {
 		const rpc = this.rpcs.get(member.name);
 		if (rpc) {
 			rpc.kill();
-			this.rpcs.delete(member.name);
+			if (this.rpcs.get(member.name) === rpc) this.rpcs.delete(member.name);
 		}
 	}
 

@@ -1,7 +1,7 @@
 /**
  * TUI rendering probe (plan-25). Zero-token: render.ts is pure — its outputs
  * are asserted headless with a pass-through theme, so the strings documented
- * in docs/TUI-VERIFICATION.md no longer need eyeballing.
+ * in docs/MANUAL-TESTING.md no longer need eyeballing.
  *
  * Covers: renderCall for all six tools (args preview lines) and
  * renderTeamResult for all six tools (status/usage/body, collapsed vs
