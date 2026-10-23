@@ -142,7 +142,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 | 均衡 Balanced *（未选择时的回退）* | 在成本与质量间平衡，覆盖勘察、规划、执行、审查 |
 | 性能 Performance | 质量最高、不计成本：多成员、高 effort 深度协作 |
 
-档位是**策略提示词，而非固定阵容**：指令说明策略并给出非绑定示例（如"1 名 scout + 1 名 worker，effort 取 low/medium，拓扑用 star"），具体成员、角色、拓扑与 effort 由队长模型按任务实际需要决定。`/topo` 带请求文本时，模型先经一次性规划调用（带进度动画）为该请求起草**实际方案**，yes/no 确认框展示之——批准后以高于一般性策略的优先级注入。选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → effort），自由文字需求随请求一并携带。
+档位是**策略提示词，而非固定阵容**：指令说明策略并给出非绑定示例（如"1 名 scout + 1 名 worker，effort 取 low/medium，拓扑用 star"），具体成员、角色、拓扑与 effort 由队长模型按任务实际需要决定。`/topo` 带请求文本时，模型先经一次性规划调用（带进度动画）为该请求起草**实际方案**，Accept/取消 选择框展示之——批准后以高于一般性策略的优先级注入。选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → effort），自由文字需求随请求一并携带。
 
 选单行为：选项按语言本地化（英文请求显示 Economic/Fast/Balanced/Performance）；30 秒超时回退 `balanced` 策略；headless/RPC 激活跳过选单直接应用。`plan.tier` 固定为某一策略时，每次激活（`/topo` 或关键词命中）都直接应用、不再询问；`/topo <档位名>` 仍可按次覆盖。
 
@@ -204,7 +204,7 @@ flowchart LR
     M3 --> M2
 ```
 
-**`ring`** — 每成员可通知下一位（末位回环）；消息链长度受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限）：
+**`ring`** — 每成员可通知下一位（末位回环）；消息链长度受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限）——默认值下 3 成员环的闭环跳（r3→r1）必被拒，闭环须由队长中转，确需环内闭环再调高上限：
 
 ```mermaid
 flowchart LR

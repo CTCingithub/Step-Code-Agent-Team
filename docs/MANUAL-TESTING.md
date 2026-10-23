@@ -71,7 +71,7 @@ npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any fail
 | 1 | Activation + team board | §1 steps 1–2 | §1 | — |
 | 2 | Members + pipeline + task board | §1 steps 3–8 | §1 | — |
 | 3 | `topo_team_msg` E2E | paste: `Have scout1 send worker1 a one-line intro through topo_team_msg and report the tool's exact return text` | §1, §4 | The reply is best-effort: a delivery acknowledgment ("Delivered to …") is not the teammate's answer — collect outputs through the leader |
-| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list |
+| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list. **Ring closure**: with the default `maxLoopCount=2`, a 3-member ring's closing hop (r3→r1) is always rejected — the loop must close through the leader; raise `maxLoopCount` only if you truly need in-ring closure |
 | 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 | 7 | Activation guard (L1) | paste: `如何用智能体小队并行审查这个仓库？` | — | Rewritten 2026-10-23: a how-to request with a body activates the plugin (the team forms); a pure question about the plugin itself (`什么是智能体小队？`) stays suppressed — no team forms |
@@ -80,7 +80,7 @@ npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any fail
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
 a tier is picked, the plugin first asks the model (one-off, plan-only call with a
-"正在生成智能体拓扑协作方案…" spinner) to draft the actual team plan for that request; the yes/no confirmation then shows that plan,
+"正在生成智能体拓扑协作方案" spinner) to draft the actual team plan for that request; the Accept/Cancel selection then shows that plan,
 and on approval it is injected with precedence over the tier's general guidance. Bare
 `/topo` (no request) or a failed planning call falls back to the tier's standard
 shape — there is nothing request-specific to show yet.
@@ -138,6 +138,10 @@ leader model receives it, it calls the matching team tool on its own, and all yo
 to do is check that the rendering matches the "Expected render" column. Paste them in
 order; between steps, wait for the previous render to finish before pasting the next
 one. Step 6 is a key press, not a prompt.
+
+**Before forming the team**: right after activation, ask for the team status first
+(`Report the team's current status` → `team_status`) and confirm no leftover live
+members from an earlier round — if any show up, disband them before creating new ones.
 
 | # | Copy-paste | Expected render | Result |
 |---|---|---|---|

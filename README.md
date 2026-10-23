@@ -179,7 +179,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 A tier is a **strategy prompt, not a fixed roster**: the instruction states the
 strategy and offers a non-binding example (e.g. "1 scout + 1 worker, effort
 low/medium, star topology"), and the leader model decides the actual members,
-roles, topology, and effort from the task. When `/topo` carries a request, the model first drafts the **actual plan** for that request (a one-off, plan-only call with a spinner progress) and the yes/no confirmation shows it — on approval the plan is injected with precedence over the general strategy. The picker's fifth entry —
+roles, topology, and effort from the task. When `/topo` carries a request, the model first drafts the **actual plan** for that request (a one-off, plan-only call with a spinner progress) and the Accept/Cancel selection shows it — on approval the plan is injected with precedence over the general strategy. The picker's fifth entry —
 **custom requirements** — runs a short guided flow (team size → topology →
 effort) and carries your free-text requirements along with the request.
 
@@ -248,7 +248,7 @@ flowchart LR
     M3 --> M2
 ```
 
-**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited):
+**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited) — at the default, a 3-member ring's closing hop (r3→r1) is always rejected, so closure runs through the leader unless you raise the limit:
 
 ```mermaid
 flowchart LR
