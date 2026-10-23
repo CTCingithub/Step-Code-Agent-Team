@@ -478,3 +478,15 @@
 **工作**（`72e93ef`）：① forward.ts 新增 `teamPlanPrompt()`（一次性规划提示：成员名单与各自 effort、通信拓扑及理由、任务拆解与 blockedBy 依赖，≤10 行，只出方案不执行）与 `approvedPlanInstruction()`（批准方案的优先级注入）；② index.ts 新增 `generateTeamPlan()`——经 `ctx.modelRegistry.complete` 做一次性规划调用（90s 超时竞速 + clearTimeout 清理；无模型/出错/超时/空文本一律返回 null）；confirmChoice 增加 planText 参数（有实际方案时展示"模型为本次请求生成的实际方案：+方案全文"，否则回退档位标准形态）；runTeamCommand 接线：tier + 有请求 + 交互式时先 notify"正在生成本次请求的实际团队方案…"再生成 → 确认框展示之 → 批准则 pendingInjection = tierInstruction + approvedPlanInstruction（已确认方案优先级高于一般性策略描述）；③ phase21 补 4 条断言覆盖两个新构建器（再次避开 performance 全局对象坑）；④ MANUAL-TESTING(_CN) runbook 新增确认框内容说明段，TEST-PLAN(_CN) K2 行同步更新。**回退路径**：裸 /topo（无请求可规划）/ 无模型 / 规划调用失败 / headless（无对话框）均回退档位标准形态并注明"没有可展示的请求相关内容"；custom 与 review 分支不受影响。
 
 **验证**：全量冒烟全绿（18 phase + manifest + 7 live + orphan-check）；`bash test/run-smoke.sh 21` 单独通过；提交 72e93ef 推送 develop。
+
+### 47. v0.2.0 正式版发布：合并、脚本化发版、latest 修复（plan-85）
+
+**用户 prompt**：「我同意你做第1条的全部内容」（批准发版审查建议：P0-a 合并 develop→main 切 v0.2.0 正式版并移动 `latest`；P0-b README 补双副本冲突排障段；P1-c `scripts/release.sh` 脚本化；P1-d npm 分发决策成文）
+
+**思路**：按批准清单顺序执行——先文档前置（排障段 + npm 决策，随 develop 合并进 main），再脚本化发版流程并以本次发布 dogfood，最后执行发布（合并 → bump → tag → push → latest → hermetic 实测）。README 安装示例同步选择在合并前提交于 develop，使 main = develop + 发布提交，避免 main 多出 develop 没有的文档提交造成长期分叉。
+
+**工作**（提交链 `19a6570` → `74752cc` → `b862bdc` → `e1c22ac`/`06bc06c` → `f8b9a9e`）：① **P0-b/P1-d**（`19a6570`，develop）：README(_CN) 安装节新增"Tool … conflicts with …"启动失败排障段（本地路径 install 与 git 包并存→两份 index.ts→6 工具名冲突→扩展加载失败；修复=只保留一项，`step remove` 摘除另一项）与"Distribution: git only"分发决策段（不发布 npm；`latest` 只跟随正式版，预览绝不移动）。② **P1-c**（`74752cc`，develop）：新增 `scripts/release.sh <version> [--preview]`——前置检查（树干净/在 main/版本号格式/tag 本地与远程均未占用/step 在 PATH）→ 全量冒烟门 → bump → `chore: release vX.Y.Z` 提交 → 附注 tag → push main+tag → 正式版移动 latest → hermetic 实测（临时 agentDir 安装该 tag 探测激活）；develop→main 合并保留为人工步；README(_CN) Development 节补发布流程指向。③ **P0-a**（`b862bdc`/`e1c22ac`）：README(_CN) 安装示例同步 v0.2.0（稳定线 v0.1.4→v0.2.0、预览行移除）提交于 develop；main 以 `--no-ff` 合并 develop（`e1c22ac` 合并边界提交，41 个文件）。④ **发布执行**：`release.sh 0.2.0`——冒烟门全绿 → bump 0.2.0-preview→0.2.0 → `06bc06c`"chore: release v0.2.0" → 附注 tag `v0.2.0`（36a9dc8）→ push main+tag 成功（3f9b607..06bc06c）。**latest 首推被远程拒绝**——根因：分支 ref 不能指向附注 tag 对象（脚本推的是 `v0.2.0:latest`）；改用剥离后 commit（`v0.2.0^{}:latest`）推送成功（698a698..06bc06c）。⑤ **hermetic 实测**（脚本止步于 latest 后手动补跑）：临时 agentDir 安装 `git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0` 并探测激活——"HERMETIC VERIFY: OK — activated from the v0.2.0 tag"。⑥ **脚本 bug 修复**（dogfood 的直接收获）：latest 推送改用 `v$VERSION^{}:latest` 并注释原因——develop `3fa45b8` + cherry-pick 至 main `f8b9a9e`，双分支均已推送。
+
+**最终状态**：`origin/main` = `f8b9a9e`（发布提交 + 脚本修复）；`origin/latest` = `06bc06c`（v0.2.0 发布提交）；`origin/develop` = `3fa45b8`；tag `v0.2.0` = 36a9dc8；工作树干净。第 1 条四项内容全部交付。
+
+**验证**：发布前 develop 冒烟门全绿；release.sh 内冒烟门全绿（18 phase + manifest + 7 live + orphan-check）；hermetic 安装激活实测通过；远程 refs（main/latest/develop/v0.2.0）逐一核验指向正确。
