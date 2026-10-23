@@ -79,6 +79,19 @@ step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # st
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 preview (latest stays on the stable line until 0.2.0 final)
 ```
 
+**Troubleshooting — "Tool … conflicts with …" at startup**: step loads every
+`packages` entry, and this plugin can be installed only once per config. A
+local-path install (`step install /path/to/checkout`) alongside a git install
+(`git:github.com/…`) loads two copies of `extensions/index.ts`, so all six team
+tool names conflict, the extension fails to load, and step may fail to start.
+Fix: keep exactly one entry — run `step remove` on the other one (the same path
+or git spec you used to install it).
+
+**Distribution**: git only — the plugin is not published to npm. Use
+`step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest` for the
+stable line (or pin a version tag); `latest` follows final releases only,
+previews never move it.
+
 Then start a session and ask: *"Use an agent squad to review this repo in parallel."* — or run `/topo` first; the plugin stays dormant until then.
 
 ## Activation (default off)

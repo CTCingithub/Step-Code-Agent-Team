@@ -73,6 +73,11 @@ step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # �
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.2.0-preview # 0.2.0 预览版（latest 在 0.2.0 正式版前保持稳定线）
 ```
 
+**排障——启动时报 "Tool … conflicts with …"**：step 会加载 `packages` 里的每一项，而本插件在同一份配置里只能安装一份。本地路径安装（`step install /path/to/checkout`）与 git 安装（`git:github.com/…`）并存会加载两份 `extensions/index.ts`，六个团队工具名全部冲突、扩展加载失败，step 可能无法启动。修复：只保留一项——对另一项执行 `step remove`（用当初安装时相同的路径或 git 规格）。
+
+**分发方式**：仅 git——本插件不发布到 npm。稳定线用
+`step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest`（或锁定版本 tag）；`latest` 只跟随正式版，预览版绝不移动它。
+
 然后在会话里下达目标，例如："用智能体小队并行审查这个仓库"（或先运行 `/topo`——插件在此之前保持静默）。
 
 ## 激活机制（默认关闭）
