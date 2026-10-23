@@ -489,4 +489,27 @@
 
 **最终状态**：`origin/main` = `f8b9a9e`（发布提交 + 脚本修复）；`origin/latest` = `06bc06c`（v0.2.0 发布提交）；`origin/develop` = `3fa45b8`；tag `v0.2.0` = 36a9dc8；工作树干净。第 1 条四项内容全部交付。
 
+### 48. 改进计划 P1 执行：分支切换与官方接口对齐三项（plan-86）
+
+**用户 prompt**：「请切换到develop分支，按照改进计划开始优化项目，并进行测试」（承接官方接口替代性审计的改进计划）
+
+**思路**：按审计计划的 P1 三项执行——P1-1/P1-2 工具描述边界声明（防模型混用团队系统与官方内置系统）、P1-3 config.ts 官方符号消费类型化；P2/P3 维持（P2 卡上游导出面、P3 明确不做）。分支按约定从 main 切新 develop。
+
+**工作**：① **分支**：本地旧 develop（3fa45b8，唯一提交已 cherry-pick 在 main）删除，从 main（cdbe5c2，发布后状态）切新 develop；远程旧 develop 替换（零损失）。② **周期基线**：`.gitignore` 修复（`sandbox/step-build/`→`sandbox/step-build`，构建产物实为符号链接、尾斜杠模式漏匹配）；submodule bump `b5dbed9`→`81e79bc`（35 个上游提交；附重建+新二进制冒烟全绿+4 个 LLM 探针+11 面冲突审计的验证记录）。③ **P1-1/P1-2**（tools.ts）：team_task 描述新增 Scope 行（团队共享板 vs 官方 `task_*` 个人 checklist，两系统独立不同步）；team_create_member 描述新增边界行——**执行中修正审计误判**：官方 subagent 的 agent 发现目录与我方 preset 目录实际重合（user 层同 `<agentDir>/agents`、项目层同 `<project>/.stepcode/agents`、同 frontmatter 形状），表述改为"同一文件可同时支撑 team 角色与 subagent agent，但两系统独立解析、状态不共享"。④ **P1-3**（config.ts）：4 处 `stepCore as Record<string, unknown>` 防御性 cast → `StepCoreConfigExports` 接口（4 个可选符号）+ 单次 Partial 断言；运行时守卫与回退保留（旧版 step 缺导出仍工作），我方拼写错误今后可被编译期捕获——submodule 本地 tsc 5.9.3（strict、映射真实 dist/index.d.ts）零错误。
+
+**验证**：全量冒烟门全绿（18 phase + manifest + 7 live + orphan-check）；tsc 对 config.ts 全导入图零错误。提交 b17c98e/92c7ab2/86ee984/81de343，推送 develop。
+
+### 49. UI 动画/配置审计/文档更新/综合检查四项轮（plan-87）
+
+**用户 prompt**：「1.请把'正在生成本次请求的实际团队方案'界面，改为根据用户发送 prompt 的语言的'正在生成智能体拓扑协作方案'，并尝试添加 UI 动画（尽量用 Step Code 现成的）；2.请检查现有的配置选项，是否有和官方重合，或者多余/错误/过时的内容；3.请更新优化所有文档；4.请检查并优化其他内容」
+
+**工作**：① **item 1（index.ts）**：方案生成等待期 UI 改造——notify 文案改为按 detectLang 的"正在生成智能体拓扑协作方案…"/"Generating the agent topology collaboration plan…"；新增 `startPlanProgress`——经 `ctx.ui.setWidget`（字符串数组形式）实现 braille 帧循环动画（120ms），**刻意不 import pi-tui**（会触发扩展双加载工具名冲突，见 run-smoke.sh 的 STANDALONE_PHASES 注记）；守卫按官方文档用 `mode === "tui"`（widget 属终端专用 UI，rpc/json/print 降级为单条 notify，无 widget 槽同样降级）；调用点 try/finally 确保动画必被清除。② **item 2（配置审计，只读）**：30+ 选项逐项消费核查——全部有真实读取点，无死选项/无多余项；与官方无名称冲突（节命名空间隔离），概念邻居（官方 MAX_RUNNING_LANES=8、LANE_IDLE_TTL_MS=10min 硬编码）分属不同子系统；无错误项（区间校验一致）；发现 4 处文档漂移移交 item 3。③ **item 3（文档，15 处双语）**：CONFIGURATION(_CN)——timeoutMs 注释补"覆盖成员整个回合含嵌套中继"、retries 改"仅对尚未启动的派发重试"（timeout 批漂移）、plan 行补实际方案确认流（plan-112 漂移）、Notes 增"管辖范围"边界声明；README(_CN) 方案节补实际方案流、CN 特性行同步；MANUAL-TESTING(_CN) 确认框注补进度动画；TEST-PLAN(_CN) 还原段补当前 11/12 基线。④ **item 4（类型硬化，9 处真实缺陷跨 6 文件）**：index.ts——`type Lang` 改从 plan.ts 导入（原导入 forward.ts 未导出符号）、context handler 按官方 ContextEvent/ContextEventResult 重写+structuredClone（联合类型恒等）、sessionFile 两处随签名放宽消解；members.ts/rpc-client.ts——usage 局部结构类型修正（cost 实为 `{total}` 对象而非 number）；rpc-client.ts——timer 定值分析；team-server.ts——闭包丢失 narrowing 处边界重断言；tools.ts——edges 映射隐式 any 显式化；render.ts——本地 Theme 结构替身改用官方 `@step-harness/coding-agent` 的 Theme（12 个渲染签名不匹配消解）、renderTeamCall 形参放宽 `object`+局部窄化（空 schema 的 `{}` 满足逆变）。tsc 全图错误 19→2，剩余 2 个均为环境伪影：context 重载的 **submodule dist 构建偏移**（源码有重载、dist 无，运行时用宿主实际 API 一直正常）；`Type.Optional` 双参的 **typebox@1.3.7 映射伪影**。
+
+**关键实证（负载匹配对照实验）**：本轮曾将 `Type.Optional` 改为单参内嵌 description 的"对齐"写法，随后满载冒烟 3 连败（phase9×2、phase18，均为"member handshake timeout"）；经 stash 基线、单项回退、**同负载复跑**（1.52 vs 失败时 1.48）三重对照，确认该写法与握手超时相关（机制未明——成员进程不加载 tools.ts，疑为宿主 typebox  schema 生成路径的隐性差异），**已回退为主机验证过的双参形式**；tsc 对该写法报的 TS2554 系映射到旧版 typebox 的伪影。教训：类型"对齐"不能脱离宿主实证，冒烟门（含满载时序）是唯一裁判。
+
+**遗留**：P1-4（activation.ts META_RE 对普通"如何/怎么"请求的过度抑制）仍为唯一已知遗留项——需 clause 锚定匹配+phase6 回归用例，属行为变更，建议专轮处理。
+
+**验证**：全量冒烟门全绿（18 phase + manifest + 7 live + orphan-check，回退终态）；双语文档 15 处更新经行数/锚点断言落盘。
+
+
 **验证**：发布前 develop 冒烟门全绿；release.sh 内冒烟门全绿（18 phase + manifest + 7 live + orphan-check）；hermetic 安装激活实测通过；远程 refs（main/latest/develop/v0.2.0）逐一核验指向正确。
