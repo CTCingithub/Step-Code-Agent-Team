@@ -536,4 +536,17 @@
 
 **验证**：全部编辑经锚点断言落盘；双语场景数（各 9）与总览行数（各 10 项+译文行）一致；结论——需要用户手动测试的流程已全部在双语文档中。
 
+### 52. 确认界面 Accept 化、spinner 去省略号与沙箱日志优化（plan-90）
+
+**用户 prompt**：「1."正在生成智能体拓扑协作方案..."的界面，删掉省略号；2.出具拓扑协作方案问yes或no的界面，改为Accept或者让用户自行输入信息；3.已经做了一次sandbox测试，请分析日志文件sandbox/logs/session-log-2026-10-23.md，并进行修改优化」+ 确认性能档实际方案（6 成员 mesh）后「刚刚出现错误，请继续」。
+
+**思路**：按批准方案组建 6 成员团队（总指挥·林/诊断师·陈/溯源员·赵/修复师·王/验证官·孙/记录官·周，mesh）分推进：日志分析 → 根因与方案 → 实施验证。派发在负载 6+ 的机器上屡发 settle 超时（7 次派发 3 次首发失败；王在被杀前已完成绝大部分实现，余项由队长补全），验证由队长亲跑 + lin 末轮审查。
+
+**工作**：① **溯源（赵）**：会话日志五条异常逐条实据判定——唯一真实代码缺陷是 `team_task start` 丢弃 detail（tools.ts:325 第三参硬编码 undefined，agg 未收到三方清单的铁证）；`Tool team_disband/ not found` 是模型发射带尾斜杠的畸形工具名（注册名正确，同会话 9 次成功调用反证，非插件缺陷）；R1/R2/R3 命名拒绝/8 人上限/maxLoopCount=2 限流均为既定护栏；ring 第三跳被限流暴露唯一真正误导用户的文档缺口（用户 Prompt 5 预期"巡游长度=3，在上限内"与默认值矛盾）；**"刚刚出现错误"在所有可读会话记录中无实迹**（不猜测）。② **诊断（陈）**：宿主 confirm 无自定义按钮标签（types.ts:185 选项仅 mirror/signal/timeout/overlay/examples/searchable），"Accept"只能用 select 实现；**RPC 模式 hasUI===true**（runner.ts:518 + rpc-mode.ts:337）使 select 超时→undefined 的陷阱真实可达，必须 `picked === acceptLabel` 严格相等映射；推荐方案 A（select 双选项），自由输入列为后续轮次。③ **实施**：index.ts——select 双选项 + 严格相等映射、spinner 双语去省略号；tools.ts——start 透传 detail 并与 taskPrompt 合并（team_send 路径与无 detail 默认行为不动）；forward.ts——任务编号从 1 起的提示；member-messaging.ts——三处返回补宿主必填的 details（全导入图 tsc 暴露的既存类型契约违背，纯元数据零行为变化）。④ **文档双语 10 文件**：MANUAL-TESTING(_CN)（Accept/Cancel 措辞、ring 闭环警示、建团前 team_status 核对）、README(_CN)（措辞 + ring 段）、CONFIGURATION(_CN)、TEST-PLAN(_CN)（K2/M3）、PROTOCOL(_CN)（detail 参数语义、成员命名规则）。⑤ **验证**：冒烟门全绿；全 extensions 导入图 tsc 仅剩 1 个既知 typebox 映射伪影；lin 末轮审查 6/6 PASS（2 处 LOW 措辞 nit 当轮修掉）。
+
+**验证**：冒烟 exit 0（18 phase + manifest + 7 live + orphan-check）；tsc 1 伪影；grep 确认省略号与方案确认语境的 yes/no 措辞零残留（唯一命中为禁改的历史行）；提交 53b6944/e776f63 + 收尾提交，演示项目未提交改动未被裹挟。
+
+**遗留**：①"允许用户自行输入信息"（input 路径 + note 注入链路）列为后续独立轮次——需先定 note 语义与专属 TUI 验证；② 派发在负载下的 settle 抖动——建议后续为 team_send/team_task start 增加与冒烟 runner 同构的有界重试；③ M3 手动 TUI 目验（Accept/取消 选择框 + spinner）仍待用户执行。
+
+
 
