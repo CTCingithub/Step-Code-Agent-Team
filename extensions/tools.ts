@@ -261,6 +261,10 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			blockedBy: Type.Optional(Type.Array(Type.String(), { description: "Task ids this task depends on" })),
 			assignee: Type.Optional(Type.String({ description: "Member name for start, or default assignee for create" })),
 			result: Type.Optional(Type.String({ description: "Result text for complete" })),
+			// Keep the two-argument Optional form: the single-arg
+			// Optional(String({ description })) variant empirically correlated with
+			// member-handshake timeouts under load (DEVELOPMENT-HISTORY entry 49)
+			// even though the host's typebox accepts both spellings.
 			reason: Type.Optional(Type.String(), { description: "Failure reason for fail" }),
 		}),
 		renderCall: renderTeamCall("team_task"),

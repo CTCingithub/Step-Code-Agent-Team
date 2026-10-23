@@ -28,7 +28,7 @@
  */
 
 import * as fs from "node:fs";
-import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
+import type { ContextEvent, ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
 import { currentDepth, TeamManager, teamIdForSession } from "./members.ts";
 import { registryPath } from "./registry.ts";
 import { registerTeamTools } from "./tools.ts";
@@ -600,7 +600,15 @@ export default function (pi: ExtensionAPI) {
 	// team" instruction into the same turn's context only. emitContext works on
 	// a structuredClone of the messages, so nothing is written back to the
 	// session file — subsequent turns see the user's original text alone.
-	pi.on("context", (event) => {
+	// The pinned submodule's built typings lag its source: dist/index.d.ts
+	// lacks the "context" overload the running host implements (the smoke live
+	// checks exercise this hook), so register it through a narrow cast typed
+	// with the official ContextEvent.
+	const onContext = pi.on as unknown as (
+	  event: "context",
+	  handler: (event: ContextEvent) => { messages?: ContextEvent["messages"] } | void,
+	) => void;
+	onContext("context", (event) => {
 		if (!pendingInjection) return;
 		const injection = pendingInjection;
 		// structuredClone (not a spread) keeps the AgentMessage union intact for the type checker.
@@ -621,8 +629,11 @@ export default function (pi: ExtensionAPI) {
 			}
 			break;
 		}
-		const synthetic = { role: "user", content: [{ type: "text", text: injection }], timestamp: Date.now() };
-		return { messages: [...messages, synthetic] };
+		// Inlined (not a separate const) so the object literal is contextually
+		// typed as AgentMessage — a standalone const widens role/type to string.
+		return {
+			messages: [...messages, { role: "user", content: [{ type: "text", text: injection }], timestamp: Date.now() }],
+		};
 	});
 
 	// The injection is per-turn: drop it once the turn settles so the next

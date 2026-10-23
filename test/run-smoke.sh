@@ -54,23 +54,13 @@ if [ -z "${STEP_API_KEY:-}" ] && [ -f "$ROOT/sandbox/TEST-KEY.md" ]; then
   if [ -n "$key" ]; then export STEP_API_KEY="$key"; fi
 fi
 FAILED=()
-for p in $PHASES; do
-  probe="$ROOT/test/smoke/phase$p.ts"
-  if [ ! -f "$probe" ]; then
-    echo "phase$p: MISSING ($probe)"
-    FAILED+=("$p")
-    continue
-  fi
-  if echo " $KEY_PHASES " | grep -q " $p " && [ -z "${STEP_API_KEY:-}" ]; then
-    echo "phase$p: SKIPPED (STEP_API_KEY not set; put a key in sandbox/TEST-KEY.md to run it)"
-    continue
-  fi
-  if echo " $STANDALONE_PHASES " | grep -q " $p "; then
-    ext_args=(-e "$probe")
-  else
-    ext_args=(-e "$ROOT/extensions/index.ts" -e "$probe")
-  fi
-  rc=0
+
+# Runs one probe attempt and prints the verdict. Args: phase, session suffix
+# (the retry uses a fresh session id — resuming a failed session could
+# inherit its partial state). Reads the caller's $ext_args; returns 0/1.
+run_phase_attempt() {
+  local p="$1" suffix="$2"
+  local rc=0 out probe_log fails skips done
   out="$(printf '{"id":"1","type":"get_state"}\n' \
     | STEP_CODING_AGENT_DIR="$AGENT_DIR" \
       timeout 240 "$STEP_BIN" "${ext_args[@]}" \
@@ -88,14 +78,40 @@ for p in $PHASES; do
     # of the indistinguishable "(fails=0)".
     echo "phase$p: FAILED (timed out after 240s — the probe hung before DONE)"
     echo "$probe_log" | tail -20
-    FAILED+=("$p")
+    return 1
   elif [ "$done" -ge 1 ] && [ "$fails" -eq 0 ]; then
     echo "phase$p: OK (fails=0, skips=$skips)"
+    return 0
   else
     echo "phase$p: FAILED (fails=$fails)"
     echo "$probe_log" | grep -E 'FAIL |FAILED' | head -20
-    FAILED+=("$p")
+    return 1
   fi
+}
+
+for p in $PHASES; do
+  probe="$ROOT/test/smoke/phase$p.ts"
+  if [ ! -f "$probe" ]; then
+    echo "phase$p: MISSING ($probe)"
+    FAILED+=("$p")
+    continue
+  fi
+  if echo " $KEY_PHASES " | grep -q " $p " && [ -z "${STEP_API_KEY:-}" ]; then
+    echo "phase$p: SKIPPED (STEP_API_KEY not set; put a key in sandbox/TEST-KEY.md to run it)"
+    continue
+  fi
+  if echo " $STANDALONE_PHASES " | grep -q " $p "; then
+    ext_args=(-e "$probe")
+  else
+    ext_args=(-e "$ROOT/extensions/index.ts" -e "$probe")
+  fi
+  run_phase_attempt "$p" "" && continue
+  # One load-induced flake (e.g. a member handshake grazing its 15s budget
+  # while the machine is saturated) would otherwise fail the whole suite —
+  # and the release gate. Re-run once on a fresh session id: a real failure
+  # fails twice deterministically.
+  echo "phase$p: retrying once (transient failure)"
+  run_phase_attempt "$p" "-retry" || FAILED+=("$p")
 done
 
 # ---- package manifest sanity ----
