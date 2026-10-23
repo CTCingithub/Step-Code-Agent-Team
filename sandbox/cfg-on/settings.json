@@ -8,7 +8,7 @@
         "step-5-preview"
       ],
       "autonomousSelection": true,
-      "autonomousThinking": true
+      "autonomousEffort": true
     }
   }
 }

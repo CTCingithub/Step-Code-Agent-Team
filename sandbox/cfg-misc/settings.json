@@ -13,7 +13,7 @@
         "other-model"
       ],
       "autonomousSelection": true,
-      "autonomousThinking": true
+      "autonomousEffort": true
     },
     "members": {
       "max": 3,
@@ -35,9 +35,6 @@
     "idle": {
       "reapAfterMs": 600000,
       "reapIntervalMs": 120000
-    },
-    "storage": {
-      "dir": "sandbox/cfg-misc/teams-custom"
     },
     "debug": true
   }

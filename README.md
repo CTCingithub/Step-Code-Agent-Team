@@ -466,7 +466,7 @@ is absent, so the core team functionality always runs.
 
 ## Status
 
-0.2.0 feature set (release tag pending maintainer approval):
+0.2.0 feature set (shipped as v0.2.0 — `@latest` tracks the release):
 
 - **Command & activation**: `/topo` with plan tiers, `/topo review [target]`,
   and `/topo off`; plugin-specific activation keywords with forced migration

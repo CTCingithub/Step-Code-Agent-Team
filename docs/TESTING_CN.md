@@ -41,6 +41,12 @@ rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
 bash sandbox/restore-project.sh
 ```
 
+`OPT_OUT_PHASES="13 14" npm run smoke` 表示跑除列表外的全部 phase（runner 唯一的
+刻意排除开关；显式 phase 参数优先）。`bash sandbox/probe.sh` 是一次性 RPC 握手探针
+（期望输出 `PROBE OK`）；`bash sandbox/archive-round.sh <标签>` 会把一轮测试的证据
+——会话 JSONL、团队注册表、`logs/`、演示项目 diff——快照到 gitignore 的
+`sandbox/archive/`，且必须在任何会删除它的还原**之前**执行。
+
 交互 TUI 的人工验证（含可复制粘贴的 prompt）与完整手动测试清单（含各项还原命令）均见
 [MANUAL-TESTING.md](MANUAL-TESTING_CN.md)。
 
@@ -62,7 +68,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -89,6 +95,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、优先级、非法 TOML 容忍、env 仍胜出） | 零 token |
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议） | 零 token |
+| phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——探针本身已跟踪入库，仅沙箱运行时状态在 .gitignore 内（见 C 层）。
 
@@ -109,6 +116,10 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | 并发上限 live / 嵌套消息死锁 |
 | phase11 | cfg-deep2 | 递归深度 2 真实链 |
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
+
+phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的 export 指向对应 fixture
+（phase11 用 `STEP_CODING_AGENT_DIR="$PWD/sandbox/cfg-deep2"`）。用默认目录跑 phase11
+会得到干净的 SKIP——那是假绿。
 
 通过标准（摘要）：并行调度均成功；任务链状态流转 pending→ready→running→done；
 oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记得上文；

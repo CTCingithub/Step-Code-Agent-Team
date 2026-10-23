@@ -14,7 +14,9 @@
 > not outlive the leader), **clean-export loadability** (live-clean-export: a
 > package exported via git archive can activate), and the **package install path**
 > (live-package-install: a settings `packages` entry pointing at the repo loads the
-> extension and activates it).
+> extension and activates it), and the **tool-availability self-heal** (phase22:
+> `ensureToolsAvailable` restores the team tools after a host-side reset, and
+> `session_start` re-activates a session whose team registry already exists).
 >
 > What remains is only the **irreducible** manual items. Start with the **Round
 > runbook** below for the full one-round sequence; each section after it is the
@@ -75,6 +77,8 @@ a tier is picked, the plugin first asks the model (one-off, plan-only call with 
 and on approval it is injected with precedence over the tier's general guidance. Bare
 `/topo` (no request) or a failed planning call falls back to the tier's standard
 shape — there is nothing request-specific to show yet.
+The planning call is interactive-only — headless/RPC `/topo <request>` skips it and
+confirms the tier's standard shape directly.
 
 ### Step 3 — wrap-up
 

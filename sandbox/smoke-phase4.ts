@@ -27,7 +27,7 @@ export default function (pi: ExtensionAPI) {
 
 		try {
 			if (!process.env.STEP_API_KEY) {
-				log("SMOKE4 FAILED: STEP_API_KEY is not set (export it from local/test-api-key.md)");
+				log("SMOKE4 FAILED: STEP_API_KEY is not set (export it, or put it in sandbox/TEST-KEY.md)");
 				setTimeout(() => process.exit(1), 500);
 				return;
 			}
