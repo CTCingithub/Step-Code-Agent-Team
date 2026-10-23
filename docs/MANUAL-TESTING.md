@@ -24,16 +24,20 @@
 > rendering checklist (look-and-feel only; the content layer is asserted by phase15)
 > is §1.
 
-## Status overview (2026-10-20)
+## Status overview (2026-10-23)
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Interactive TUI look and feel | ✅ Verified 2026-10-19 (no rendering issues found) |
+| 1 | Interactive TUI look and feel | ✅ Verified 2026-10-22 (full walkthrough, no rendering issues) |
 | 2 | Real install (`step install` from a clean export) | ➖ Mechanics covered by `live-package-install` / `live-clean-export`; the interactive residue ⬜ yours |
 | 3 | Trust prompt interactive UX | ➖ Rejection path covered by `live-untrusted-config`; the popup itself ⬜ yours |
-| 4 | LLM behavior adherence (ring) | ✅ 2026-10-19 (third hop avoided + reported); the third hop / `maxLoopCount` rejection itself still unobserved live ⬜ |
-| 5 | Sandbox demo scripts (three acts) | ✅ Verified 2026-10-19 |
+| 4 | LLM behavior adherence (ring) | ✅ 2026-10-22 (two hops succeeded + third hop rejected verbatim — the previously unobserved part is now confirmed) |
+| 5 | Sandbox demo scripts (three acts) | ✅ Verified 2026-10-22 (rerun) |
 | 6 | Performance subjective items (8 full members) | ➖ Optional, subjective |
+| 7 | Actual-plan confirmation + generation spinner (new UI) | ➖ Type/smoke-verified only; the first real-TUI look ⬜ yours (scenario 5) |
+| 8 | Activation guard L1 (rewritten 2026-10-23) | ➖ 8 phase6 cases green; one interactive confirmation ⬜ yours (scenario 7) |
+| 9 | Custom roles (agent-dir + trusted project tier) | ➖ phase3 covers preset loading and the trust gate; the LLM-level application ⬜ yours (scenario 8) |
+| 10 | Keyword migration notice | ➖ phase6/phase9 cover the stripping semantics; the one-time notice ⬜ yours (scenario 9) |
 | — | English translation review | ⬜ Recommended |
 
 ## Round runbook (one complete test round)
@@ -70,6 +74,9 @@ npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any fail
 | 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list |
 | 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
+| 7 | Activation guard (L1) | paste: `如何用智能体小队并行审查这个仓库？` | — | Rewritten 2026-10-23: a how-to request with a body activates the plugin (the team forms); a pure question about the plugin itself (`什么是智能体小队？`) stays suppressed — no team forms |
+| 8 | Custom roles (K6) | write `sandbox/agent/agents/quickfix.md` (frontmatter: `name` / `description` / `tools` / `effort`), restart, paste: `Create a member with the quickfix role, named fixer1, and have it list its tool allowlist in one sentence` | §1 | The frontmatter's prompt/tools/effort apply (the tool list shows the allowlist); project-level roles under `sandbox/project/.stepcode/agents/` load only in trusted projects (delete `sandbox/agent/trust.json` to re-trigger the popup) |
+| 9 | Keyword migration notice (K7) | add `"智能体团队"` (deprecated) next to a plugin-specific term in `keywords` in `sandbox/config.toml`, restart, paste: `我想用智能体小队熟悉一下这个项目` | — | Activation still works via the plugin-specific term; the stripped deprecated terms are reported once on activation (and never again that session) |
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
 a tier is picked, the plugin first asks the model (one-off, plan-only call with a
