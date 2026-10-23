@@ -78,7 +78,10 @@ if [ "$PREVIEW" = 1 ]; then
 	LATEST_NOTE="untouched (preview)"
 	echo "release: preview — latest stays where it is"
 else
-	git push "$REMOTE" "v$VERSION:latest" || die "moving latest failed — push 'v$VERSION:latest' by hand"
+	# Peel the tag (v$VERSION^{}): a branch ref must point at the commit, not
+	# the annotated tag object — pushing v$VERSION:latest is rejected remotely
+	# (found by dogfooding the v0.2.0 release).
+	git push "$REMOTE" "v$VERSION^{}:latest" || die "moving latest failed — push 'v$VERSION^{}:latest' by hand"
 	LATEST_NOTE="moved to v$VERSION"
 	echo "release: latest → v$VERSION"
 fi
