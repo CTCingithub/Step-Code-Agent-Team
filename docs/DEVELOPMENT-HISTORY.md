@@ -548,5 +548,18 @@
 
 **遗留**：①"允许用户自行输入信息"（input 路径 + note 注入链路）列为后续独立轮次——需先定 note 语义与专属 TUI 验证；② 派发在负载下的 settle 抖动——建议后续为 team_send/team_task start 增加与冒烟 runner 同构的有界重试；③ M3 手动 TUI 目验（Accept/取消 选择框 + spinner）仍待用户执行。
 
+### 53. 方案确认框倒计时取消（plan-91）
+
+**用户 prompt**：「出具拓扑协作方案的界面，在用户按下任意键后，取消倒计时」
+
+**思路**：先查宿主机制再定插件侧可行解。宿主 select 的倒计时是 TUI 组件（apps/cli/src/ui/view/dialogs/countdown-timer.ts + extension-selector.ts:103-113）：`handleInput` 处理按键但完全不碰计时器，仅 `dispose()`（对话框关闭）才停——**宿主不支持按键取消倒计时**，插件也无法给对话框挂键盘监听（ExtensionUIDialogOptions 仅 mirror/signal/timeout/overlay/examples/searchable）。宿主侧正解是 handleInput 里 dispose 计时器，但 sandbox/step 是固定 pin 的子模块、插件须对已发布宿主工作，故不走宿主修改。
+
+**工作**：`extensions/index.ts` confirmChoice 的 select 改**模式分流**——TUI（`ctx.mode === "tui"`，倒计时可见且扰人的场景）不传 timeout：无倒计时、对话框等待用户决定（Esc/取消仍落拒绝，`picked === acceptLabel` 严格相等映射不变）；RPC（hasUI===true 可达、无可见倒计时）保留 30s deadline 作无应答兜底。文档同步：TEST-PLAN(_CN) M3 行、MANUAL-TESTING(_CN) 场景 5 注意列去掉"30s 倒计时"表述；README(_CN) 的 30s 措辞指档位选单回退（行为未动）故保留。
+
+**验证**：tsc 仅剩既知 typebox 伪影；冒烟门全绿（confirmChoice 交互路径冒烟零覆盖，本轮仅改 opts 传参）；待用户场景 5 目验（无倒计时 + Esc 取消 + Accept 组队）。
+
+**遗留（宿主缺口，建议上游）**：extension-selector.ts 的 handleInput 应在任意按键时 `this.countdown?.dispose()` 并复位标题——这才是"按键取消倒计时"的完整实现；插件侧对已发布宿主只能以不设超时规避。
+
+
 
 
