@@ -179,6 +179,7 @@
 | R3 | ✅ 自动化轮（2026-10-23）：遗留修复+测试流程轮 | P1-4 元问题守卫改句子锚定（如何/怎么 用法请求恢复激活；纯 how-to 问句仍抑）+ phase6 8 条用例；冒烟 runner 有界单次重试；context hook 经 ContextEvent 类型化注册（tsc 19→1）；审计驱动的测试流程更新（phase22 文档行、Layer C 调用块、fixture 键、stale 配置、README 状态行）。全量套件绿 |
 | R4 | ✅ 自动化轮（2026-10-23）：测试覆盖加固 | 新 phase23 全工具 JSON-schema 守卫（typebox 描述丢失事件可被捕获）+ phase16/21/3 的 dispatchPrompt / planConfirmDialogOpts / details.to 断言；runner 重试行前缀 attempt1；全量套件 19 phase 全绿、tsc 零错误 |
 | R5 | ✅ 自动化轮（2026-10-24）：沙箱日志驱动修理 | 确认框选项精简为精确 Accept/Cancel；failed 板任务可重派（assertDispatchable + phase16 六条门禁断言）；未匹配的显式 role 在 create 结果中提示；MANUAL-TESTING(_CN) 新增派发异常恢复运维块；全量套件绿、tsc 零错误 |
+| R6 | ✅ 自动化轮（2026-10-25）：全面修改与优化（均衡档团队轮） | createMember spawn 重试（ensureLiveWithRetry，与 startTaskLocked 同构）+ isRetryableSpawnError 词边界修复（堵住增强错误里 respawn 的误放行）；phase1 零 token 回归块（10 条断言+3 个打桩场景）；CONFIGURATION(_CN) storage.dir 绝对路径说明；TEST-PLAN(_CN) 弃用 cfg-misc 标签；演示项目修复决议不做（设计上易失）；全量套件绿、tsc 零错误 |
 
 剩余交互项：K2/K3（方案选单 + Accept/取消 确认框）、K6（自定义角色）、K7（迁移提示）——见 MANUAL-TESTING 场景 5/8/9；K1/K4/K5/K8 已被自动化覆盖（K8 由 2026-10-22 四探针轮完成）。人工项：M1–M6（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
