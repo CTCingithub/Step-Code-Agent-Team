@@ -36,7 +36,7 @@
 
 | 探针 | agentDir/配置 | 成本 | 对应缺口 |
 |---|---|---|---|
-| smoke-phase9 | cfg-misc（全节覆盖+storage.dir+debug） | 零 token | 8 |
+| smoke-phase9 | 探针自建 settings.json 全节 fixture（mktemp；取代已弃用的 cfg-misc 标签）——全节覆盖+storage.dir 重定向+debug | 零 token | 8 |
 | smoke-phase10 | cfg-conc（maxConcurrent=2） | ~4 次 token | 1 |
 | smoke-phase10 | cfg-deadlock（maxConcurrent=1, timeoutMs=60s） | ~2 次 token | 2 |
 | smoke-phase11 | cfg-deep2（maxRecursionDepth=2, dispatch.timeoutMs=240s） | ~4 次 token | 3 |
@@ -48,7 +48,7 @@
 
 | 探针/配置 | 结果 | 失败项 | 后续 |
 |---|---|---|---|
-| phase9 / cfg-misc | ✅ 33/33 | 探针笔误×2（async 漏 await、reaper 阈值小于 spawn 间隔） | 修探针后全过 |
+| phase9 / 自建全节 fixture | ✅ 33/33 | 探针笔误×2（async 漏 await、reaper 阈值小于 spawn 间隔） | 修探针后全过 |
 | phase10 / cfg-conc | ✅ 2/2 | — | 4 并行派活、观测最大并发 2（排队启动正确） |
 | phase10 / cfg-deadlock | ✅ 修复后通过 | **产品缺陷：嵌套消息死锁**（A 持唯一信号量经 shim 消息 B，B 的派活也要信号量→60s 超时） | 已修复：server 派活标记 nested 绕过全局门 |
 | phase11 / cfg-deep2 | ✅ 修复后 4/4 | **产品缺陷①：`team_set_topology` 不在门控清单→激活前泄漏；②子队长 `--tools` 允许清单过滤掉团队工具→深度2 编排失效**（另有 cfg-deep2 配置文件丢失的测试设施问题、探针未启队长 server 问题） | 已修复：门控清单补全、子队长允许清单合并团队工具、协调提示加固（命令失败不排查工具）；探针补启队长 server + 拒答检测 |

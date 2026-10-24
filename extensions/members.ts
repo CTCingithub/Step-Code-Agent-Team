@@ -141,6 +141,22 @@ export function augmentDispatchError(err: unknown, members: readonly MemberRecor
 	return new Error(note, { cause: err });
 }
 
+/**
+ * Retryable spawn-path failures: only errors proving the work never started
+ * (spawn / handshake). A settle timeout or mid-run exit may mean the work is
+ * done — retrying duplicates it. Shared by startTaskLocked's dispatch retry
+ * and createMemberLocked's ensureLive retry so both stay isomorphic.
+ */
+export function isRetryableSpawnError(err: unknown): boolean {
+	const msg = err instanceof Error ? err.message : String(err);
+	// Word boundaries matter: augmentDispatchError appends "will respawn with
+	// its context resumed" to settle-timeout / mid-run-exit errors, and a bare
+	// /spawn/ matches inside "respawn" — retrying exactly the failures whose
+	// work may already be done (the duplicate-billing trap this policy exists
+	// to prevent). Genuine spawn failures still match ("spawn step ENOENT").
+	return /\baborted before start\b|\bhandshake\b|\bspawn\b|\bfailed to start\b/i.test(msg);
+}
+
 /** Depth of this process in the team tree (the leader session is 0). */
 export function currentDepth(): number {
 	const raw = process.env.STEPCODE_TEAM_DEPTH;
@@ -356,7 +372,7 @@ export class TeamManager {
 		const existing = this.findMember(name);
 		if (existing) {
 			// Idempotent: ensure it is alive, but never duplicate.
-			await this.ensureLive(existing);
+			await this.ensureLiveWithRetry(existing);
 			return { member: { ...existing }, created: false };
 		}
 
@@ -411,7 +427,7 @@ export class TeamManager {
 		this.reg.members.push(record);
 		this.save();
 
-		await this.ensureLive(record);
+		await this.ensureLiveWithRetry(record);
 		return { member: { ...record }, created: true, note: presetNote };
 	}
 
@@ -578,6 +594,26 @@ export class TeamManager {
 		});
 		this.spawning.set(member.name, run);
 		return run;
+	}
+
+	/**
+	 * ensureLive with the same bounded, spawn/handshake-only retry as
+	 * startTaskLocked: a failed handshake is transient, and re-spawning is
+	 * safe — the record and its deterministic session id already exist, so a
+	 * retry resumes instead of duplicating. Attempts come from
+	 * dispatch.retries, exactly like dispatch.
+	 */
+	private async ensureLiveWithRetry(member: MemberRecord): Promise<MemberRpc> {
+		let lastError: unknown;
+		for (let attempt = 0; attempt <= getConfig().dispatch.retries; attempt++) {
+			try {
+				return await this.ensureLive(member);
+			} catch (err) {
+				lastError = err;
+				if (!isRetryableSpawnError(err)) break;
+			}
+		}
+		throw lastError instanceof Error ? lastError : new Error(String(lastError));
 	}
 
 	private async doSpawn(member: MemberRecord): Promise<MemberRpc> {
@@ -795,8 +831,7 @@ export class TeamManager {
 				// may already have done the work — re-sending the same prompt to
 				// the respawned member duplicates it (its resumed context holds
 				// the result), which is what made timeouts recur in a loop.
-				const msg = err instanceof Error ? err.message : String(err);
-				if (!/aborted before start|handshake|spawn|failed to start/i.test(msg)) break;
+				if (!isRetryableSpawnError(err)) break;
 			}
 		}
 		const aborted = options.signal?.aborted === true;

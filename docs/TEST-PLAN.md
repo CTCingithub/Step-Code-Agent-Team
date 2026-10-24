@@ -36,7 +36,7 @@
 
 | Probe | agentDir/config | Cost | Gap |
 |---|---|---|---|
-| smoke-phase9 | cfg-misc (full-section coverage + storage.dir + debug) | zero-token | 8 |
+| smoke-phase9 | self-built settings.json full-section fixture (mktemp; supersedes the retired cfg-misc label) — full-section + storage.dir redirection + debug | zero-token | 8 |
 | smoke-phase10 | cfg-conc (maxConcurrent=2) | ~4 tokens | 1 |
 | smoke-phase10 | cfg-deadlock (maxConcurrent=1, timeoutMs=60s) | ~2 tokens | 2 |
 | smoke-phase11 | cfg-deep2 (maxRecursionDepth=2, dispatch.timeoutMs=240s) | ~4 tokens | 3 |
@@ -48,7 +48,7 @@
 
 | Probe/config | Result | Failures | Follow-up |
 |---|---|---|---|
-| phase9 / cfg-misc | ✅ 33/33 | 2 probe typos (async missing await, reaper threshold shorter than the spawn interval) | All pass after fixing the probe |
+| phase9 / self-built full-section fixture | ✅ 33/33 | 2 probe typos (async missing await, reaper threshold shorter than the spawn interval) | All pass after fixing the probe |
 | phase10 / cfg-conc | ✅ 2/2 | — | 4 parallel dispatches; observed max concurrency 2 (queue-before-start correct) |
 | phase10 / cfg-deadlock | ✅ pass after fix | **Product defect: nested-message deadlock** (A holds the only semaphore slot, messages B via the shim, B's dispatch also needs a slot → 60s timeout) | Fixed: server dispatches marked nested bypass the global gate |
 | phase11 / cfg-deep2 | ✅ 4/4 after fix | **Product defects ①: `team_set_topology` not in the gate list → leak before activation; ② sub-leader `--tools` allowlist filters out the team tools → depth-2 orchestration broken** (plus test-harness issues: cfg-deep2 config file missing, probe didn't start the leader server) | Fixed: gate list completed, sub-leader allowlist merges the team tools, coordination prompt hardened (command failure doesn't mean investigating tools); probe now starts the leader server + refusal detection |

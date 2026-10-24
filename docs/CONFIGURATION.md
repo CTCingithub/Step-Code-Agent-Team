@@ -56,6 +56,7 @@ reapIntervalMs = 300000              # reaping check interval (5 min)
 
 [stepcodeAgentTeam.storage]
 # dir omitted (null) = <agentDir>/teams
+# dir must be an absolute path: a relative value resolves against the launching process's cwd (registry.ts teamsRoot), not <agentDir>
 
 [stepcodeAgentTeam.tasks]
 max = 999                           # task-board capacity (ids T1..T<max>; 1–10000)
@@ -91,7 +92,7 @@ debug = false                        # debug logging
 | `oneshot` | Timeout for stateless `mode: "oneshot"` dispatches |
 | `cost` | Team-level cumulative spend warning; 0 disables |
 | `idle` | Idle members are reaped (sessions stay resumable); running members are never reaped |
-| `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams` |
+| `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams`. Must be absolute — a relative `dir` resolves against `process.cwd()`, so it moves with the launch directory |
 | `tasks` | `max` sizes the task board (ids T1..T<max>; creating past the cap errors with the configured limit); `outputCapBytes` truncates the model-visible per-task output — the full text stays in `details.fullText` |
 | `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender states it in their final report — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `topo_team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
 | `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). With a request attached, the model first drafts the ACTUAL plan for that request (a one-off, plan-only call with a spinner progress) and the Accept/Cancel selection shows that plan — on approval it is injected with precedence over the general strategy; bare `/topo` (no request) or a failed planning call falls back to the tier's standard shape. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths); `/topo <tier>` overrides per invocation. Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |
