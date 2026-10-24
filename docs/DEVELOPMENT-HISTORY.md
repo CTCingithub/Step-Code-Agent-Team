@@ -584,6 +584,19 @@
 
 **遗留**：cfg-misc 的"full-section coverage"表述待校正或接线探针；createMember 重试、storage.dir、自由输入链路、settle 抖动兜底维持 deferred（见 HANDOFF §4）。
 
+### 56. 沙箱日志（10-24）修理：任务板 failed 重派与预设提示（plan-94）
+
+**用户 prompt**：「1.确认页面，改为只有Accept和Cancel两个选项，不要写多余文本；2.我已经完成了一轮沙箱测试，请阅读日志 sandbox/logs/session-log-2026-10-24.md，并进行修理与优化」
+
+**思路**：对日志（修复链 + 并行审查 + ring 巡回三轮）的异常逐条定性——演示项目审查发现（M1-M4/m1-m11）与 README 陈旧文案按既往裁定不出插件范围；settle 超时为负载性环境因；真正插件侧三件事：任务板 failed 卡死、预设可发现性、topo_team_msg 自报不可靠。分析员派发 settle 超时（负载 10），队长自读全日志接管分析。
+
+**工作**：① **确认框精简**（请求 1）：Accept/取消 选项去掉「· 按此方案组建 / form this team」后缀，两语言均为精确 `Accept`/`Cancel`。② **任务板 failed 可重派**（日志阶段 2/3 两度卡死 + 队长多轮同症）：`assertDispatchable(task)` 提取至 tasks.ts（ready/failed 可派发；pending/running/done 抛错并带 blockers），members.ts 两处守卫改调它；team_task 工具描述注明 failed 可重派；phase16 补 6 条门禁断言。③ **未知 role 静默回退修复**（日志「四轮创建均回退 worker」的 footgun——审查员因此未获只读白名单）：显式传入但无预设匹配时 create 结果追加提示（可用预设清单 + 各层目录说明）；CONFIGURATION(_CN) 明示预设随包发布且可被 agentDir/信任项目层遮蔽。④ **topo_team_msg 自报不可靠**（三方汇报互相矛盾、R1 将已投递消息误判「无应答」）：契约与 180s 回复超时均无缺陷，属模型侧误读——MANUAL-TESTING(_CN) 新增「派发异常与恢复」运维块（settle 恢复、failed 重派、以会话 JSONL 核实投递、板 id 以 create 返回为准、沙箱预设可用）。
+
+**验证**：tsc 零错误；phase16/2/18/1 单跑全过（含 6 条新门禁断言与 role:「smoke」提示路径）；全量冒烟门 exit 0 全绿。
+
+**遗留**：演示项目 M1-M4/m1-m11 修复（sandbox/project，按既往裁定待用户明确要求）；settle 抖动兜底（team_send 重试的幂等/harvest 策略）维持 deferred；其余见 HANDOFF §4。
+
+
 
 
 
