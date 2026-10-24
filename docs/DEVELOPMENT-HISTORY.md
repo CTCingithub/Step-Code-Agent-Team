@@ -560,6 +560,19 @@
 
 **遗留（宿主缺口，建议上游）**：extension-selector.ts 的 handleInput 应在任意按键时 `this.countdown?.dispose()` 并复位标题——这才是"按键取消倒计时"的完整实现；插件侧对已发布宿主只能以不设超时规避。
 
+### 54. typebox Optional 单参化：「伪影」定性的修正（plan-92）
+
+**用户 prompt**：「请给我解释typebox映射伪影问题，并给出一个可能的解决方案」+ 确认经济档单成员方案（Lin）+「我选择最推荐方案，请给我进行修改」。
+
+**思路**：先实证再定性。查证：子模块 coding-agent 与 cli 的 package.json 均 pin `typebox: 1.3.7`（store 唯一版本；本仓库无 typebox 依赖，扩展的 import 在宿主进程内解析）——**paths 映射一直是对的**；1.3.7 的 d.ts 声明 `Optional(type)` 单参，运行时 `AddOptional(type)` 不读第二参；node 实测双参调用得 `{"type":"string"}`（描述丢失）、单参内嵌得 `{"type":"string","description":"..."}`（描述落地）。
+
+**工作**：① **定性修正**——TS2554 不是"映射伪影"，而是对真实依赖版本的真实类型错误；更实质的是两参写法的第二参数被静默丢弃，`reason` 参数的描述从未进入工具 schema（tools.ts 里"宿主两种写法都接受"的注释说法不准确，JS 不报错≠参数被使用）。② **实施方案 1**（用户确认的最推荐方案）：`Type.Optional(Type.String({ description: "Failure reason for fail" }))`——类型正确且描述真正送达模型，与同文件 detail 参数现有写法一致；注释重写说明单参缘由及 entry-49 相关性的负载混淆本质（成员根本不加载 tools.ts）。③ **执行方式**：经济档单成员（Lin，low，star）；成员派发两度 settle 超时（负载抖动），改动由成员在被杀前落盘、验证与提交由队长完成。
+
+**验证**：tsc 全导入图**归零**（此前唯一错误即本处）；冒烟门低负载（2.37）连跑两轮均 exit 0、all phases passed（复核 entry-49 握手相关性）；git diff 仅 extensions/tools.ts 一处，演示项目未提交改动未裹挟。
+
+**遗留**：无。typebox 类型门自此全绿；entry 49/50 中"伪影/宿主两种写法都接受"的表述以本条为准（历史条目按惯例不回改）。
+
+
 
 
 
