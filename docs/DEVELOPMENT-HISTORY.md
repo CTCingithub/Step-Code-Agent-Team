@@ -608,6 +608,19 @@
 
 **遗留（不变）**：A3 自由输入链路、A4 settle 抖动兜底设计、B2 端到端交互覆盖、B3 各项（P2-8c 低成本优先）、E 合 main 前带 key 复跑 phase4/10/11/12；D 演示项目修复（待用户明确退役种子 bug 才做）。
 
+### 58. 剩余项确认与全量测试轮：LLM 探针 22 项全绿（plan-96）
+
+**用户 prompt**：「请给我罗列，现在确认需要修改或优化的内容。如果没有，请开始测试，直至只剩下需要我手动测试的内容」
+
+**思路**：先逐项取证确认剩余修改/优化清单，再进入测试阶段，驱动至「只剩手动项」。
+
+**工作**：① **清单确认**（全部附新取证）：A3 自由输入链路（index.ts:400/448 仍返 boolean、无 note 回流）、A4 settle 兜底（members.ts:658 sendMessage 无重试环）、B2 端到端覆盖（test/ 对 confirmChoice 仅 phase21 纯函数断言）、B3（phase7 无工具层 topology scoping、phase3 无 formatTeammateReply socket E2E、tasks 配置→消费方联动断言缺位、P2-8e 需 key、P2-9 待原审计细节）——四项均为 deferred-by-design 增强，无阻塞、无回归。② **测试阶段**：全量冒烟门 exit 0（19 phase + manifest + 7 live + orphan-check）；**LLM 探针带 key 全绿**——phase4 4/4（回复/上下文/重 spawn 恢复/shim 消息）、phase10 Branch A（cfg-conc）3/3、phase10 Branch B（cfg-deadlock）2/2（maxConcurrent=1 下嵌套消息无死锁）、phase11（cfg-deep2）4/4（深度 2 链 LEAF-OK 回传）、phase12（默认）9/9（oneshot/任务链/unicode/SIGKILL 恢复/流式）。③ **测试中发现并处置一个假绿陷阱**：全局 config.toml 位于 agentDir 旁边且优先级高于 fixture 的 settings.json——本地 `sandbox/config.toml`（gitignored）静默遮蔽 cfg-* fixture，phase10 首跑因此走了 Branch A（报 maxConcurrent=5 而非 fixture 的 1）；以临时 agentDir 隔离后 Branch B 正确执行。TESTING(_CN) Layer C 补该警示与隔离手法。
+
+**验证**：冒烟门全绿；探针合计 22 项断言全过（均在隔离 agentDir 下执行，排除本地配置干扰）。
+
+**遗留**：A3/A4（待用户设计决策）、B2/B3（测试加固排期）；**至此自动化可测内容全部验证通过，剩余全部为用户手动测试项**（场景 5/7/8/9、M1、M2）与 develop→main 合并拍板。
+
+
 
 
 

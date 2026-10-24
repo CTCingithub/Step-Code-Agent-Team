@@ -145,6 +145,14 @@ phase10/phase11 read their behavior from the agent dir's config, so repoint the
 export at the fixture (`STEP_CODING_AGENT_DIR="$PWD/sandbox/cfg-deep2"` for
 phase11). With the default dir phase11 exits with a clean SKIP — a false green.
 
+**Local-config shadowing**: the global `config.toml` lives *beside* the agent dir
+(`dirname(agentDir)/config.toml`) and outranks the fixture's `settings.json`. A
+local `sandbox/config.toml` (gitignored) therefore shadows `sandbox/cfg-*` — its
+`dispatch.maxConcurrent` silently replaces the fixture's, and phase10 takes
+Branch A instead of B (a false green observed 2026-10-25). On machines with that
+file, isolate the probe: copy the fixture's `settings.json` into a temp agent dir
+and point `STEP_CODING_AGENT_DIR` there.
+
 Pass criteria (summary): all parallel dispatches succeed; task chains move
 pending→ready→running→done; oneshot gets a reply and leaves no resident process;
 after `kill -9` the next send succeeds and remembers the earlier context;
