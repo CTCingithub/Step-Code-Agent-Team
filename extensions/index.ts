@@ -431,9 +431,17 @@ export default function (pi: ExtensionAPI) {
 		try {
 			const acceptLabel = lang === "zh" ? "Accept · 按此方案组建" : "Accept · form this team";
 			const cancelLabel = lang === "zh" ? "取消" : "Cancel";
-			const picked = await ctx.ui.select("智能体团队", [acceptLabel, cancelLabel], {
-				timeout: INTERACTIVE_TIMEOUT_MS,
-			});
+			// The host's select countdown is a TUI-only component that ignores
+			// keypresses — it runs to expiry and can dismiss the dialog while the
+			// user is still reading the plan, and the plugin cannot hook the
+			// dialog's keys. In the TUI we therefore pass no timeout at all: no
+			// countdown is shown and the dialog waits for the decision (Esc
+			// still cancels). RPC keeps the deadline as a no-answer guard.
+			const picked = await ctx.ui.select(
+				"智能体团队",
+				[acceptLabel, cancelLabel],
+				ctx.mode === "tui" ? undefined : { timeout: INTERACTIVE_TIMEOUT_MS },
+			);
 			return picked === acceptLabel;
 		} catch {
 			return false;

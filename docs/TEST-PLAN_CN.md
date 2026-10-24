@@ -157,7 +157,7 @@
 |---|---|---|
 | M1 | 真实安装：干净导出物 `step install`、激活、`step remove` | `step install` 命令 UX + 卸载；live-package-install 只覆盖 config packages 加载路径 |
 | M2 | 信任弹窗 UX | 项目级配置信任弹窗是交互式的 |
-| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept/取消 选项、30s 超时倒计时 |
+| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept/取消 选项（无倒计时——方案确认框等待用户决定）、档位选单的 30s 回退 `balanced` |
 | M4 | TUI 渲染观感（render.ts） | phase15 只断言内容字符串，不覆盖像素 |
 | M5 | 英文译文审阅 | 文档双语准确性 |
 | M6 | 8 成员性能（主观，可选） | 定性 |

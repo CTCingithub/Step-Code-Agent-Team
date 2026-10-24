@@ -61,7 +61,7 @@ npm run smoke   # 18 phase + manifest + 7 个 live 检查；任何失败先停�
 | 2 | 建成员 + pipeline + 任务板 | §1 第 3–8 步 | §1 | — |
 | 3 | `topo_team_msg` E2E | 粘贴：`让 scout1 通过 topo_team_msg 给 worker1 发一条一句话自我介绍，并原样报告工具的返回文本` | §1、§4 | 回复为尽力语义：投递回执（"Delivered to …"）不是队友的答复——产出经队长收集 |
 | 4 | ring 快巡（小步快跑） | §4 的 ring prompt | §4 | 每一跳保持小工作量（一个文件一个问题），使每跳都能在 600s 默认 `dispatch.timeoutMs`（覆盖成员整回合，含嵌套中继）内 settle——且超时不再触发盲目重试：任务会带着收割指引失败。只跑一圈；最终清单由队长收集。**环内闭环**：默认 `maxLoopCount=2` 下，3 成员环的闭环跳（r3→r1）必被拦下——闭环须由队长中转；确需环内闭环再调高 `maxLoopCount` |
-| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置 |
+| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；方案确认框无倒计时，等待你决定（Esc 取消） |
 | 6 | 并行评审 | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 | 7 | 激活护栏（L1） | 粘贴：`如何用智能体小队并行审查这个仓库？` | — | 2026-10-23 重写：带请求主体的 how-to 请求会激活插件（正常组队）；对插件本身的纯提问（`什么是智能体小队？`）仍被抑制——不组队 |
 | 8 | 自定义角色（K6） | 写 `sandbox/agent/agents/quickfix.md`（frontmatter：`name`/`description`/`tools`/`effort`），重启，粘贴：`创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §1 | frontmatter 的 prompt/tools/effort 生效（工具列表即白名单）；项目级角色 `sandbox/project/.stepcode/agents/` 仅在信任的项目加载（删 `sandbox/agent/trust.json` 可重触发弹窗） |

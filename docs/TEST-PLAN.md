@@ -155,7 +155,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 |---|---|---|
 | M1 | Real install: `step install` from a clean export, activate, `step remove` | the `step install` command UX + uninstall; live-package-install only covers the config-packages load path |
 | M2 | Trust dialog UX | the project-level config trust popup is interactive |
-| M3 | TUI picker / selection rendering | `ctx.ui.select` visuals, the Accept/Cancel options, the 30s timeout countdown |
+| M3 | TUI picker / selection rendering | `ctx.ui.select` visuals, the Accept/Cancel options (no countdown — the plan confirmation waits for the decision), the tier picker's 30s fallback to `balanced` |
 | M4 | TUI rendering观感 (render.ts) | phase15 asserts content strings, not pixels |
 | M5 | English translation review | docs bilingual accuracy |
 | M6 | 8-member performance (subjective, optional) | qualitative |
