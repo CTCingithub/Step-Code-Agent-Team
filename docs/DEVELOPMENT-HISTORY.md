@@ -596,6 +596,19 @@
 
 **遗留**：演示项目 M1-M4/m1-m11 修复（sandbox/project，按既往裁定待用户明确要求）；settle 抖动兜底（team_send 重试的幂等/harvest 策略）维持 deferred；其余见 HANDOFF §4。
 
+### 57. 全面修改与优化轮：spawn 重试、respawn 陷阱与文档销账（plan-95）
+
+**用户 prompt**：确认均衡档实际方案（Scout/Planner/Executor/Reviewer 四成员，planner 中枢 custom 拓扑，T1 调研→T2 计划→T3 实施→T4 审查）后「请创建合理的计划后，开始对项目进行全面的修改与优化」。
+
+**思路**：按批准的四阶段流水线执行——只读成员（Scout/Planner/Reviewer）不碰文件，实施归 Executor、提交与记录归队长。
+
+**工作**：① **T1 调研（Scout）**：A1–A4/B1/B2/C/E 全部确证（附 文件:行号）；B1 实为「表述过时」（phase9 已迁 mktemp 自建 fixture，cfg-misc 无 live 消费方）；**D（演示项目修复）结论「不做」**——restore-project.sh 每轮从 project-pristine/ 复位，修复易失，保留修复须同步改快照而会摧毁种子 bug 演示前提；恢复 B3（P2-8a/b/c/e、P2-9）细节。**重要交叉验证**：Scout 报告同轮 7 个 live 检查全红，队长在干净环境复跑**全绿**——确证「live 检查在成员进程受限环境下假阴性」，教训写入 MANUAL-TESTING 运维块。② **T2 计划（Planner）**：6 处编辑（E1 HANDOFF 计数、E2 CONFIGURATION 双语 storage.dir 绝对路径、E3 TEST-PLAN 双语 cfg-misc 标签、E4 A1 代码、E5 phase1 零 token 回归、E6 restore 卫生）。③ **T3 实施（Executor）**：E2–E5 全部落盘（派发 settle 超时被杀前完成，与计划逐条吻合），队长补跑验证。④ **T4 审查（Reviewer）PASS**：范围零越界、逐项对照逐字吻合、tsc 与 phase1/2/18 复跑全绿；并发现**既有隐患**——augmentDispatchError 追加的 "will respawn with its context resumed" 命中旧内联正则 /spawn/ 的 respawn 子串，settle 超时被 startTaskLocked 判为可重试（重复计费陷阱）。⑤ **队长修复该隐患**：正则改词边界（"spawn step ENOENT" 仍命中、"respawn" 不再命中），phase1 fatal 集补增强错误断言；node 快验 + phase1 + tsc + 全量冒烟门全绿。⑥ E1/E6 由队长执行（HANDOFF §5-1 计数、restore 复位演示项目且日志自动归档）；提交 fc29a94。
+
+**验证**：tsc 零错误；phase1 单跑 OK（10 条判定断言 + 3 个打桩场景）；phase2/18 复跑 OK；全量冒烟门 exit 0（19 phase + manifest + 7 live + orphan-check）。
+
+**遗留（不变）**：A3 自由输入链路、A4 settle 抖动兜底设计、B2 端到端交互覆盖、B3 各项（P2-8c 低成本优先）、E 合 main 前带 key 复跑 phase4/10/11/12；D 演示项目修复（待用户明确退役种子 bug 才做）。
+
+
 
 
 
