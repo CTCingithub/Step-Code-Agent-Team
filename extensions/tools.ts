@@ -264,11 +264,13 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			blockedBy: Type.Optional(Type.Array(Type.String(), { description: "Task ids this task depends on" })),
 			assignee: Type.Optional(Type.String({ description: "Member name for start, or default assignee for create" })),
 			result: Type.Optional(Type.String({ description: "Result text for complete" })),
-			// Keep the two-argument Optional form: the single-arg
-			// Optional(String({ description })) variant empirically correlated with
-			// member-handshake timeouts under load (DEVELOPMENT-HISTORY entry 49)
-			// even though the host's typebox accepts both spellings.
-			reason: Type.Optional(Type.String(), { description: "Failure reason for fail" }),
+			// Single-argument form: the pinned typebox (1.3.7) declares
+			// Optional(schema) with one parameter — a second options argument is
+			// both a TS2554 error and silently dropped at runtime, so the
+			// description never reached the tool schema. Attaching it to the
+			// inner String keeps it in the schema. (The entry-49 handshake
+			// correlation was load-confounded: members never load this file.)
+			reason: Type.Optional(Type.String({ description: "Failure reason for fail" })),
 		}),
 		renderCall: renderTeamCall("team_task"),
 		renderResult: renderTeamResult("team_task"),
