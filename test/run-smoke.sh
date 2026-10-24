@@ -43,7 +43,7 @@ fi
 # which makes step stage the repo package into the agent dir and load a second
 # copy of index.ts: a fatal tool-name conflict. These probes don't need the
 # team extension, so don't load it.
-STANDALONE_PHASES="15 16"
+STANDALONE_PHASES="15 16 23"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
 KEY_PHASES="5"
@@ -83,7 +83,7 @@ run_phase_attempt() {
     echo "phase$p: OK (fails=0, skips=$skips)"
     return 0
   else
-    echo "phase$p: FAILED (fails=$fails)"
+    echo "phase$p: attempt1 FAILED (fails=$fails) — retrying once with a fresh session id"
     echo "$probe_log" | grep -E 'FAIL |FAILED' | head -20
     return 1
   fi
@@ -110,7 +110,6 @@ for p in $PHASES; do
   # while the machine is saturated) would otherwise fail the whole suite —
   # and the release gate. Re-run once on a fresh session id: a real failure
   # fails twice deterministically.
-  echo "phase$p: retrying once (transient failure)"
   run_phase_attempt "$p" "-retry" || FAILED+=("$p")
 done
 

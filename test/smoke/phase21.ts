@@ -29,6 +29,7 @@ import {
 	PLAN_TIER_MODES,
 	tierLabel,
 	tierPickerOptions,
+	planConfirmDialogOpts,
 } from "../../extensions/plan.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -183,6 +184,11 @@ export default function (pi: ExtensionAPI) {
 					reviewEn.includes("the target named in the user's request") &&
 					!reviewEn.includes("×"),
 			);
+
+			// ---- planConfirmDialogOpts (no countdown in the TUI) ----
+			check("confirm opts: tui → no timeout (no countdown)", planConfirmDialogOpts("tui", 30_000) === undefined, "");
+			const rpcConfirmOpts = planConfirmDialogOpts("rpc", 30_000);
+			check("confirm opts: rpc keeps the no-answer guard", rpcConfirmOpts?.timeout === 30_000, JSON.stringify(rpcConfirmOpts));
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE21 DONE (all passed)" : `SMOKE21 DONE (${failed}/${results.length} failed)`);

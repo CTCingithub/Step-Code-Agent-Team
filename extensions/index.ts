@@ -62,6 +62,7 @@ import {
 	tierLabel,
 	tierPickerOptions,
 	tierPlanLines,
+	planConfirmDialogOpts,
 	type CustomPicks,
 	type Lang,
 	type TeamTier,
@@ -440,7 +441,7 @@ export default function (pi: ExtensionAPI) {
 			const picked = await ctx.ui.select(
 				"智能体团队",
 				[acceptLabel, cancelLabel],
-				ctx.mode === "tui" ? undefined : { timeout: INTERACTIVE_TIMEOUT_MS },
+				planConfirmDialogOpts(ctx.mode, INTERACTIVE_TIMEOUT_MS),
 			);
 			return picked === acceptLabel;
 		} catch {

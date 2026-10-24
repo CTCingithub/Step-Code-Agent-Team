@@ -19,7 +19,7 @@ import type { PluginConfig } from "./config.ts";
 import { getConfig, VALID_EFFORT } from "./config.ts";
 import { isActive } from "./activation.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
-import { taskPrompt } from "./tasks.ts";
+import { dispatchPrompt } from "./tasks.ts";
 
 type GetManager = (ctx: ExtensionContext) => TeamManager;
 
@@ -330,7 +330,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 				let dispatchMessage: string | undefined;
 				if (params.detail) {
 					const board = manager.snapshot().tasks.find((t) => t.id === params.id);
-					dispatchMessage = board ? [taskPrompt(board), params.detail].join("\n\n") : params.detail;
+					dispatchMessage = board ? dispatchPrompt(board, params.detail) : params.detail;
 				}
 				const { task, text } = await manager.startTask(params.id, params.assignee, dispatchMessage, options);
 				return {

@@ -83,3 +83,13 @@ export function taskPrompt(task: TaskRecord): string {
 	lines.push("", "Complete this task and report the outcome concisely.");
 	return lines.join("\n");
 }
+
+/**
+ * The dispatch prompt for a task: its acceptance criteria (frozen at create
+ * time) plus any detail the caller supplies at start time — both halves reach
+ * the member. A start-time detail used to be silently dropped.
+ */
+export function dispatchPrompt(task: TaskRecord, startDetail?: string): string {
+	const extra = startDetail?.trim();
+	return [taskPrompt(task), extra].filter(Boolean).join("\n\n");
+}

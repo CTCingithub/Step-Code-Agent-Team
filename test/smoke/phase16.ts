@@ -8,7 +8,7 @@
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { costWarning, truncateOutput } from "../../extensions/tools.ts";
 import { formatTeammateReply } from "../../extensions/member-messaging.ts";
-import { nextTaskId } from "../../extensions/tasks.ts";
+import { dispatchPrompt, nextTaskId, taskPrompt } from "../../extensions/tasks.ts";
 import { defaultConfig } from "../../extensions/config.ts";
 import type { TaskRecord } from "../../extensions/registry.ts";
 
@@ -86,6 +86,22 @@ export default function (pi: ExtensionAPI) {
 			check("truncate: explicit cap below length truncates", truncateOutput("x".repeat(100), 10).includes("[Output truncated: 90 bytes omitted."), "");
 			check("truncate: explicit cap at length keeps text", truncateOutput("x".repeat(10), 10) === "x".repeat(10));
 			check("truncate: explicit cap above length keeps text", truncateOutput("hello", 10) === "hello");
+
+			// ---- dispatchPrompt (team_task start detail passthrough) ----
+			// The dispatch prompt must carry both the frozen acceptance criteria
+			// and a start-time detail — a start-time detail used to be dropped.
+			const boardTask = {
+				id: "T1",
+				title: "Ship the fix",
+				detail: "acceptance criteria",
+				status: "ready",
+				blockedBy: [],
+				assignee: null,
+			} as unknown as TaskRecord;
+			check("dispatch: merges criteria + start detail", /acceptance criteria/.test(dispatchPrompt(boardTask, "extra context")) && dispatchPrompt(boardTask, "extra context").includes("extra context"), "");
+			check("dispatch: no detail → criteria only", dispatchPrompt(boardTask) === taskPrompt(boardTask), "");
+			check("dispatch: whitespace detail ignored", dispatchPrompt(boardTask, "   ") === taskPrompt(boardTask), "");
+			check("dispatch: halves joined by a blank line", dispatchPrompt(boardTask, "extra").includes("\n\n"), "");
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE16 DONE (all passed)" : `SMOKE16 DONE (${failed}/${results.length} failed)`);
