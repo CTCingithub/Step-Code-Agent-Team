@@ -86,7 +86,7 @@ throwaway temporary agentDir (mktemp), so they do not pollute `~/.stepcode` or
 the gitignored `sandbox/`:
 
 ```bash
-npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22)
+npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23)
 bash test/run-smoke.sh 9 13   # run only the given phases
 ```
 
@@ -115,6 +115,7 @@ either set, phase5 is part of the regression run.
 | phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
 | phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) | zero token |
 | phase22 | Tool-availability self-heal: `ensureToolsAvailable` restores tools after a host reset, no-ops while inactive, and `session_start` re-activates a session whose team registry already exists | zero token |
+| phase23 | Team-tool JSON-schema contract: every tool and every top-level parameter carries a non-empty description (guards the typebox two-argument Optional class of regression, which once dropped `reason`'s description) | zero token |
 
 The LLM-path probes (phase4/10/11/12) need a test key and live in `sandbox/` —
 the probes themselves are tracked; only sandbox runtime state is gitignored (see

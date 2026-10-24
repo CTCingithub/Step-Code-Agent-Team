@@ -572,6 +572,19 @@
 
 **遗留**：无。typebox 类型门自此全绿；entry 49/50 中"伪影/宿主两种写法都接受"的表述以本条为准（历史条目按惯例不回改）。
 
+### 55. 测试覆盖加固：schema 契约守卫与两个可测性重构（plan-93）
+
+**用户 prompt**：确认经济档单成员实际方案（Solo·全栈执行，custom 单节点，T1 修改优化→T2 更新文档）后「请开始修改优化，并更新文档」。
+
+**思路**：落实三路只读审查轮结论中的全部零 token 测试优化项——补"交互路径与工具 schema 零覆盖"的三个缺口，并把两处内联决策提为纯函数使其可断言。
+
+**工作**：① **新 phase23（standalone）**：假 pi 捕获 `registerTeamTools` 注册的六个团队工具，断言每个工具与每个顶层参数均有非空 description——早些时候 typebox 双参致 `reason` 描述被运行时静默丢弃的事件正可被这条断言捕获（整类回归守卫）；另断言各工具参数名册与 `parameters.type==="object"`。② **两个纯函数提取**：`tasks.ts` 增 `dispatchPrompt(task, startDetail?)`（验收标准+start 时 detail 合并，trim 防空白 detail），tools.ts start 分支改用它；`plan.ts` 增 `planConfirmDialogOpts(mode, timeoutMs)`（TUI→无 timeout 即无倒计时、其他模式保留 30s 兜底），index.ts confirmChoice 改用它。③ **既有 phase 补断言**：phase16 四条 dispatchPrompt、phase21 两条 planConfirmDialogOpts、phase3 两条 `details.to` 回显。④ **runner**：phase23 注册 STANDALONE；首发失败行改 "attempt1 FAILED … retrying once"（消除重试成功后残留裸 FAILED 行对 CI 的误导）。⑤ **文档**：TESTING(_CN) phase23 行+清单注释、README(_CN) 清单补 22/23、TEST-PLAN(_CN) R4 行+尾句修正（K1/K4/K5/K8 已覆盖）、HANDOFF 同步。⑥ **执行方式**：Solo 派发 settle 超时（负载 10）但全部改动在被杀前落盘且与清单逐条吻合，验证与提交由队长完成；**cfg-misc 补节建议经查证搁置**——该 fixture 全仓无 live 消费方（仅文档引用），补节无验证载体。
+
+**验证**：`bash -n` 通过；phase23/16/21/3 单跑全过（runner verdict 要求 DONE 标记+零 FAIL，排除"没跑也算过"）；全量冒烟门 exit 0、**19 phase 全绿**（phase23: OK fails=0）；tsc 零错误；diff 逐行复核与清单一致。
+
+**遗留**：cfg-misc 的"full-section coverage"表述待校正或接线探针；createMember 重试、storage.dir、自由输入链路、settle 抖动兜底维持 deferred（见 HANDOFF §4）。
+
+
 
 
 

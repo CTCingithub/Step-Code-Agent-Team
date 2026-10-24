@@ -319,7 +319,7 @@ reviewer = "high"
 ```bash
 bash sandbox/probe.sh   # RPC 握手探针 → 期望输出 PROBE OK
 
-npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21）
+npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21,22,23）
                         # hermetic：一次性临时 agentDir；phase5 未设 STEP_API_KEY 时
                         # 显式 SKIP（它会发起一次真实调用）
 ```

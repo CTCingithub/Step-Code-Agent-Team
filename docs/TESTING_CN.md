@@ -68,7 +68,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -96,6 +96,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议） | 零 token |
 | phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
+| phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——探针本身已跟踪入库，仅沙箱运行时状态在 .gitignore 内（见 C 层）。
 

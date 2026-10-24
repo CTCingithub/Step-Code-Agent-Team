@@ -386,7 +386,7 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21)
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21,22,23)
                         # hermetic: throwaway agent dir; phase 5 is skipped
                         # unless STEP_API_KEY is set (it makes one real call)
 ```
