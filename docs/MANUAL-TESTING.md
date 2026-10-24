@@ -87,6 +87,14 @@ shape — there is nothing request-specific to show yet.
 The planning call is interactive-only — headless/RPC `/topo <request>` skips it and
 confirms the tier's standard shape directly.
 
+**Dispatch anomalies and recovery (from the 2026-10-24 sandbox round)**:
+
+- **Settle timeouts**: a dispatch can fail with `timeout waiting for member to settle` — the member is killed fail-fast, but its work usually continues server-side (or resumes with context on the next dispatch). Recovery: check `team_status`, then re-dispatch (a short "finish and report" message works). Nothing is lost.
+- **Failed board tasks are re-dispatchable**: a task whose member was killed mid-run stays `failed`; `team_task start` on it re-dispatches and the member resumes — no need to rebuild the `blockedBy` chain (that deadlock is what forced the equivalent-task workaround in earlier rounds).
+- **`topo_team_msg` self-reports are unreliable**: members have reported both "delivered" and "tool unavailable" for messages that were in fact delivered. Verify actual delivery in `sandbox/agent/teams/<teamId>/sessions/*.jsonl` (look for the tool call) before trusting a member's claim in either direction.
+- **Board ids come from `create`'s return**, not from your plan's numbering — `blockedBy` an unknown id and the create is rejected with the offending ids.
+- **Presets ship with the package** (`agents/<role>.md`: scout/planner/worker/reviewer) and work in the sandbox too — pass `role:` to inherit a preset's read-only tools and effort instead of hand-building system prompts; an explicit role that matches no preset is called out in the create result.
+
 ### Step 3 — wrap-up
 
 1. `Report the team's current status`, then disband the team when finished.

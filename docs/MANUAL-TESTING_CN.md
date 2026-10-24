@@ -73,6 +73,14 @@ npm run smoke   # 18 phase + manifest + 7 个 live 检查；任何失败先停�
 回退为该档位的标准方案形态——此时没有可展示的请求相关内容。
 规划调用仅交互式会话生效——headless/RPC 的 `/topo <请求>` 会跳过它，直接按档位标准形态确认。
 
+**派发异常与恢复（来自 2026-10-24 沙箱轮）**：
+
+- **settle 超时**：派发可能报 `timeout waiting for member to settle`——成员被 fail-fast 杀死，但其工作通常在服务端继续（或下次派发时带上下文恢复）。恢复：查 `team_status` 后重派（发一条"收尾并报告"的短消息即可），成果不丢。
+- **failed 板任务可重派**：成员中途被杀的任务保持 `failed`；对其 `team_task start` 会重派且成员带上下文恢复——无需重建 `blockedBy` 链（此前轮次正是被此死锁逼出"建等价任务"的变通）。
+- **`topo_team_msg` 的成员自报不可靠**：成员对实际已投递的消息既报过"投递成功"也报过"工具不可用"。信任任何一侧之前，先在 `sandbox/agent/teams/<teamId>/sessions/*.jsonl` 里核实是否存在该工具调用。
+- **板 id 以 `create` 的返回为准**，不按你方案里的编号——`blockedBy` 未知 id 会被拒绝并列出 offending id。
+- **预设随包发布**（`agents/<role>.md`：scout/planner/worker/reviewer），沙箱内同样可用——传 `role:` 即可继承预设的只读工具与 effort，无需手搓 systemPrompt；显式传入但无匹配预设时，create 结果会给出提示。
+
 ### 第 3 步 — 收尾
 
 1. `汇报一下团队当前状态`，完工后解散团队。

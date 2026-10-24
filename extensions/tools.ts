@@ -114,7 +114,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			const manager = getManager(ctx);
 			assertActive();
 			const leaderModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
-			const { member, created } = await manager.createMember(
+			const { member, created, note } = await manager.createMember(
 				{
 					name: params.name,
 					role: params.role,
@@ -130,6 +130,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 				`Model: ${member.model ?? "leader default"}; effort: ${member.effort ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
 				`Status: ${member.status}. Use team_send to give it work.`,
 			];
+			if (note) lines.push(note);
 			if (!created) {
 				// Resume is idempotent: the existing record wins, so say which
 				// passed params were dropped instead of implying a reconfiguration.
@@ -245,7 +246,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		description: [
 			"Manage the team task board.",
 			"create: add a task (optionally with blockedBy dependencies and an assignee).",
-			"start: dispatch a ready task to its assignee (or the given one) and wait for completion.",
+			"start: dispatch a ready task — or re-dispatch a failed one (its member resumes with context) — to its assignee (or the given one) and wait for completion.",
 			"complete / fail: set a task's terminal status manually (result / reason recorded).",
 			"list: show the board.",
 			"A task is ready when every task in blockedBy is done; cycles are rejected.",

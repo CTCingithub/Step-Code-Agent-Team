@@ -28,8 +28,8 @@ import {
 	saveRegistry,
 	teamDir,
 } from "./registry.ts";
-import { type AgentPreset, extensionEntryPath, loadPreset, memberMessagingEntryPath } from "./presets.ts";
-import { nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
+import { type AgentPreset, extensionEntryPath, loadPreset, loadPresets, memberMessagingEntryPath } from "./presets.ts";
+import { assertDispatchable, nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
 import {
 	DEFAULT_EFFORT,
 	type PluginConfig,
@@ -322,7 +322,10 @@ export class TeamManager {
 		return reaped;
 	}
 
-	async createMember(params: CreateMemberParams, leaderModel?: string): Promise<{ member: MemberRecord; created: boolean }> {
+	async createMember(
+		params: CreateMemberParams,
+		leaderModel?: string,
+	): Promise<{ member: MemberRecord; created: boolean; note?: string }> {
 		const name = params.name.trim();
 		if (!MEMBER_NAME_RE.test(name)) {
 			throw new Error(
@@ -349,7 +352,7 @@ export class TeamManager {
 		name: string,
 		params: CreateMemberParams,
 		leaderModel?: string,
-	): Promise<{ member: MemberRecord; created: boolean }> {
+	): Promise<{ member: MemberRecord; created: boolean; note?: string }> {
 		const existing = this.findMember(name);
 		if (existing) {
 			// Idempotent: ensure it is alive, but never duplicate.
@@ -372,6 +375,17 @@ export class TeamManager {
 		const role = params.role?.trim() || config.members.defaultRole;
 		const preset = loadPreset(role, this.cwd, this.projectTrusted);
 		const systemPrompt = params.systemPrompt?.trim() || preset?.systemPrompt;
+		// An explicitly requested role that matches no preset used to fall back
+		// silently — the member quietly ran without the preset's prompt, tools,
+		// or effort (the 2026-10-24 sandbox round lost its read-only reviewer
+		// guardrails that way). Surface it in the create result instead.
+		const presetNote =
+			params.role?.trim() && !preset
+				? `role "${role}" matched no preset — using explicit params/defaults. Presets ship with the package (agents/<role>.md) and can be shadowed by <agentDir>/agents/ and a trusted project's .stepcode/agents/. Available: ${loadPresets(this.cwd, this.projectTrusted)
+						.map((p) => p.name)
+						.sort()
+						.join(", ") || "none"}.`
+				: undefined;
 
 		const record: MemberRecord = {
 			name,
@@ -398,7 +412,7 @@ export class TeamManager {
 		this.save();
 
 		await this.ensureLive(record);
-		return { member: { ...record }, created: true };
+		return { member: { ...record }, created: true, note: presetNote };
 	}
 
 	/**
@@ -735,10 +749,7 @@ export class TeamManager {
 	): Promise<{ task: TaskRecord; text: string }> {
 		this.assertTopologyDeclared();
 		const task = this.findTask(id);
-		if (task.status !== "ready") {
-			const blockers = task.blockedBy.join(", ") || "none";
-			throw new Error(`Task "${id}" is "${task.status}", not "ready" (blocked by: ${blockers}).`);
-		}
+		assertDispatchable(task);
 		const target = assignee?.trim() || task.assignee;
 		if (!target) throw new Error(`Task "${id}" has no assignee. Pass assignee or set it when creating the task.`);
 		if (!this.findMember(target)) {
@@ -757,10 +768,7 @@ export class TeamManager {
 		options: SendOptions,
 	): Promise<{ task: TaskRecord; text: string }> {
 		const task = this.findTask(id);
-		if (task.status !== "ready") {
-			const blockers = task.blockedBy.join(", ") || "none";
-			throw new Error(`Task "${id}" is "${task.status}", not "ready" (blocked by: ${blockers}).`);
-		}
+		assertDispatchable(task);
 		task.assignee = target;
 		task.status = "running";
 		this.save();

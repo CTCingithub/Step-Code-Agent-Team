@@ -8,7 +8,7 @@
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { costWarning, truncateOutput } from "../../extensions/tools.ts";
 import { formatTeammateReply } from "../../extensions/member-messaging.ts";
-import { dispatchPrompt, nextTaskId, taskPrompt } from "../../extensions/tasks.ts";
+import { assertDispatchable, dispatchPrompt, nextTaskId, taskPrompt } from "../../extensions/tasks.ts";
 import { defaultConfig } from "../../extensions/config.ts";
 import type { TaskRecord } from "../../extensions/registry.ts";
 
@@ -102,6 +102,28 @@ export default function (pi: ExtensionAPI) {
 			check("dispatch: no detail → criteria only", dispatchPrompt(boardTask) === taskPrompt(boardTask), "");
 			check("dispatch: whitespace detail ignored", dispatchPrompt(boardTask, "   ") === taskPrompt(boardTask), "");
 			check("dispatch: halves joined by a blank line", dispatchPrompt(boardTask, "extra").includes("\n\n"), "");
+
+			// ---- assertDispatchable (a failed task stays re-dispatchable) ----
+			// A member killed mid-run used to leave its task failed forever,
+			// deading every task blocked on it (the 2026-10-24 sandbox round hit
+			// exactly this and had to rebuild the chain). Re-dispatching resumes
+			// the member with its context, so "failed" is dispatchable.
+			const gateTask = (status: string, blockedBy: string[] = []) =>
+				({ id: "T1", title: "t", status, blockedBy, assignee: null }) as unknown as TaskRecord;
+			const gateError = (status: string): string => {
+				try {
+					assertDispatchable(gateTask(status, ["T0"]));
+					return "";
+				} catch (err) {
+					return err instanceof Error ? err.message : String(err);
+				}
+			};
+			check("dispatch gate: ready passes", gateError("ready") === "", gateError("ready"));
+			check("dispatch gate: failed is re-dispatchable", gateError("failed") === "", gateError("failed"));
+			for (const s of ["pending", "running", "done"]) {
+				const msg = gateError(s);
+				check(`dispatch gate: ${s} rejected with its blockers`, msg.includes(`"${s}"`) && msg.includes("T0"), msg.slice(0, 120));
+			}
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE16 DONE (all passed)" : `SMOKE16 DONE (${failed}/${results.length} failed)`);

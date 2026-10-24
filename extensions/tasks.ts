@@ -93,3 +93,15 @@ export function dispatchPrompt(task: TaskRecord, startDetail?: string): string {
 	const extra = startDetail?.trim();
 	return [taskPrompt(task), extra].filter(Boolean).join("\n\n");
 }
+
+/**
+ * Guards a dispatch: only a ready task — or a failed one being re-started —
+ * may be dispatched. A failed task stays re-dispatchable so a member killed
+ * mid-run (a settle timeout) can be resumed instead of every task blocked on
+ * it deading forever; pending / running / done are never dispatchable.
+ */
+export function assertDispatchable(task: TaskRecord): void {
+	if (task.status === "ready" || task.status === "failed") return;
+	const blockers = task.blockedBy.join(", ") || "none";
+	throw new Error(`Task "${task.id}" is "${task.status}", not "ready" (blocked by: ${blockers}).`);
+}

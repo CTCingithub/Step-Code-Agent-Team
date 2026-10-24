@@ -430,8 +430,10 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.notify(lines.join("\n"), "info");
 		if (!isInteractive(ctx)) return true;
 		try {
-			const acceptLabel = lang === "zh" ? "Accept · 按此方案组建" : "Accept · form this team";
-			const cancelLabel = lang === "zh" ? "取消" : "Cancel";
+			// Exactly two options, no extra text (the suffixes read as noise next to
+			// the plan already shown by the notify above).
+			const acceptLabel = "Accept";
+			const cancelLabel = "Cancel";
 			// The host's select countdown is a TUI-only component that ignores
 			// keypresses — it runs to expiry and can dismiss the dialog while the
 			// user is still reading the plan, and the plugin cannot hook the
