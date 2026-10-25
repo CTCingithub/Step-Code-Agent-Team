@@ -157,6 +157,18 @@ export function isRetryableSpawnError(err: unknown): boolean {
 	return /\baborted before start\b|\bhandshake\b|\bspawn\b|\bfailed to start\b/i.test(msg);
 }
 
+/**
+ * Settle-timeout failures: the leader's wait for the member to settle expired.
+ * Unlike spawn/handshake errors they say nothing about whether the work
+ * started — the member may have finished (its usage is persisted server-side
+ * either way) — so they are retried only when the usage delta proves nothing
+ * ran (see dispatchWithSettleGuard).
+ */
+export function isSettleTimeoutError(err: unknown): boolean {
+	const msg = err instanceof Error ? err.message : String(err);
+	return /timeout waiting for member to settle/i.test(msg);
+}
+
 /** Depth of this process in the team tree (the leader session is 0). */
 export function currentDepth(): number {
 	const raw = process.env.STEPCODE_TEAM_DEPTH;
@@ -668,12 +680,34 @@ export class TeamManager {
 		const prev = this.queues.get(name) ?? Promise.resolve();
 		const run = prev
 			.catch(() => {})
-			.then(() => this.dispatch(member, message, options))
+			.then(() => this.dispatchWithSettleGuard(member, message, options))
 			.finally(() => {
 				if (this.queues.get(name) === run) this.queues.delete(name);
 			});
 		this.queues.set(name, run);
 		return run;
+	}
+
+	/**
+	 * Bounded safety net for settle jitter — covers team_send and team_task
+	 * start alike. A settle timeout is retried once, but only when the
+	 * member's usage proves the failed attempt did nothing: turns are
+	 * persisted server-side even when the leader never sees the reply, so a
+	 * zero delta means re-sending cannot duplicate work or billing. A settle
+	 * timeout after real work is never retried — the member's resumed context
+	 * holds the result, and re-sending would duplicate it (the duplicate-
+	 * billing trap startTaskLocked's retry loop warns about).
+	 */
+	private async dispatchWithSettleGuard(member: MemberRecord, message: string, options: SendOptions): Promise<SendResult> {
+		const before = member.usage.turns;
+		try {
+			return await this.dispatch(member, message, options);
+		} catch (err) {
+			if (options.signal?.aborted || !isSettleTimeoutError(err)) throw err;
+			const after = this.findMember(member.name)?.usage.turns ?? before;
+			if (after > before) throw err;
+			return await this.dispatch(member, message, options);
+		}
 	}
 
 	private async dispatch(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {

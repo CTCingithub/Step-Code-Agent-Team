@@ -98,6 +98,21 @@ export default function (pi: ExtensionAPI) {
 				check(`schema: ${toolName} params all described`, blank.length === 0, blank.join(","));
 			}
 
+			// e2. topology scoping contract at the tool layer (P2-8a): the model must
+			// see the members/edges parameters that scope a shape to a subset —
+			// the manager-layer semantics are covered by phase7.
+			const topoProps = propsOf("team_set_topology");
+			check(
+				"schema: team_set_topology exposes shape/edges/members",
+				["shape", "edges", "members"].every((p) => p in topoProps),
+				Object.keys(topoProps).join(","),
+			);
+			check(
+				"schema: team_set_topology params all described",
+				["shape", "edges", "members"].every((p) => Boolean(topoProps[p]?.description?.trim())),
+				JSON.stringify(topoProps).slice(0, 120),
+			);
+
 			// f. the parameters root is a JSON object schema.
 			check("schema: team_task.parameters.type === \"object\"", (tool("team_task")?.parameters as Schema | undefined)?.type === "object", "");
 

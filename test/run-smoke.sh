@@ -43,7 +43,7 @@ fi
 # which makes step stage the repo package into the agent dir and load a second
 # copy of index.ts: a fatal tool-name conflict. These probes don't need the
 # team extension, so don't load it.
-STANDALONE_PHASES="15 16 23"
+STANDALONE_PHASES="15 16 23 24"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
 KEY_PHASES="5"
