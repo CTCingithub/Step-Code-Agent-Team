@@ -680,6 +680,25 @@
 
 **遗留（最终盘点，无其他代码/文档待改项）**：① **P2-8b/8e/9** 三项测试加固（分别需 live 成员空回复回合 / 需 key / 原审计细节不可恢复）；② **有真实工作后 settle 超时的自动 harvest**（A4 只自动化了零用量场景，手动恢复有效）；③ **宿主 select 倒计时不响应按键**（上游缺口，插件已规避）；④ **演示项目 M1-M4/m9/m10**（决议不做——restore 每轮复位、保留修复会摧毁种子 bug 演示前提）；⑤ **storage.dir 行为半**（改按 agentDir 解析，需决策+探针）。**剩余全部为用户手动测试项**（场景 5 三选项确认框+自定义输入首验、场景 7/8/9、M1、M2、建议 M5）与 develop→main 合并拍板。
 
+### 64. 沙箱实测日志驱动轮：拓扑渲染、免重发回执、方案拓扑自洽（plan-102）
+
+**用户 prompt**：「我已经完成了沙箱测试，请阅读分析 @sandbox/logs/session-log-2026-10-25.md ，然后进行修改优化」（团队激活态）。
+
+**思路**：用户按 MANUAL-TESTING runbook 完成一轮完整沙箱测试（16 条 prompt：§1 TUI 走查 + §4 ring 巡回 + §5 三幕演示 + 两轮并行审查；异常均原文引用，日志质量高）。按组队判据组 2 人只读小队分头取证——**派发机制连续 3 次 settle 超时失败**（成员零用量被 fail-fast 杀死，与用户日志记录的基础设施现象同源），按既定模式队长接管执行。日志证据已 archive-round.sh 归档至 `sandbox/archive/20261025-194159-20261025-manual-round/`。
+
+**取证与修复**（5 项，均有日志原文佐证）：
+- **B 拓扑表残留已解散成员**（阶段 10：解散 r1–r3 后重声明 pipeline，输出仍列 r1/r2/r3 "→ (no direct peers)"）：根因 `describeTopology` 渲染**全部**注册表成员，而 disband 只 prune 边、保留 dead 记录供 session 恢复。修复：只渲染**参与边的成员**（topology.ts），无匹配时回退边列表直述。
+- **C 首发送被误判"无回执"而重发**（阶段 9 异常 1：r1 自述"工具返回 No result provided，已重发"）：取证确认唯一返回路径已有占位符守卫（`formatTeammateReply` 把空轮次转为明确送达回执）——**非缺陷**，成员看到的是回执、其自述为转述；但回执未说清"勿重发"，成员重发导致队友重复工作。修复：回执补 "Delivery is asserted, so do not resend"。
+- **D 档位方案与拓扑矛盾**（阶段 12 异常 4：R1–R4 方案承诺 R4「直接收集」，star 下无成员间消息，队长被迫人工中转三份报告）：根因是规划调用指令未要求方案与拓扑自洽。修复：`teamPlanPrompt` 双语加第 4 条约束——star 下成员间没有任何直连消息，汇总/协调角色只能经队长中转收集。
+- **E "leader 非消息目标"的成员侧困惑**（阶段 9：r3 声称「逐条完整终稿由 r3 直接交回队长」，该通道不存在）：成员侧协议（members.ts:524-526）早已成文，缺口在**队长侧激活协议**未要求接力链任务书写明终稿回传路径。修复：`teamActivationInstruction` 第 2 条补 relay 规则（终稿沿调用链回传、leader 不是消息目标）。
+- **A 预设 effort 与文档不符**（阶段 1 备注：README 称 scout=low、实际返回 high）：取证确认为**设计行为**——`models.autonomousEffort=true` 时预设 effort 一律失效（resolveEffort）；ROLES/CONFIGURATION 已成文，缺口仅在 README 顶部消耗警告 Callout。修复：双语补注。
+- **F 同名重建提示**（阶段 12：「同名重建会恢复旧 session 并忽略新参数」）：`resumeIgnoredParams` 已上报冲突参数，但无冲突时不告知"已恢复"。修复：create 结果无条件说明恢复事实。
+
+**测试**：phase14 新增 describeTopology 3 断言（只渲染边参与者 / star 无成员行 / ring 列全参与者）、phase16 补免重发断言、phase21 补激活协议 relay 规则 + 规划提示词拓扑自洽 4 断言；三 phase 单跑全过，tsc 零错误，全量冒烟门 exit 0（20 phase + manifest + 7 live + orphan-check）。
+
+**遗留**：演示项目两轮并行审查的 18/20 条 findings 与演示 README 陈旧（load() fail-loud 描述过期）按既定决议只记录不修（restore 每轮复位、保留修复会摧毁种子 bug 演示前提）；用户轮次遗留的 4 个 idle 成员由用户下轮收尾时解散；**自定义输入路径仍未人工实测**（本轮三档均走 Accept 确认）。
+
+
 
 
 
