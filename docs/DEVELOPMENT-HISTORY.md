@@ -656,6 +656,19 @@
 
 **遗留**：见 HANDOFF §4/§5——A3/A4 待用户设计决策、B2/B3 排期、3 项低优先文档建议；其余全部为用户手动测试项（场景 5/7/8/9、M1、M2）与 develop→main 合并拍板。
 
+### 62. 性能档竞速轮：自由输入落地、settle 守卫重试与确认路径端到端覆盖（plan-100）
+
+**用户 prompt**：确认性能档实际方案（顾竞/林拓/沈锐/苏衡/白验 五成员，custom 星型+mesh，T1–T7）后「请创建合理的计划后做：1.输入文本的需求是用户写的，我不确定，直接发送给模型；2.事项2到5都要修改优化；3.调整相关文档与测试内容」。
+
+**思路**：按批准的五成员七任务流水线执行。**派发机制本轮持续故障**（T2–T4 连续 6 次 settle 超时，空闲成员重派亦失败——与负载无关的机制性退化），按既定模式队长接管执行；甲乙竞速由队长双案自评定夺。
+
+**工作**：① **T1（顾竞，第 3 次派发成功）**：A3 语义定案——确认框三选项（Accept / 自定义输入… / Cancel）；**用户输入文本原样直达模型**（trim 后以 `\n\n` 并入 effectiveRequest，经 sendUserMessage 发出，不作解释不结构化）；空提交=按原样接受、Esc/超时=取消、headless 隐式同意无 note、RPC 保留 30s 且 input 复用无倒计时 opts；activeChoice 条件改 `!effectiveRequest`。提交 de4854e。② **T2/T3（事项2-3，队长接管，双案自评）**：**A4 采用甲案（usage 守卫重试）**——settle 超时后仅当成员 usage.turns 增量为 0（usage 服务端持久化，证明该次尝试什么都没做）才重发一次，经 `dispatchWithSettleGuard` 覆盖 team_send 与 team_task start；有真实工作的超时不重试（保留既有排除语义与 harvest 指引，防重复计费）。乙案（harvest 提示重试）评估后弃置（改变结果语义、边界更多）。**B2 采用新 phase24 端到端探针**（standalone）：假 pi 捕获 registerCommand/sendUserMessage/context 钩子 + 脚本化 ctx（select/input 队列），驱动完整确认链；plan.enabled 经 resetConfigCache 钩子切换并还原（注意全局 config.toml 位于 agentDir 旁边——首版写错位置致静默失败，复跑修正）。③ **T4（事项4-5，队长接管）**：P2-8c（phase16 配置→消费方联动：nextTaskId 满板报错文案与 truncateOutput 默认 cap 均取自 `[tasks]`）、P2-8a（phase23 team_set_topology 工具层 schema 契约）；**P2-8b/8e/9 留档**（分别需 live 成员空回复回合/需 key/原审计细节不可恢复）。3 项低优先文档建议全部落地（sandbox/README 测试小节、TESTING Layer C 通过标准补 cfg-deadlock 60s 与 phase11 须实跑 4/4、TEST-PLAN R 行记录规约）。④ **文档调整**：MANUAL-TESTING(_CN) 三选项与自定义输入语义+场景 5 改 `/topo <请求>`+settle 自动重试注记；README(_CN) 方案段；TEST-PLAN(_CN) K2/M3 行。
+
+**验证**：tsc 零错误；phase16/23/24 单跑全过（phase24 六断言：Accept 原样转发+方案注入 / 自定义输入 note 原样合并 / 空输入按原样接受 / Cancel 仅激活注入）；全量冒烟门 exit 0（**20 phase** + manifest + 7 live + orphan-check）。
+
+**遗留**：P2-8b/8e/9（原因见上）；竞速机制因派发故障未实际发生（队长双案自评代替）；A3 三选项与 A4 重试的真实 TUI 目验并入 M3 手动项。
+
+
 
 
 
