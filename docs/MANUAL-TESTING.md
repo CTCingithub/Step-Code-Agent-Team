@@ -68,6 +68,8 @@ npm run smoke   # 19 phases + manifest + 7 live checks (+ orphan-check); stop an
 
 ### Step 2 — interactive scenarios (in order, one prompt at a time)
 
+**Two activation paths — one per prompt, never both**: the **`/topo` command** (the request rides as its argument) or a **keyword prompt** (natural language containing a plugin keyword). The §5 demo acts use the command path; §1 step 1 and scenarios 7/8/9 exercise the keyword path. Writing `/topo` and keyword phrasing into the same prompt tests neither path cleanly.
+
 | # | Scenario | Do | Detail | Watch out for |
 |---|---|---|---|---|
 | 1 | Activation + team board | §1 steps 1–2 | §1 | — |
@@ -291,7 +293,7 @@ per protocol (details in §4 and the third act below).
 ### Act 1 · pipeline fix chain (copy-paste)
 
 ```text
-/topo Use the topo team to fix the failing tests in this project: first dispatch scout to locate the failing test and root cause, then dispatch planner to give a minimal fix plan, then dispatch worker to fix it per the plan and get npm test passing, and finally dispatch reviewer to review the changes. Before fixing, first confirm the npm test baseline.
+/topo Fix the failing tests in this project: first dispatch scout to locate the failing test and root cause, then dispatch planner to give a minimal fix plan, then dispatch worker to fix it per the plan and get npm test passing, and finally dispatch reviewer to review the changes. Before fixing, first confirm the npm test baseline.
 ```
 
 **Expected**: the task board T1→T4 flows per `blockedBy`; after the worker's fix `npm
@@ -310,7 +312,7 @@ pass, that is correct behavior, not a bug.
 ### Act 2 · star parallel review (copy-paste)
 
 ```text
-/topo Use the topo team to review this project in parallel: dispatch three reviewers to review src/ and test/ from the correctness, style, and security angles respectively, and consolidate the three parties' findings into one list.
+/topo Review this project in parallel: dispatch three reviewers to review src/ and test/ from the correctness, style, and security angles respectively, and consolidate the three parties' findings into one list.
 ```
 
 **Expected**: the three members work in parallel (concurrency is visible in
@@ -321,7 +323,7 @@ against the demo code is recorded in `docs/TEST-PLAN.md` section 8).
 ### Act 3 · ring round-robin review (copy-paste, ✅ 2026-10-19 measured)
 
 ```text
-/topo Use the topo team for a round-robin review: create three reviewer members, declare a ring topology, let the review comments pass along the ring, each member adding what the previous one missed, and mind the ring's chain-length cap.
+/topo Run a round-robin review: create three reviewer members, declare a ring topology, let the review comments pass along the ring, each member adding what the previous one missed, and mind the ring's chain-length cap.
 ```
 
 **Measured (2026-10-19)**: the leader, following the tool description, proactively
