@@ -26,7 +26,8 @@
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`：12 条测试，种子 bug 在位时 11 条通过） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
-| `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效） |
+| `probe-remaining-manual.mjs` | 原人工场景的 RPC 驱动 live 探针（需 key）：`node sandbox/probe-remaining-manual.mjs <5a\|5b\|7\|8\|9>`——应答宿主对话框（select/input/confirm）驱动方案确认、L1 护栏、自定义角色与迁移提示；每条子命令用隔离临时 agentDir，须由队长自身进程运行 |
+| `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效）。活跃：`cfg-conc`（phase10 A 支）、`cfg-deadlock`（phase10 B 支）、`cfg-deep2`（phase11）；其余为遗留、无 live 消费方（phase9 自建 mktemp fixture）。本地 `sandbox/config.toml` 会遮蔽它们——探针须隔离 agentDir（见 docs/TESTING.md C 层） |
 | `TEST-KEY.md` | 测试 API 密钥（gitignored——首行写 `STEP_API_KEY=<key>`；由 run-smoke.sh 与 with-test-key.sh 读取） |
 | `with-test-key.sh` | 以 TEST-KEY.md 中的密钥 export 后运行给定命令（用于 C 层 LLM 探针） |
 | `step/` | Step Code 源码 submodule（钉住本沙箱跟踪的版本） |
@@ -92,6 +93,15 @@ git submodule，钉住本沙箱跟踪的 Step Code 版本——step 升级时只
 npm run smoke            # 零 token 全量冒烟（无需 key）
 bash test/run-smoke.sh 5 # phase5 需 key（来自环境变量或 sandbox/TEST-KEY.md）
 ```
+
+**门禁内容**：20 个 phase——清单由 `test/smoke/phase*.ts` 磁盘派生；phase 15/16/23/24
+独立运行（不加载扩展，避免与已安装包副本的工具名冲突）；phase5 需 key；phase 之后：
+manifest 检查、7 个 live 检查（**必须由队长自身的干净进程跑**——在成员进程受限环境中会
+整体假阴性）、15s 孤儿进程轮询。失败 phase 以新 session id 重试一次（首发失败行前缀
+`attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；`OPT_OUT_PHASES` 可跳过指定 phase。
+完整参考：[../docs/TESTING.md](../docs/TESTING_CN.md)。任何还原前先跑
+`bash sandbox/archive-round.sh <标签>`——它保留 `restore-project.sh` 不碰的
+session JSONL 与团队注册表。
 
 LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_CN.md)；
 配置方式见 [../docs/CONFIGURATION.md](../docs/CONFIGURATION_CN.md)

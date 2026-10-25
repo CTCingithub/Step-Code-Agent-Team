@@ -29,6 +29,7 @@ import {
 	PLAN_TIER_MODES,
 	tierLabel,
 	tierPickerOptions,
+	planConfirmDialogOpts,
 } from "../../extensions/plan.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -50,6 +51,19 @@ export default function (pi: ExtensionAPI) {
 			check("instruction: zh mentions the team tools", zh.includes("智能体团队已启用") && zh.includes("team_create_member"));
 			const en = teamActivationInstruction("en");
 			check("instruction: en mentions the team tools", en.includes("[Agent team active]") && en.includes("team_create_member"));
+			// 2b. relay chains: the task book must state the report return path —
+			// a 2026-10-25 round had a member promise a "direct report to the
+			// leader" that no channel could deliver (the leader is not a target).
+			check(
+				"instruction: zh relay rule (final report along the reply chain)",
+				zh.includes("终稿沿调用链回传") && zh.includes("leader 不是消息目标"),
+				"",
+			);
+			check(
+				"instruction: en relay rule (final report along the reply chain)",
+				en.includes("final report returns along the reply chain") && en.includes("never a message target"),
+				"",
+			);
 
 			// 3. a tier instruction is a strategy prompt, not a fixed roster
 			const balanced = getTier("balanced");
@@ -132,6 +146,21 @@ export default function (pi: ExtensionAPI) {
 					planPromptZh.user.includes("通信拓扑") &&
 					planPromptZh.user.includes("任务拆解"),
 			);
+			// 6d. the plan must be consistent with its declared topology: under
+			// star no member-to-member messaging exists, so a consolidator can
+			// only collect through the leader (observed 2026-10-25: an R1–R4
+			// plan promised direct fan-out/collection under a star topology).
+			check(
+				"plan prompt: zh topology-consistency constraint",
+				planPromptZh.user.includes("star 下成员间没有任何直连消息") && planPromptZh.user.includes("只能经队长中转收集"),
+				"",
+			);
+			check(
+				"plan prompt: en topology-consistency constraint",
+				planPromptEn.user.includes("under star there is no member-to-member messaging") &&
+					planPromptEn.user.includes("only collect through the leader"),
+				"",
+			);
 			check(
 				"plan prompt: en carries the request + strategy + asks",
 				planPromptEn.user.includes("fix the complete() bug") &&
@@ -183,6 +212,11 @@ export default function (pi: ExtensionAPI) {
 					reviewEn.includes("the target named in the user's request") &&
 					!reviewEn.includes("×"),
 			);
+
+			// ---- planConfirmDialogOpts (no countdown in the TUI) ----
+			check("confirm opts: tui → no timeout (no countdown)", planConfirmDialogOpts("tui", 30_000) === undefined, "");
+			const rpcConfirmOpts = planConfirmDialogOpts("rpc", 30_000);
+			check("confirm opts: rpc keeps the no-answer guard", rpcConfirmOpts?.timeout === 30_000, JSON.stringify(rpcConfirmOpts));
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE21 DONE (all passed)" : `SMOKE21 DONE (${failed}/${results.length} failed)`);

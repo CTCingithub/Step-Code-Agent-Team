@@ -28,7 +28,7 @@
  */
 
 import * as fs from "node:fs";
-import type { ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
+import type { ContextEvent, ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
 import { currentDepth, TeamManager, teamIdForSession } from "./members.ts";
 import { registryPath } from "./registry.ts";
 import { registerTeamTools } from "./tools.ts";
@@ -52,7 +52,6 @@ import {
 	teamPlanPrompt,
 	teamReviewInstruction,
 	tierInstruction,
-	type Lang,
 } from "./forward.ts";
 import {
 	allTiers,
@@ -63,7 +62,9 @@ import {
 	tierLabel,
 	tierPickerOptions,
 	tierPlanLines,
+	planConfirmDialogOpts,
 	type CustomPicks,
+	type Lang,
 	type TeamTier,
 } from "./plan.ts";
 import { VALID_EFFORT } from "./config.ts";
@@ -324,6 +325,37 @@ export default function (pi: ExtensionAPI) {
 		}
 	};
 
+	/** Braille spinner frames for the plan-generation progress widget. */
+	const PLAN_PROGRESS_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+	/**
+	 * Progress indicator for the one-off plan generation: a spinner widget
+	 * above/below the editor via ctx.ui.setWidget with plain strings
+	 * (importing pi-tui here would stage a second copy of the extension and
+	 * clash on tool names — see the STANDALONE_PHASES note in run-smoke.sh).
+	 * Falls back to a plain notify when the host exposes no widget slot.
+	 * Always call the returned stop function — it clears the widget.
+	 */
+	const startPlanProgress = (ctx: ExtensionContext, message: string): (() => void) => {
+		// The widget slot is terminal-only UI (see ExtensionContext.mode's doc):
+		// rpc/json/print modes get one plain notify instead of widget traffic.
+		if (ctx.mode !== "tui" || typeof ctx.ui.setWidget !== "function") {
+			ctx.ui.notify(message, "info");
+			return () => {};
+		}
+		let frame = 0;
+		const draw = () => {
+			ctx.ui.setWidget("team-plan-progress", [`${PLAN_PROGRESS_FRAMES[frame % PLAN_PROGRESS_FRAMES.length]} ${message}`]);
+			frame += 1;
+		};
+		draw();
+		const timer = setInterval(draw, 120);
+		return () => {
+			clearInterval(timer);
+			ctx.ui.setWidget("team-plan-progress", undefined);
+		};
+	};
+
 	/**
 	 * One-off planning call: the model drafts the ACTUAL team plan for this
 	 * request — what the user is about to approve in the confirmation. Plan
@@ -365,7 +397,7 @@ export default function (pi: ExtensionAPI) {
 		choice: PlanChoice,
 		lang: Lang,
 		planText?: string | null,
-	): Promise<boolean> => {
+	): Promise<{ confirmed: boolean; note?: string }> => {
 		const lines =
 			choice.kind === "tier"
 				? [
@@ -396,13 +428,44 @@ export default function (pi: ExtensionAPI) {
 							: "Actual members, roles, topology, and effort are decided by the model from the task.",
 					].filter(Boolean);
 		ctx.ui.notify(lines.join("\n"), "info");
-		if (!isInteractive(ctx)) return true;
+		if (!isInteractive(ctx)) return { confirmed: true };
 		try {
-			return await ctx.ui.confirm("智能体团队", lang === "zh" ? "按此方案组建团队？" : "Form the team with this plan?", {
-				timeout: INTERACTIVE_TIMEOUT_MS,
-			});
+			// Three options, no extra text (the suffixes read as noise next to the
+			// plan already shown by the notify above): accept the plan as shown,
+			// type free-form text that rides along with the request verbatim, or
+			// cancel.
+			const acceptLabel = "Accept";
+			const customLabel = lang === "zh" ? "自定义输入…" : "Custom input…";
+			const cancelLabel = "Cancel";
+			// The host's select countdown is a TUI-only component that ignores
+			// keypresses — it runs to expiry and can dismiss the dialog while the
+			// user is still reading the plan, and the plugin cannot hook the
+			// dialog's keys. In the TUI we therefore pass no timeout at all: no
+			// countdown is shown and the dialog waits for the decision (Esc
+			// still cancels). RPC keeps the deadline as a no-answer guard. The
+			// same rule applies to the free-text input (typing takes time).
+			const dialogOpts = planConfirmDialogOpts(ctx.mode, INTERACTIVE_TIMEOUT_MS);
+			const picked = await ctx.ui.select(
+				"智能体团队",
+				[acceptLabel, customLabel, cancelLabel],
+				dialogOpts,
+			);
+			if (picked === customLabel) {
+				// The user's own words, sent as-is: no interpretation, no
+				// restructuring — the note joins the forwarded request verbatim.
+				const note = await ctx.ui.input(
+					lang === "zh" ? "输入你的需求" : "Type your request",
+					lang === "zh" ? "原样发送给模型，不作解释或结构化" : "Sent to the model verbatim — not interpreted or restructured",
+					dialogOpts,
+				);
+				// Dismissed (Esc/timeout) cancels the whole confirmation; an empty
+				// submission accepts the plan as shown with nothing to add.
+				if (note === undefined) return { confirmed: false };
+				return { confirmed: true, note: note.trim() || undefined };
+			}
+			return { confirmed: picked === acceptLabel };
 		} catch {
-			return false;
+			return { confirmed: false };
 		}
 	};
 
@@ -445,6 +508,13 @@ export default function (pi: ExtensionAPI) {
 
 		let choice: PlanChoice | null = null;
 		let extraRequest = "";
+		// A tier that comes from the pinned plan.tier (not from an explicit
+		// argument or the picker) is a standing "stop asking" preference: the
+		// keyword path applies it with no dialogs at all, so the command path
+		// must not draft a plan and ask for confirmation either (observed
+		// 2026-10-25: a pinned fast tier still popped the three-option box on
+		// /topo while the keyword path went straight to the tier).
+		let pinnedTier = false;
 		if (reviewArg) {
 			choice = { kind: "review", focus: request };
 		} else if (tierArg) {
@@ -453,10 +523,11 @@ export default function (pi: ExtensionAPI) {
 			({ choice, request: extraRequest } = await resolveCustomChoice(ctx, request.length > 0, lang));
 		} else if (planEnabled && standingTier !== "always ask") {
 			choice = { kind: "tier", tier: getTier(standingTier) };
+			pinnedTier = true;
 		} else if (planEnabled) {
 			({ choice, request: extraRequest } = await pickChoice(ctx, request.length > 0, lang));
 		}
-		const effectiveRequest = request || extraRequest;
+		let effectiveRequest = request || extraRequest;
 		let approvedPlan: string | null = null;
 		if (choice) {
 			// The review protocol is deterministic — no summary confirm needed.
@@ -464,15 +535,28 @@ export default function (pi: ExtensionAPI) {
 			// (one-off, plan only) so the confirmation shows what will really be
 			// built — not the tier's preset shape.
 			let planText: string | null = null;
-			if (choice.kind === "tier" && effectiveRequest && isInteractive(ctx)) {
-				ctx.ui.notify(lang === "zh" ? "正在生成本次请求的实际团队方案…" : "Generating the actual team plan for this request…", "info");
-				planText = await generateTeamPlan(ctx, choice.tier, effectiveRequest, lang);
+			if (choice.kind === "tier" && !pinnedTier && effectiveRequest && isInteractive(ctx)) {
+				const stopPlanProgress = startPlanProgress(
+					ctx,
+					lang === "zh" ? "正在生成智能体拓扑协作方案" : "Generating the agent topology collaboration plan",
+				);
+				try {
+					planText = await generateTeamPlan(ctx, choice.tier, effectiveRequest, lang);
+				} finally {
+					stopPlanProgress();
+				}
 			}
-			const confirmed = choice.kind === "review" ? true : await confirmChoice(ctx, choice, lang, planText);
-			if (!confirmed) choice = null;
+			// The review protocol is deterministic — no dialog, no free-text note.
+			const decision: { confirmed: boolean; note?: string } =
+				choice.kind === "review" || pinnedTier ? { confirmed: true } : await confirmChoice(ctx, choice, lang, planText);
+			if (!decision.confirmed) choice = null;
 			else {
 				approvedPlan = planText;
-				if (!request && !extraRequest) activeChoice = choice; // applies to the next message
+				// A free-text note from the confirmation dialog is the user's own
+				// request: it rides along with the forwarded text verbatim.
+				const note = decision.note?.trim() ?? "";
+				if (note) effectiveRequest = effectiveRequest ? `${effectiveRequest}\n\n${note}` : note;
+				if (!effectiveRequest) activeChoice = choice; // applies to the next message
 			}
 		}
 
@@ -562,37 +646,40 @@ export default function (pi: ExtensionAPI) {
 	// team" instruction into the same turn's context only. emitContext works on
 	// a structuredClone of the messages, so nothing is written back to the
 	// session file — subsequent turns see the user's original text alone.
-	pi.on("context", (event) => {
+	// The pinned submodule's built typings lag its source: dist/index.d.ts
+	// lacks the "context" overload the running host implements (the smoke live
+	// checks exercise this hook), so register it through a narrow cast typed
+	// with the official ContextEvent.
+	const onContext = pi.on as unknown as (
+	  event: "context",
+	  handler: (event: ContextEvent) => { messages?: ContextEvent["messages"] } | void,
+	) => void;
+	onContext("context", (event) => {
 		if (!pendingInjection) return;
 		const injection = pendingInjection;
-		const messages = (event.messages as unknown as Array<{ role?: string; content?: unknown }>).map((m) => ({ ...m }));
+		// structuredClone (not a spread) keeps the AgentMessage union intact for the type checker.
+		const messages = event.messages.map((m) => structuredClone(m));
 		for (let i = messages.length - 1; i >= 0; i--) {
 			const m = messages[i];
 			if (m?.role !== "user") continue;
-			const content = m.content;
-			if (typeof content === "string") {
-				m.content = `${injection}\n\n${content}`;
+			if (typeof m.content === "string") {
+				m.content = `${injection}\n\n${m.content}`;
 				return { messages };
 			}
-			if (Array.isArray(content)) {
-				const parts = content.map((p) => (typeof p === "object" && p !== null ? { ...(p as object) } : p));
-				const textPart = parts.find(
-					(p) =>
-						typeof p === "object" &&
-						p !== null &&
-						(p as { type?: string }).type === "text" &&
-						typeof (p as { text?: unknown }).text === "string",
-				) as { text?: string } | undefined;
-				if (textPart) {
-					textPart.text = `${injection}\n\n${textPart.text ?? ""}`;
-					m.content = parts;
-					return { messages };
-				}
+			const parts = m.content.map((p) => structuredClone(p));
+			const textPart = parts.find((p) => p.type === "text");
+			if (textPart) {
+				textPart.text = `${injection}\n\n${textPart.text ?? ""}`;
+				m.content = parts;
+				return { messages };
 			}
 			break;
 		}
-		const synthetic = { role: "user", content: [{ type: "text", text: injection }] };
-		return { messages: [...messages, synthetic] };
+		// Inlined (not a separate const) so the object literal is contextually
+		// typed as AgentMessage — a standalone const widens role/type to string.
+		return {
+			messages: [...messages, { role: "user", content: [{ type: "text", text: injection }], timestamp: Date.now() }],
+		};
 	});
 
 	// The injection is per-turn: drop it once the turn settles so the next

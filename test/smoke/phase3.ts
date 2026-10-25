@@ -211,12 +211,20 @@ export default function (pi: ExtensionAPI) {
 					const res = (await msgTool.execute("probe", { to: "ghost", message: "hello" })) as {
 						content?: Array<{ text?: string }>;
 						isError?: boolean;
+						details?: { to?: string };
 					};
 					const text = res.content?.map((c) => c.text ?? "").join("\n") ?? "";
 					if (res.isError !== true || !/topology denies|Allowed teammates/i.test(text)) {
 						fail(`topo_team_msg socket round-trip broken: ${text.slice(0, 160)}`);
 					} else {
 						log("topo_team_msg: topology denial surfaces with the allowed list: OK");
+					}
+					// details.to echoes the addressed member — the reply is attributed to
+					// the target the sender named, not to whoever answered.
+					if (res.details?.to !== "ghost") {
+						fail(`topo_team_msg details.to must echo the addressed member (got ${JSON.stringify(res.details?.to)})`);
+					} else {
+						log("topo_team_msg: details.to echoes the addressed member: OK");
 					}
 					// The leader is not a topology node and has no inbox: a
 					// member→leader attempt must be denied with the final-report
@@ -225,6 +233,7 @@ export default function (pi: ExtensionAPI) {
 					const leaderRes = (await msgTool.execute("probe", { to: "leader", message: "final list" })) as {
 						content?: Array<{ text?: string }>;
 						isError?: boolean;
+						details?: { to?: string };
 					};
 					const leaderText = leaderRes.content?.map((c) => c.text ?? "").join("\n") ?? "";
 					if (
@@ -235,6 +244,11 @@ export default function (pi: ExtensionAPI) {
 						fail(`topo_team_msg leader target must explain the final-report path: ${leaderText.slice(0, 160)}`);
 					} else {
 						log("topo_team_msg: leader target denied with final-report guidance: OK");
+					}
+					if (leaderRes.details?.to !== "leader") {
+						fail(`topo_team_msg details.to must echo the addressed member (got ${JSON.stringify(leaderRes.details?.to)})`);
+					} else {
+						log("topo_team_msg: details.to echoes the addressed member: OK");
 					}
 				}
 			}

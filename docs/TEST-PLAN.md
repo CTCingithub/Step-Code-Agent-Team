@@ -21,6 +21,7 @@
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero-token |
 | phase8 | Recursion depth /proc real check + sub-team self-bootstrap + concurrency defaults | zero-token |
 
+> The full current phase list (20 phases, derived on disk from `test/smoke/phase*.ts`) with per-phase coverage is in [docs/TESTING.md](TESTING.md) §2; the table above is the historical baseline snapshot.
 ## II. Coverage gaps targeted this round
 
 1. **Concurrency cap live**: the queue-before-start semantics of `maxConcurrent` have never been verified with real dispatches (phase5 only tests spawn mutual exclusion)
@@ -36,7 +37,7 @@
 
 | Probe | agentDir/config | Cost | Gap |
 |---|---|---|---|
-| smoke-phase9 | cfg-misc (full-section coverage + storage.dir + debug) | zero-token | 8 |
+| smoke-phase9 | self-built settings.json full-section fixture (mktemp; supersedes the retired cfg-misc label) — full-section + storage.dir redirection + debug | zero-token | 8 |
 | smoke-phase10 | cfg-conc (maxConcurrent=2) | ~4 tokens | 1 |
 | smoke-phase10 | cfg-deadlock (maxConcurrent=1, timeoutMs=60s) | ~2 tokens | 2 |
 | smoke-phase11 | cfg-deep2 (maxRecursionDepth=2, dispatch.timeoutMs=240s) | ~4 tokens | 3 |
@@ -48,7 +49,7 @@
 
 | Probe/config | Result | Failures | Follow-up |
 |---|---|---|---|
-| phase9 / cfg-misc | ✅ 33/33 | 2 probe typos (async missing await, reaper threshold shorter than the spawn interval) | All pass after fixing the probe |
+| phase9 / self-built full-section fixture | ✅ 33/33 | 2 probe typos (async missing await, reaper threshold shorter than the spawn interval) | All pass after fixing the probe |
 | phase10 / cfg-conc | ✅ 2/2 | — | 4 parallel dispatches; observed max concurrency 2 (queue-before-start correct) |
 | phase10 / cfg-deadlock | ✅ pass after fix | **Product defect: nested-message deadlock** (A holds the only semaphore slot, messages B via the shim, B's dispatch also needs a slot → 60s timeout) | Fixed: server dispatches marked nested bypass the global gate |
 | phase11 / cfg-deep2 | ✅ 4/4 after fix | **Product defects ①: `team_set_topology` not in the gate list → leak before activation; ② sub-leader `--tools` allowlist filters out the team tools → depth-2 orchestration broken** (plus test-harness issues: cfg-deep2 config file missing, probe didn't start the leader server) | Fixed: gate list completed, sub-leader allowlist merges the team tools, coordination prompt hardened (command failure doesn't mean investigating tools); probe now starts the leader server + refusal detection |
@@ -84,7 +85,7 @@ serving as the vehicle for team members doing real work inside the sandbox (memb
 - **Verification record**: with the bug, `cd sandbox/project && npm test` = 7/8 pass, exit code 1; after temporarily switching to lookup by id,
   8/8 all green (proving it's fixable); already restored to the buggy demo state.
 - `secret-sample.txt` (fake secret) is kept for the path-protection guardrail test.
-- **Restore mechanism** (plan-10): `sandbox/project-pristine/` is the initial snapshot (without data/); `bash sandbox/restore-project.sh` overwrites project/'s known files from the snapshot and clears data/. Verified: simulated member fix (8/8) → restore → back to the 7/8 expected failure. Run it once before each demo round.
+- **Restore mechanism** (plan-10): `sandbox/project-pristine/` is the initial snapshot (without data/); `bash sandbox/restore-project.sh` overwrites project/'s known files from the snapshot and clears data/. Verified: simulated member fix (8/8) → restore → back to the 7/8 expected failure (the demo suite has since grown to 12 tests — the current restored baseline is 11/12). Run it once before each demo round.
 
 ### Demo script
 
@@ -131,7 +132,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Check | Command / probe | Expected |
 |---|---|---|---|
-| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 7 live checks + orphan-check) |
+| A1 | Full zero-token regression | `npm run smoke` | all phases passed (20 phases — the list is derived on disk from `test/smoke/phase*.ts` — + manifest + 7 live checks + orphan-check) |
 | A2 | Protocol probe | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
 | A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |
@@ -141,12 +142,12 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | # | Check | Probe | Gap |
 |---|---|---|---|
 | K1 | `/topo <request>` end-to-end | RPC prompt with the command | the verbatim request lands in the session log; the leader forms a team (no solo completion) |
-| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo` | the select shows 4 tiers + custom; with a request attached the confirmation shows the model-generated actual plan (one-off planning call), and on approval that plan reaches the model with precedence over the tier's general guidance |
-| K3 | `plan.tier` pinned mode | config `tier="fast"` | no picker; the tier applies on every activation (command and keyword paths) |
+| K2 | Plan picker + tier instruction | sandbox session, `plan.enabled=true`, `/topo <请求>` | the select shows 4 tiers + custom; with a request attached the three-option confirmation (Accept / 自定义输入… / Cancel) shows the model-generated actual plan (one-off planning call); Accept injects that plan with precedence, a custom input's text rides along with the request verbatim, Cancel forwards the request with activation only **The Accept path was measured manually 2026-10-25; the custom input is live-verified by `probe-remaining-manual.mjs 5a`; TUI key feel stays M3** |
+| K3 | `plan.tier` pinned mode | config `tier="fast"` | a pin means "stop asking": neither activation path shows the picker **or the three-option confirmation** — the tier applies directly. **Live-verified by `probe-remaining-manual.mjs 5b` (both negative assertions: neither dialog appears) + a phase24 pinned-tier zero-token scenario**; the keyword path keeps one manual spot-check |
 | K4 | `/topo review <target>` | sandbox session | three reviewers + worker merge protocol executed |
 | K5 | topo_team_msg success dispatch | two members + a declared edge; the upstream messages the downstream | the reply returns over the socket — the E2E gap left by the topology fix |
-| K6 | Custom roles | `<agentDir>/agents/quickfix.md`; project-level in a trusted project | `team_create_member(role="quickfix")` applies the prompt / tools / effort |
-| K7 | Keyword migration notice | config carrying old keywords | activation strips them and notifies once |
+| K6 | Custom roles | `<agentDir>/agents/quickfix.md`; project-level in a trusted project | `team_create_member(role="quickfix")` applies the prompt / tools / effort **The agent-dir tier is live-verified by `probe-remaining-manual.mjs 8` (effort:low + the frontmatter allowlist + the topo_team_msg overlay); the project tier needs the M2 trust flow** |
+| K7 | Keyword migration notice | config carrying old keywords | activation strips them and notifies once **Live-verified by `probe-remaining-manual.mjs 9` (exactly once per session)** |
 | K8 | phase4/10/11/12 LLM probes | `sandbox/smoke-phase4/10/11/12.ts` | full-path regression with the new spawn args (topo_team_msg in the allowlist) |
 
 ### Must be manual (real TUI / install / UX)
@@ -155,7 +156,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 |---|---|---|
 | M1 | Real install: `step install` from a clean export, activate, `step remove` | the `step install` command UX + uninstall; live-package-install only covers the config-packages load path |
 | M2 | Trust dialog UX | the project-level config trust popup is interactive |
-| M3 | TUI picker / confirm rendering | `ctx.ui.select`/`confirm` visuals, the 30s timeout countdown |
+| M3 | TUI picker / selection rendering | `ctx.ui.select` visuals, the Accept/Cancel options (no countdown — the plan confirmation waits for the decision), the tier picker's 30s fallback to `balanced` |
 | M4 | TUI rendering观感 (render.ts) | phase15 asserts content strings, not pixels |
 | M5 | English translation review | docs bilingual accuracy |
 | M6 | 8-member performance (subjective, optional) | qualitative |
@@ -174,8 +175,21 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | F1 | Flow fixes found while re-running | TESTING(_CN): the documented LLM-probe invocation lacked `STEP_CODING_AGENT_DIR` isolation — an installed copy under `~/.stepcode/agent` conflicts with the `-e` extension, so every tool name failed to load and the probes never ran (isolation export added to both docs); MANUAL-TESTING(_CN) runbook 17→18 phases; run-smoke.sh duplicate comment removed |
 | U1 | ✅ user manual round (2026-10-22; the §7 log was lost to an unarchived restore — analysis reconstructed from the session JSONL) | §1 walkthrough + demo Acts 1–3 all completed: the 4-member fix chain (T1–T4) finished; Act 1's premise had already been met (baseline 12/12 from the earlier activation run) and the leader adapted via clarify_user + verify-only tasks; Act 2 three-way parallel review (T8–T10); Act 3 ring tour a→b→c with the third hop rejected verbatim ("would reach 3 hops, over the ring loop limit (2)"), the whole chain finishing in ~12 min with zero timeouts under the 600s family; members scoping used in team_set_topology; exactly one isError:true in the session (the expected ring rejection) |
 | F2 | Log-loss hardening (2026-10-22) | restore-project.sh now auto-archives logs/ (and legacy session-log-*.md) to sandbox/archive/<ts>-auto-before-restore/ before deleting them, so an unarchived restore can never destroy a round's §7 log again; MANUAL-TESTING Act 1 gained the baseline-pitfall note (restore first when a previous run already fixed the bug; the leader's clarify_user adaptation is correct behavior); the activation instruction now tells the model to stay read-only when the user did not ask for changes |
+| R3 | ✅ automation round (2026-10-23): legacy-fix + test-flow round | P1-4 meta-guard rewritten sentence-anchored (usage requests with 如何/怎么 activate again; pure how-to questions still suppressed) + 8 phase6 cases; smoke runner bounded single-retry; context hook registered through a typed ContextEvent cast (tsc 19→1); audit-driven updates — phase22 rows, Layer C invocation (mkdir + --approval-mode auto + cfg-fixture repointing), fixture key renames, stale 180000→600000, README status. Full suite green |
+| R4 | ✅ automation round (2026-10-23): test-coverage hardening | new phase23 all-tool JSON-schema guard (the typebox description drop would have been caught) + dispatchPrompt / planConfirmDialogOpts / details.to assertions in phase16/21/3; runner retry line prefixed attempt1; full suite green (19 phases), tsc zero |
+| R5 | ✅ automation round (2026-10-24): sandbox-log-driven repairs | plan confirmation options reduced to exactly Accept/Cancel; failed board tasks re-dispatchable (assertDispatchable + 6 phase16 gate assertions); an unresolved explicit role is now reported in the create result; MANUAL-TESTING(_CN) gained the dispatch-anomaly recovery block; full suite green, tsc zero |
+| R6 | ✅ automation round (2026-10-25): comprehensive optimization (balanced team round) | createMember spawn retry (ensureLiveWithRetry, isomorphic with startTaskLocked) + isRetryableSpawnError word-boundary fix closing the augmented-respawn false positive; phase1 zero-token regression block (10 assertions + 3 stubbed scenarios); CONFIGURATION(_CN) storage.dir absolute-path notes; TEST-PLAN(_CN) retired cfg-misc label; demo-project fixes declined (ephemeral by design); full suite green, tsc zero |
+| R7 | ✅ verification round (2026-10-25): remaining-items confirmation + full LLM-probe re-run | A3/A4/B2/B3 re-confirmed as deferred-by-design (no blockers, no regressions); smoke gate green; probes 22/22 assertions pass (phase4 4/4, phase10 Branch A 3/3 + Branch B 2/2 no-deadlock, phase11 4/4 depth-2 chain, phase12 9/9); found and documented the local-config fixture-shadowing false green |
+| R8 | ✅ docs round (2026-10-25): test-flow documentation review | two read-only auditors (automated-flow + manual lines) + leader mechanical cross-checks; 16 bilingual updates — TESTING(_CN) Layer C block aligned + runner/pass-criteria section + phase3/16/21 coverage rows; TEST-PLAN(_CN) A1 17→19 + §I pointer + K8 tail; MANUAL-TESTING(_CN) Step 1 19 phases + restore auto-archive wording + 2026-10-25 baseline + phase23 header + ops-block notes; sandbox/README(_CN) cfg-* live-vs-legacy; README_CN stale path. No code changes |
+| R9 | ✅ automation round (2026-10-25): performance-tier round (leader-executed after dispatch failures) | A3 free-text input landed (three options; the user's text rides along with the request verbatim); A4 usage-guarded settle retry (dispatchWithSettleGuard — retries only when the failed attempt provably did nothing); new phase24 end-to-end confirmation probe (6 assertions); P2-8c/8a test hardening; three deferred doc suggestions + A3/A4 doc adjustments; full suite green (20 phases), tsc zero |
+| R10 | ✅ verification round (2026-10-25): LLM-probe re-run on the A3/A4 code | probes 22/22 (phase4 4/4, phase10 Branch A 3/3 + Branch B 2/2 no-deadlock, phase11 4/4, phase12 9/9) on the code with free-text input and the usage-guarded settle retry — the dispatch path was exercised for real; each probe ran in an isolated agentDir (local config shadowing avoided); smoke gate still green (20 phases) |
+| R11 | ✅ sandbox-round-driven round (2026-10-25): fixes from the user's manual round log | B: describeTopology renders only edge participants (disbanded dead records no longer list as "no direct peers" rows); C: the delivery ack now forbids a resend (the placeholder guard itself confirmed by-design); D: the plan prompt requires topology consistency (star ⇒ collection routes through the leader); E: the activation protocol tells the leader to state the report return path in relay task books; A: README autonomousEffort caveat; F: unconditional resume note; phase14/16/21 assertions; full suite green (20 phases), tsc zero |
+| R12 | ✅ manual-scenario closure round (2026-10-25): performance-tier plan executed | T1 scenario inventory (7 must-run items + downgrade rationale) → T2A wrote the MANUAL-TESTING(_CN) revision (new §8–§11 with the scenario 5a/5b/7/8/9 details; the scenario table's detail column points at the new sections) → T4 ran the unfinished tests: all five `sandbox/probe-remaining-manual.mjs` subcommands PASS (5a custom input rides along verbatim / 5b pinned tier suppresses the picker / 7 suppress+activate+team_create_member / 8 frontmatter tools+effort land / 9 notice exactly once); TESTING(_CN) probe table, sandbox/README(_CN) and the K2/K3/K6/K7 rows synced; the smoke gate stays green |
+| R13 | ✅ pinned-tier consistency fix (2026-10-25): performance-tier plan executed | three sandbox logs analyzed (parallel-review / 2301 — no plugin defects, all findings belong to the demo project) + the user-reported asymmetry: the command path's pinned branch skipped only the picker while still running the planning call and the three-option confirmation (the keyword path injects directly); fix = a `pinnedTier` flag in index.ts skips both; phase24 gains a pinned-tier zero-token scenario (2 assertions), probe 5b's assertion flipped and its live re-run PASSes; CONFIGURATION/README/MANUAL-TESTING/TEST-PLAN synced bilingually; the smoke gate stays green |
 
-Remaining: K1–K8 need `STEP_API_KEY` (set it in `sandbox/TEST-KEY.md`, gitignored, or export it); M1–M6 are manual (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
+**Round-record convention**: every round that changes code, tests, or the test flow (zero-token rounds included) appends an R row — date, what ran, result, anomalies; a manual sandbox round additionally produces the §7 session log.
+
+Remaining interactive: K2/K3 (plan picker + the Accept/Cancel confirmation), K6 (custom roles) and K7 (migration notice) — MANUAL-TESTING scenarios 5/8/9; K1/K4/K5/K8 are already covered (K8 re-run 2026-10-25: 22/22 probe assertions, phase10 both branches). Manual: M1–M6 (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
 
 ### Findings from the 2026-10-20 sandbox session
 

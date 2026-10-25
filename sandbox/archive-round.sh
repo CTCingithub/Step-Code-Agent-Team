@@ -25,8 +25,8 @@ if [ -d "$DIR/agent/teams" ]; then cp -a "$DIR/agent/teams" "$DEST/teams"; fi
 if [ -d "$DIR/logs" ]; then cp -a "$DIR/logs" "$DEST/logs"; fi
 # Legacy-location session logs (sandbox/session-log-*.md), when any remain
 cp -a "$DIR"/session-log-*.md "$DEST/" 2>/dev/null || true
-git -C "$DIR/project" diff > "$DEST/project.diff" 2>/dev/null || true
-git -C "$DIR/project" status --porcelain > "$DEST/project.status.txt" 2>/dev/null || true
+git -C "$DIR/project" diff -- . > "$DEST/project.diff" 2>/dev/null || true
+git -C "$DIR/project" status --porcelain -- . > "$DEST/project.status.txt" 2>/dev/null || true
 
 echo "archive-round: 已归档到 sandbox/archive/${STAMP}-${LABEL}/（$(du -sh "$DEST" | cut -f1)）"
 echo "archive-round: 含 sessions/ teams/ logs/ session-log-*.md（如有）/ project.diff project.status.txt（按实际存在情况）"

@@ -41,6 +41,12 @@ rm -rf sandbox/agent/sessions sandbox/agent/teams sandbox/agent/plans \
 bash sandbox/restore-project.sh
 ```
 
+`OPT_OUT_PHASES="13 14" npm run smoke` 表示跑除列表外的全部 phase（runner 唯一的
+刻意排除开关；显式 phase 参数优先）。`bash sandbox/probe.sh` 是一次性 RPC 握手探针
+（期望输出 `PROBE OK`）；`bash sandbox/archive-round.sh <标签>` 会把一轮测试的证据
+——会话 JSONL、团队注册表、`logs/`、演示项目 diff——快照到 gitignore 的
+`sandbox/archive/`，且必须在任何会删除它的还原**之前**执行。
+
 交互 TUI 的人工验证（含可复制粘贴的 prompt）与完整手动测试清单（含各项还原命令）均见
 [MANUAL-TESTING.md](MANUAL-TESTING_CN.md)。
 
@@ -62,7 +68,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -74,7 +80,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 |---|---|---|
 | phase1 | 成员生命周期断言（spawn/握手/注册表持久化/disband 复位/幂等恢复——kill 路径实例身份回归） | 零 token |
 | phase2 | 任务板状态机（DAG/环/ready-set/持久化） | 零 token |
-| phase3 | 消息服务 + shim status 往返 + 预设加载 | 零 token |
+| phase3 | 消息服务 + shim status 往返 + 预设加载 + `topo_team_msg` 结果 `details.to` 回显 | 零 token |
 | phase5 | 并发创建竞态/失败即杀/状态机/socket 0600/abort/shutdown | 1 次 token（无 key 时 SKIP） |
 | phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 + 强制关键词迁移（剥离/上报/全旧词禁用）+ L1 否定护栏矩阵 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
@@ -83,12 +89,17 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
 | phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
-| phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput） | 零 token（独立运行） |
+| phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput）+ `dispatchPrompt` 合并契约 + `assertDispatchable` 门禁（failed 任务可重派） | 零 token（独立运行） |
 | phase17 | 孤儿进程（成员不得比队长长寿） | 零 token |
 | phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + dispatch 失败上下文（超时/中止提示接力在途与成员名册） | 零 token |
 | phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、优先级、非法 TOML 容忍、env 仍胜出） | 零 token |
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
-| phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议） | 零 token |
+| phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议）+ `planConfirmDialogOpts`（TUI 无倒计时） | 零 token |
+| phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
+| phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
+| phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言 Accept 原样转发请求并注入方案指令、自定义输入 note 原样合并、空提交按原样接受、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
+
+**runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——探针本身已跟踪入库，仅沙箱运行时状态在 .gitignore 内（见 C 层）。
 
@@ -97,10 +108,11 @@ LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——�
 ```bash
 # 先隔离 agent 目录：不设置时 step 回退到 ~/.stepcode/agent，其 packages 项里
 # 安装的本插件副本会与下面的 -e 扩展冲突——全部工具名加载失败，探针根本不运行。
+mkdir -p "$PWD/sandbox/agent/sessions"   # gitignored；fresh clone 上无人创建它
 export STEP_CODING_AGENT_DIR="$PWD/sandbox/agent"
 sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
   -e "$PWD/sandbox/smoke-phase4.ts" \
-  --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions"
+  --mode rpc --session-id r4 --session-dir "$PWD/sandbox/agent/sessions" --approval-mode auto
 ```
 
 | 探针 | 配置 | 覆盖 |
@@ -109,11 +121,24 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | 并发上限 live / 嵌套消息死锁 |
 | phase11 | cfg-deep2 | 递归深度 2 真实链 |
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
+| probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框自定义输入路径：脚本化 RPC 客户端应答档位选单→确认框选「自定义输入…」→input，断言用户文本原样进入转发的 user 消息 |
+| probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单不出现、三选项确认框仍出现 |
+| probe-remaining-manual `7` | 隔离 agentDir ×2 | L1 护栏：元问题零团队动作；how-to 带主体激活且 team_create_member 真实可用 |
+| probe-remaining-manual `8` | 隔离 agentDir（agents/quickfix.md + autonomousEffort=false） | 自定义角色：frontmatter tools/effort 落到真实 spawn、成员自报白名单含 topo_team_msg |
+| probe-remaining-manual `9` | 隔离 agentDir（keywords 含废弃词） | 迁移提示每会话恰好出现一次 |
+
+phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的 export 指向对应 fixture
+（phase11 用 `STEP_CODING_AGENT_DIR="$PWD/sandbox/cfg-deep2"`）。用默认目录跑 phase11
+会得到干净的 SKIP——那是假绿。
+
+**本地配置遮蔽**：全局 `config.toml` 位于 agentDir **旁边**（`dirname(agentDir)/config.toml`），优先级高于 fixture 的 `settings.json`。因此本地的 `sandbox/config.toml`（gitignored）会遮蔽 `sandbox/cfg-*`——其 `dispatch.maxConcurrent` 会静默取代 fixture 的值，phase10 将走 Branch A 而非 B（2026-10-25 实测假绿）。有该文件的机器上隔离探针：把 fixture 的 `settings.json` 拷进临时 agentDir 并把 `STEP_CODING_AGENT_DIR` 指过去。
 
 通过标准（摘要）：并行调度均成功；任务链状态流转 pending→ready→running→done；
 oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记得上文；
 `STEPCODE_TEAM_COST_WARN=0.0001` 触发告警、设为 0 禁用；abort 后无孤儿进程；
-onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。
+onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。另：cfg-deadlock 分支
+（phase10，`maxConcurrent=1`）须在探针窗口内（实测约 6s）无死锁完成；phase11 必须配
+`cfg-deep2` 实跑四条检查（4/4）——干净 SKIP 算失败。
 
 每轮人工沙箱演练结束后，让 agent 把过程记录到 `sandbox/logs/session-log-<日期>.md`——可粘贴的
 prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。

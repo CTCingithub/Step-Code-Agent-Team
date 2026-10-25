@@ -23,7 +23,7 @@ import { TeamManager, wouldCycle } from "../../extensions/members.ts";
 import { TeamServer } from "../../extensions/team-server.ts";
 import { agentDir, defaultConfig, getConfig, loadConfig, resetConfigCache } from "../../extensions/config.ts";
 import { shimPath } from "../../extensions/presets.ts";
-import { TopologyError } from "../../extensions/topology.ts";
+import { TopologyError, describeTopology, pipelineTopology, ringTopology, starTopology } from "../../extensions/topology.ts";
 
 // Stage a short request timeout before any member spawns (members.ts reads
 // getConfig() at spawn time; index.ts's cached copy is irrelevant here).
@@ -111,6 +111,29 @@ export default function (pi: ExtensionAPI) {
 			check("cycle: direct wait → cycle", wouldCycle(wf, "b", "a"), "a waits on b");
 			check("cycle: transitive wait → cycle", wouldCycle(wf, "c", "a"), "a → b → c");
 			check("cycle: empty map → no cycle", !wouldCycle(new Map(), "x", "y"));
+
+			// ---- 1c. describeTopology renders only edge participants ----
+			// Disbanded members stay in the registry as dead records (session
+			// resume); rendering them as edge-less rows confused a real round
+			// (2026-10-25: a re-declared pipeline still listed three disbanded
+			// reviewers as "no direct peers").
+			const pipe = pipelineTopology(["scout", "worker"]);
+			const pipeText = describeTopology(pipe, ["scout", "worker", "r1", "r2", "r3"]);
+			check(
+				"describe: pipeline lists only edge participants",
+				pipeText === "pipeline (1 edge(s)):\n  scout → worker\n  worker → (no direct peers)",
+				pipeText,
+			);
+			check(
+				"describe: star has no member rows",
+				describeTopology(starTopology(), ["a", "b"]).startsWith("star —"),
+				"",
+			);
+			check(
+				"describe: ring lists every participant",
+				describeTopology(ringTopology(["r1", "r2", "r3"]), ["r1", "r2", "r3"]).includes("r3 → r1"),
+				"",
+			);
 
 			// ---- 2. manager-level rejection (before any dispatch) ----
 			const manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);

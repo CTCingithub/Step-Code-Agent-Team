@@ -180,7 +180,9 @@ export class TeamServer {
 				// sender already holds a running slot (see members.ts dispatch).
 				// withWaitingOn records the edge so later hops can detect cycles.
 				const result = await manager.withWaitingOn(from, req.to, () =>
-					manager.sendMessage(req.to, req.message, { nested: true, chainLength: nextLength }),
+					// req.to/req.message are narrowed by the guard above, but TS drops
+					// narrowing inside closures — reassert at the boundary.
+					manager.sendMessage(req.to as string, req.message as string, { nested: true, chainLength: nextLength }),
 				);
 				this.reply(conn, { ok: true, reply: result.text });
 				return;

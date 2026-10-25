@@ -21,6 +21,7 @@
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
 
+> 完整的当前 phase 清单（19 个，由 `test/smoke/phase*.ts` 磁盘派生）与逐 phase 覆盖见 [docs/TESTING.md](TESTING_CN.md) 第 2 节；上表为历史基线快照。
 ## 二、本次重点覆盖缺口
 
 1. **并发上限 live**：`maxConcurrent` 的排队启动语义从未用真实派活验证（phase5 只测 spawn 互斥）
@@ -36,7 +37,7 @@
 
 | 探针 | agentDir/配置 | 成本 | 对应缺口 |
 |---|---|---|---|
-| smoke-phase9 | cfg-misc（全节覆盖+storage.dir+debug） | 零 token | 8 |
+| smoke-phase9 | 探针自建 settings.json 全节 fixture（mktemp；取代已弃用的 cfg-misc 标签）——全节覆盖+storage.dir 重定向+debug | 零 token | 8 |
 | smoke-phase10 | cfg-conc（maxConcurrent=2） | ~4 次 token | 1 |
 | smoke-phase10 | cfg-deadlock（maxConcurrent=1, timeoutMs=60s） | ~2 次 token | 2 |
 | smoke-phase11 | cfg-deep2（maxRecursionDepth=2, dispatch.timeoutMs=240s） | ~4 次 token | 3 |
@@ -48,7 +49,7 @@
 
 | 探针/配置 | 结果 | 失败项 | 后续 |
 |---|---|---|---|
-| phase9 / cfg-misc | ✅ 33/33 | 探针笔误×2（async 漏 await、reaper 阈值小于 spawn 间隔） | 修探针后全过 |
+| phase9 / 自建全节 fixture | ✅ 33/33 | 探针笔误×2（async 漏 await、reaper 阈值小于 spawn 间隔） | 修探针后全过 |
 | phase10 / cfg-conc | ✅ 2/2 | — | 4 并行派活、观测最大并发 2（排队启动正确） |
 | phase10 / cfg-deadlock | ✅ 修复后通过 | **产品缺陷：嵌套消息死锁**（A 持唯一信号量经 shim 消息 B，B 的派活也要信号量→60s 超时） | 已修复：server 派活标记 nested 绕过全局门 |
 | phase11 / cfg-deep2 | ✅ 修复后 4/4 | **产品缺陷①：`team_set_topology` 不在门控清单→激活前泄漏；②子队长 `--tools` 允许清单过滤掉团队工具→深度2 编排失效**（另有 cfg-deep2 配置文件丢失的测试设施问题、探针未启队长 server 问题） | 已修复：门控清单补全、子队长允许清单合并团队工具、协调提示加固（命令失败不排查工具）；探针补启队长 server + 拒答检测 |
@@ -84,7 +85,7 @@
 - **验证记录**：带 bug 状态 `cd sandbox/project && npm test` = 7/8 通过、退出码 1；临时改为按 id
   查找后 8/8 全绿（证明可修复），已还原为带 bug 的演示状态。
 - `secret-sample.txt`（假密钥）保留，供路径保护护栏测试使用。
-- **还原机制**（plan-10）：`sandbox/project-pristine/` 为初始快照（不含 data/）；`bash sandbox/restore-project.sh` 用快照覆盖 project/ 已知文件并清除 data/。实测：模拟成员修复（8/8）→ 还原 → 回到 7/8 预期失败。每轮演示前先执行一次。
+- **还原机制**（plan-10）：`sandbox/project-pristine/` 为初始快照（不含 data/）；`bash sandbox/restore-project.sh` 用快照覆盖 project/ 已知文件并清除 data/。实测：模拟成员修复（8/8）→ 还原 → 回到 7/8 预期失败（演示套件此后增至 12 条——当前还原态基线为 11/12）。每轮演示前先执行一次。
 
 ### 演示剧本
 
@@ -133,7 +134,7 @@
 
 | # | 检查项 | 命令 / 探针 | 预期 |
 |---|---|---|---|
-| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（17 phase + manifest + 7 live + orphan-check） |
+| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（20 phase——清单由 `test/smoke/phase*.ts` 磁盘派生——+ manifest + 7 live + orphan-check） |
 | A2 | 协议探针 | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
 | A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |
@@ -143,12 +144,12 @@
 | # | 检查项 | 探针 | 缺口 |
 |---|---|---|---|
 | K1 | `/topo <请求>` 端到端 | RPC prompt 带命令 | 逐字请求落入会话日志；队长组建团队（不独自完成） |
-| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo` | 选单显示 4 档 + 自定义；带请求时确认框展示模型生成的实际方案（一次性规划调用），批准后该方案以高于档位一般性指导的优先级抵达模型 |
-| K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档 |
+| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo <请求>` | 选单显示 4 档 + 自定义；带请求时三选项确认框（Accept / 自定义输入… / Cancel）展示模型生成的实际方案（一次性规划调用）；Accept 以高优先级注入该方案，自定义输入的文本随请求原样同行，Cancel 只注入激活指令。**Accept 路径 2026-10-25 人工实测；自定义输入由 `probe-remaining-manual.mjs 5a` live 验证；TUI 按键观感留 M3** |
+| K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 钉档=「别再问」：两条激活路径都不弹选单**也不弹三选项确认框**，直接应用该档。**已由 `probe-remaining-manual.mjs 5b` live 验证（双负向断言：选单与确认框均不出现）+ phase24 钉档零 token 场景**；关键词路径留一轮人工抽查 |
 | K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
 | K5 | topo_team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
-| K6 | 自定义角色 | `<agentDir>/agents/quickfix.md`；受信任项目中的项目级 | `team_create_member(role="quickfix")` 应用提示词/工具/effort |
-| K7 | 关键词迁移提示 | 配置含旧关键词 | 激活时剥离并提示一次 |
+| K6 | 自定义角色 | `<agentDir>/agents/quickfix.md`；受信任项目中的项目级 | `team_create_member(role="quickfix")` 应用提示词/工具/effort。**agentDir 层已由 `probe-remaining-manual.mjs 8` live 验证（effort:low + frontmatter 白名单 + topo_team_msg 叠加）；项目级层需 M2 信任流** |
+| K7 | 关键词迁移提示 | 配置含旧关键词 | 激活时剥离并提示一次。**已由 `probe-remaining-manual.mjs 9` live 验证（每会话恰好一次）** |
 | K8 | phase4/10/11/12 LLM 探针 | `sandbox/smoke-phase4/10/11/12.ts` | 新 spawn 参数（allowlist 含 topo_team_msg）下的全路径回归 |
 
 ### 必须人工（真实 TUI / 安装 / UX）
@@ -157,7 +158,7 @@
 |---|---|---|
 | M1 | 真实安装：干净导出物 `step install`、激活、`step remove` | `step install` 命令 UX + 卸载；live-package-install 只覆盖 config packages 加载路径 |
 | M2 | 信任弹窗 UX | 项目级配置信任弹窗是交互式的 |
-| M3 | TUI 选单/确认框渲染 | `ctx.ui.select`/`confirm` 观感、30s 超时倒计时 |
+| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept / 自定义输入… / Cancel 三选项（无倒计时——方案确认框等待用户决定）、自定义输入对话框、档位选单的 30s 回退 `balanced` |
 | M4 | TUI 渲染观感（render.ts） | phase15 只断言内容字符串，不覆盖像素 |
 | M5 | 英文译文审阅 | 文档双语准确性 |
 | M6 | 8 成员性能（主观，可选） | 定性 |
@@ -176,8 +177,21 @@
 | F1 | 重跑中发现的流程修复 | TESTING(_CN)：文档化的 LLM 探针调用缺 `STEP_CODING_AGENT_DIR` 隔离——`~/.stepcode/agent` 中已安装的插件副本与 `-e` 扩展冲突，全部工具名加载失败、探针根本不运行（双语文档已补隔离导出）；MANUAL-TESTING(_CN) runbook 17→18 phase；run-smoke.sh 重复注释已删 |
 | U1 | ✅ 用户手动轮（2026-10-22；§7 日志被一次未归档的还原删除，分析证据改从会话 JSONL 重建） | §1 走查 + 三幕剧本全部完成：4 成员修复链 T1–T4 完工；Act 1 前提已被早前激活轮满足（基线 12/12），队长以 clarify_user + 只读复核任务妥善应对；Act 2 三路并行评审 T8–T10；Act 3 环形巡回 a→b→c 两跳成功、第 3 跳被拒并原文引用（"would reach 3 hops, over the ring loop limit (2)"），整链约 12 分钟在 600s 超时族下零超时完成；team_set_topology 正确使用 members 作用域；全会话仅 1 处 isError:true（即该预期拒绝） |
 | F2 | 日志丢失加固（2026-10-22） | restore-project.sh 现于删除前把 logs/（及旧位 session-log-*.md）自动归档到 sandbox/archive/<时间戳>-auto-before-restore/，未归档的还原再也不会毁掉一轮 §7 日志；MANUAL-TESTING Act 1 增加基线坑位提示（上一轮已修掉种子 bug 时先还原；队长 clarify_user 应对属正确行为）；激活指令补充“用户未要求改动时保持只读”纪律 |
+| R3 | ✅ 自动化轮（2026-10-23）：遗留修复+测试流程轮 | P1-4 元问题守卫改句子锚定（如何/怎么 用法请求恢复激活；纯 how-to 问句仍抑）+ phase6 8 条用例；冒烟 runner 有界单次重试；context hook 经 ContextEvent 类型化注册（tsc 19→1）；审计驱动的测试流程更新（phase22 文档行、Layer C 调用块、fixture 键、stale 配置、README 状态行）。全量套件绿 |
+| R4 | ✅ 自动化轮（2026-10-23）：测试覆盖加固 | 新 phase23 全工具 JSON-schema 守卫（typebox 描述丢失事件可被捕获）+ phase16/21/3 的 dispatchPrompt / planConfirmDialogOpts / details.to 断言；runner 重试行前缀 attempt1；全量套件 19 phase 全绿、tsc 零错误 |
+| R5 | ✅ 自动化轮（2026-10-24）：沙箱日志驱动修理 | 确认框选项精简为精确 Accept/Cancel；failed 板任务可重派（assertDispatchable + phase16 六条门禁断言）；未匹配的显式 role 在 create 结果中提示；MANUAL-TESTING(_CN) 新增派发异常恢复运维块；全量套件绿、tsc 零错误 |
+| R6 | ✅ 自动化轮（2026-10-25）：全面修改与优化（均衡档团队轮） | createMember spawn 重试（ensureLiveWithRetry，与 startTaskLocked 同构）+ isRetryableSpawnError 词边界修复（堵住增强错误里 respawn 的误放行）；phase1 零 token 回归块（10 条断言+3 个打桩场景）；CONFIGURATION(_CN) storage.dir 绝对路径说明；TEST-PLAN(_CN) 弃用 cfg-misc 标签；演示项目修复决议不做（设计上易失）；全量套件绿、tsc 零错误 |
+| R7 | ✅ 验证轮（2026-10-25）：剩余项确认+LLM 探针全量重跑 | A3/A4/B2/B3 复核仍为 deferred-by-design（无阻塞无回归）；冒烟门全绿；探针 22/22 断言全过（phase4 4/4、phase10 A 3/3+B 2/2 无死锁、phase11 4/4 深度 2 链、phase12 9/9）；发现并记载本地配置遮蔽 fixture 的假绿陷阱 |
+| R8 | ✅ 文档轮（2026-10-25）：测试流程文档审阅 | 两名只读审查员（流程线+人工线）+ 队长机械一致性核查；16 处双语更新——TESTING(_CN) C 层命令块对齐 + runner 行为/通过标准段 + phase3/16/21 覆盖行；TEST-PLAN(_CN) A1 17→19 + §I 指向 + K8 尾句；MANUAL-TESTING(_CN) Step 1 19 phase + restore 自动归档表述 + 2026-10-25 基线 + phase23 头部 + 运维块补注；sandbox/README(_CN) cfg-* 活跃/遗留标注；README_CN 陈旧路径。无代码改动 |
+| R9 | ✅ 自动化轮（2026-10-25）：性能档轮（派发故障后由队长执行） | A3 自由输入落地（三选项；用户文本随请求原样同行）；A4 usage 守卫 settle 重试（dispatchWithSettleGuard——仅当该次尝试证明什么都没做才重发）；新 phase24 确认路径端到端探针（6 断言）；P2-8c/8a 测试加固；3 项遗留文档建议 + A3/A4 文档调整；全量套件绿（20 phase）、tsc 零错误 |
+| R10 | ✅ 验证轮（2026-10-25）：A3/A4 代码上的 LLM 探针复跑 | 探针 22/22（phase4 4/4、phase10 A 支 3/3 + B 支 2/2 无死锁、phase11 4/4、phase12 9/9）——运行在含自由输入与 usage 守卫 settle 重试的代码上，派发路径被实际走过；每条探针均在隔离 agentDir 下执行（避开本地配置遮蔽）；冒烟门仍全绿（20 phase） |
+| R11 | ✅ 沙箱实测驱动轮（2026-10-25）：来自用户手动轮日志的修复 | B：describeTopology 只渲染边参与者（已解散的 dead 记录不再列为「no direct peers」行）；C：送达回执补「勿重发」（占位符守卫本身经取证为设计行为）；D：规划提示词要求方案与拓扑自洽（star ⇒ 汇总只能经队长中转）；E：激活协议要求接力链任务书写明终稿回传路径；A：README 补 autonomousEffort 说明；F：create 结果无条件说明恢复事实；phase14/16/21 断言；全量套件绿（20 phase）、tsc 零错误 |
+| R12 | ✅ 手动场景收口轮（2026-10-25）：性能档方案执行 | T1 场景清单（7 项必测 + 降级依据）→ T2A 主笔修订 MANUAL-TESTING(_CN)（新增 §8–§11：场景 5a/5b/7/8/9 明细节，场景表明细列改指新节）→ T4 执行未完成测试：`sandbox/probe-remaining-manual.mjs` 五个子命令全部 PASS（5a 自定义输入原样进入转发请求 / 5b 钉档选单不出现 / 7 抑制+激活+team_create_member / 8 frontmatter tools+effort 落地 / 9 迁移提示恰好一次）；同步 TESTING(_CN) 探针表、sandbox/README(_CN)、K2/K3/K6/K7 行；全量冒烟门仍绿 |
+| R13 | ✅ 钉档一致性修复轮（2026-10-25）：性能档方案执行 | 三份沙箱日志分析（parallel-review/2301 均无插件缺陷，findings 全属演示项目）+ 用户报告的钉档语义不一致：根因=命令路径 `runTeamCommand` 钉档分支只跳过选单、仍走规划调用+三选项确认（关键词路径直接注入）；修复=index.ts 加 `pinnedTier` 标志跳过两者；phase24 新增钉档零 token 场景（2 断言）、probe 5b 翻转断言后 live 复跑 PASS；CONFIGURATION/README/MANUAL-TESTING/TEST-PLAN 双语同步；全量门绿 |
 
-剩余：K1–K8 需 `STEP_API_KEY`（写入 `sandbox/TEST-KEY.md`——gitignored，或 export 环境变量）；M1–M6 为人工项（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
+**轮次记录规约**：每轮改动代码、测试或测试流程（零 token 轮次也包括）都应追加 R 行——日期、跑了什么、结果、异常；人工沙箱轮另产 §7 会话日志。
+
+剩余交互项：K2/K3（方案选单 + 三选项确认框 Accept / 自定义输入… / Cancel）、K6（自定义角色）、K7（迁移提示）——见 MANUAL-TESTING 场景 5/8/9；K1/K4/K5/K8 已被自动化覆盖（K8 于 2026-10-25 重跑：22/22 断言，phase10 双分支）。人工项：M1–M6（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
 ### 2026-10-20 沙箱会话发现
 

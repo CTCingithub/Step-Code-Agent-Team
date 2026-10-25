@@ -9,7 +9,9 @@ Agent team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`ste
 > **⚠️ Cost warning:** every team member is a full agent process with its own
 > context window, running on the conversation's current model (effort per
 > role preset: `scout`=low, `planner`/`worker`=medium, `reviewer`=high; `high`
-> when no preset applies). N members working in parallel cost roughly N× a
+> when no preset applies — with `models.autonomousEffort` on, the leader picks
+> the effort per member and all preset efforts are inert; see the role table
+> below). N members working in parallel cost roughly N× a
 > single conversation
 > turn, and long member runs accumulate quickly. The plugin tracks cumulative
 > team spend and warns at `cost.warnThreshold` (default $1, 0 disables) — watch
@@ -76,6 +78,7 @@ From git — no packaging step needed, it is a standard step package:
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.2.0)
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.3.0-preview   # preview line (newest; latest never moves for it)
 ```
 
 **Troubleshooting — "Tool … conflicts with …" at startup**: step loads every
@@ -179,7 +182,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 A tier is a **strategy prompt, not a fixed roster**: the instruction states the
 strategy and offers a non-binding example (e.g. "1 scout + 1 worker, effort
 low/medium, star topology"), and the leader model decides the actual members,
-roles, topology, and effort from the task. The picker's fifth entry —
+roles, topology, and effort from the task. When `/topo` carries a request, the model first drafts the **actual plan** for that request (a one-off, plan-only call with a spinner progress) and the three-option selection (Accept / Custom input… / Cancel) shows it — on approval the plan is injected with precedence over the general strategy; a custom input's text is forwarded with the request verbatim. The picker's fifth entry —
 **custom requirements** — runs a short guided flow (team size → topology →
 effort) and carries your free-text requirements along with the request.
 
@@ -248,7 +251,7 @@ flowchart LR
     M3 --> M2
 ```
 
-**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited):
+**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited) — at the default, a 3-member ring's closing hop (r3→r1) is always rejected, so closure runs through the leader unless you raise the limit:
 
 ```mermaid
 flowchart LR
@@ -386,7 +389,7 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21)
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21,22,23)
                         # hermetic: throwaway agent dir; phase 5 is skipped
                         # unless STEP_API_KEY is set (it makes one real call)
 ```
@@ -466,16 +469,25 @@ is absent, so the core team functionality always runs.
 
 ## Status
 
-0.2.0 feature set (release tag pending maintainer approval):
+0.3.0-preview feature set (tagged `v0.3.0-preview` — `@latest` stays on the stable v0.2.0 line until 0.3.0 goes final):
 
 - **Command & activation**: `/topo` with plan tiers, `/topo review [target]`,
   and `/topo off`; plugin-specific activation keywords with forced migration
   of the retired terms; a three-layer false-trigger guard.
 - **Team plans** (default off): economic / fast / balanced / performance
   strategy prompts plus a guided custom flow; `plan.tier` pins one strategy
-  (default `"always ask"`).
+  (default `"always ask"` — a pin applies directly on both activation paths,
+  with no picker and no confirmation). With a request attached the model
+  drafts the actual plan and a three-option selection (Accept / 自定义输入… /
+  Cancel) shows it — a custom input's own text rides along with the request
+  verbatim.
 - **Messaging**: members reach teammates through the built-in `topo_team_msg`
   tool — no bash required, so topology edges are usable for every role.
+- **Dispatch resilience**: a settle timeout retries once only when the member's
+  usage proves the failed attempt did nothing (no duplicate billing); spawn and
+  handshake failures retry in bounded loops; failed board tasks can be
+  re-dispatched with the member's context resumed and a `detail` note carried
+  along.
 - **Protocol layer** (zero-token smoke probes, `test/smoke/phase*.ts`):
   spawn, handshake, registry persistence, task graph, socket round-trip,
   preset and custom-role loading, and the topo_team_msg socket protocol.

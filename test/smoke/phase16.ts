@@ -8,8 +8,9 @@
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { costWarning, truncateOutput } from "../../extensions/tools.ts";
 import { formatTeammateReply } from "../../extensions/member-messaging.ts";
-import { nextTaskId } from "../../extensions/tasks.ts";
-import { defaultConfig } from "../../extensions/config.ts";
+import { assertDispatchable, dispatchPrompt, nextTaskId, taskPrompt } from "../../extensions/tasks.ts";
+import { truncateOutput as truncate } from "../../extensions/tools.ts";
+import { defaultConfig, getConfig } from "../../extensions/config.ts";
 import type { TaskRecord } from "../../extensions/registry.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -64,6 +65,7 @@ export default function (pi: ExtensionAPI) {
 			check("msg: host placeholder → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "No result provided")), "");
 			check("msg: undefined reply → delivery ack", /^Delivered to r3\./.test(formatTeammateReply("r3", undefined)), "");
 			check("msg: whitespace-only reply → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "   \n  ")), "");
+			check("msg: ack forbids a resend", ack.includes("do not resend"), ack.slice(0, 120));
 			check(
 				"msg: ack points at the final report + leader collection",
 				ack.includes("final report") && ack.includes("team_send") && ack.includes("team_task"),
@@ -86,6 +88,67 @@ export default function (pi: ExtensionAPI) {
 			check("truncate: explicit cap below length truncates", truncateOutput("x".repeat(100), 10).includes("[Output truncated: 90 bytes omitted."), "");
 			check("truncate: explicit cap at length keeps text", truncateOutput("x".repeat(10), 10) === "x".repeat(10));
 			check("truncate: explicit cap above length keeps text", truncateOutput("hello", 10) === "hello");
+
+			// ---- tasks config → consumer linkage (P2-8c) ----
+			// config.ts validates [tasks] max/outputCapBytes; these are the
+			// consumers. A config change must move both behaviours.
+			const tasksCfg = getConfig();
+			const capBoard = Array.from({ length: tasksCfg.tasks.max }, (_, i) => ({ id: `T${i + 1}` }) as unknown as TaskRecord);
+			let capMsg = "";
+			try {
+				nextTaskId(capBoard);
+			} catch (err) {
+				capMsg = err instanceof Error ? err.message : String(err);
+			}
+			check(
+				"tasks: board cap comes from the config value",
+				new RegExp(`Task board is full \\(${tasksCfg.tasks.max} tasks\\)`).test(capMsg),
+				capMsg,
+			);
+			const overCap = "x".repeat(tasksCfg.tasks.outputCapBytes + 100);
+			check(
+				"tasks: default truncation cap comes from the config",
+				truncate(overCap).includes("[Output truncated: 100 bytes omitted."),
+				"",
+			);
+
+			// ---- dispatchPrompt (team_task start detail passthrough) ----
+			// The dispatch prompt must carry both the frozen acceptance criteria
+			// and a start-time detail — a start-time detail used to be dropped.
+			const boardTask = {
+				id: "T1",
+				title: "Ship the fix",
+				detail: "acceptance criteria",
+				status: "ready",
+				blockedBy: [],
+				assignee: null,
+			} as unknown as TaskRecord;
+			check("dispatch: merges criteria + start detail", /acceptance criteria/.test(dispatchPrompt(boardTask, "extra context")) && dispatchPrompt(boardTask, "extra context").includes("extra context"), "");
+			check("dispatch: no detail → criteria only", dispatchPrompt(boardTask) === taskPrompt(boardTask), "");
+			check("dispatch: whitespace detail ignored", dispatchPrompt(boardTask, "   ") === taskPrompt(boardTask), "");
+			check("dispatch: halves joined by a blank line", dispatchPrompt(boardTask, "extra").includes("\n\n"), "");
+
+			// ---- assertDispatchable (a failed task stays re-dispatchable) ----
+			// A member killed mid-run used to leave its task failed forever,
+			// deading every task blocked on it (the 2026-10-24 sandbox round hit
+			// exactly this and had to rebuild the chain). Re-dispatching resumes
+			// the member with its context, so "failed" is dispatchable.
+			const gateTask = (status: string, blockedBy: string[] = []) =>
+				({ id: "T1", title: "t", status, blockedBy, assignee: null }) as unknown as TaskRecord;
+			const gateError = (status: string): string => {
+				try {
+					assertDispatchable(gateTask(status, ["T0"]));
+					return "";
+				} catch (err) {
+					return err instanceof Error ? err.message : String(err);
+				}
+			};
+			check("dispatch gate: ready passes", gateError("ready") === "", gateError("ready"));
+			check("dispatch gate: failed is re-dispatchable", gateError("failed") === "", gateError("failed"));
+			for (const s of ["pending", "running", "done"]) {
+				const msg = gateError(s);
+				check(`dispatch gate: ${s} rejected with its blockers`, msg.includes(`"${s}"`) && msg.includes("T0"), msg.slice(0, 120));
+			}
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE16 DONE (all passed)" : `SMOKE16 DONE (${failed}/${results.length} failed)`);

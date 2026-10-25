@@ -7,7 +7,7 @@
 > **参考说明：** 本项目**参考了 DeepSeek Harness 的智能体团队（agent teams）功能**——队长/成员模型、带依赖的任务板、成员间消息均沿袭其设计。本插件是面向 Step Code 的独立实现，与 DeepSeek 无隶属关系。
 
 > **⚠️ 消耗警告：** 每个团队成员都是独立的完整 agent 进程，拥有自己的上下文窗口，
-> 默认使用对话当前模型（各角色预设 effort：`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`）。N 个成员并行干活的成本约为单轮对话的 N 倍，
+> 默认使用对话当前模型（各角色预设 effort：`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`——`models.autonomousEffort` 开启时由队长逐成员选择，预设 effort 一律不生效，详见下方角色表）。N 个成员并行干活的成本约为单轮对话的 N 倍，
 > 长任务累积很快。插件会统计团队累计花费，并在 `cost.warnThreshold`
 > （默认 $1，0 禁用）时告警——请留意 `team_status`，完工后及时 `team_disband`
 > 回收空闲成员。
@@ -70,6 +70,7 @@ skill 或提示词模板资源；编排协议在激活时经请求本地注入�
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.2.0）
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.3.0-preview   # 预览线（最新；latest 绝不因预览版移动）
 ```
 
 **排障——启动时报 "Tool … conflicts with …"**：step 会加载 `packages` 里的每一项，而本插件在同一份配置里只能安装一份。本地路径安装（`step install /path/to/checkout`）与 git 安装（`git:github.com/…`）并存会加载两份 `extensions/index.ts`，六个团队工具名全部冲突、扩展加载失败，step 可能无法启动。修复：只保留一项——对另一项执行 `step remove`（用当初安装时相同的路径或 git 规格）。
@@ -142,7 +143,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 | 均衡 Balanced *（未选择时的回退）* | 在成本与质量间平衡，覆盖勘察、规划、执行、审查 |
 | 性能 Performance | 质量最高、不计成本：多成员、高 effort 深度协作 |
 
-档位是**策略提示词，而非固定阵容**：指令说明策略并给出非绑定示例（如"1 名 scout + 1 名 worker，effort 取 low/medium，拓扑用 star"），具体成员、角色、拓扑与 effort 由队长模型按任务实际需要决定。选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → effort），自由文字需求随请求一并携带。
+档位是**策略提示词，而非固定阵容**：指令说明策略并给出非绑定示例（如"1 名 scout + 1 名 worker，effort 取 low/medium，拓扑用 star"），具体成员、角色、拓扑与 effort 由队长模型按任务实际需要决定。`/topo` 带请求文本时，模型先经一次性规划调用（带进度动画）为该请求起草**实际方案**，Accept / 自定义输入… / Cancel 三选项选择框展示之——批准后以高于一般性策略的优先级注入；自定义输入的文本随请求原样转发。选单第 5 项——**自定义需求**——走一段简短引导（团队规模 → 拓扑 → effort），自由文字需求随请求一并携带。`plan.tier` 钉档时上述选单与确认框一律不弹（两路激活直接应用该档——「别再问」）。
 
 选单行为：选项按语言本地化（英文请求显示 Economic/Fast/Balanced/Performance）；30 秒超时回退 `balanced` 策略；headless/RPC 激活跳过选单直接应用。`plan.tier` 固定为某一策略时，每次激活（`/topo` 或关键词命中）都直接应用、不再询问；`/topo <档位名>` 仍可按次覆盖。
 
@@ -204,7 +205,7 @@ flowchart LR
     M3 --> M2
 ```
 
-**`ring`** — 每成员可通知下一位（末位回环）；消息链长度受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限）：
+**`ring`** — 每成员可通知下一位（末位回环）；消息链长度受 `topology.maxLoopCount` 约束（默认 2，0 = 无上限）——默认值下 3 成员环的闭环跳（r3→r1）必被拒，闭环须由队长中转，确需环内闭环再调高上限：
 
 ```mermaid
 flowchart LR
@@ -319,7 +320,7 @@ reviewer = "high"
 ```bash
 bash sandbox/probe.sh   # RPC 握手探针 → 期望输出 PROBE OK
 
-npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21）
+npm run smoke           # 零 token 冒烟集（test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21,22,23）
                         # hermetic：一次性临时 agentDir；phase5 未设 STEP_API_KEY 时
                         # 显式 SKIP（它会发起一次真实调用）
 ```
@@ -383,10 +384,11 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 
 ## 状态与验证
 
-0.2.0 功能集（发布 tag 待维护者同意后执行）：
+0.3.0-preview 功能集（已打 tag `v0.3.0-preview`——`@latest` 保持在稳定版 v0.2.0 线上，直至 0.3.0 正式发布）：
 
 - **命令与激活**：`/topo`（含方案档位、`/topo review [目标]`、`/topo off`）；插件专属激活关键词 + 旧词强制迁移；三层防误触护栏。
-- **团队方案**（默认关）：经济 / 快速 / 均衡 / 性能四档策略提示词 + 自定义引导流程；`plan.tier` 可固定档位（默认 `"always ask"`）。
+- **团队方案**（默认关）：经济 / 快速 / 均衡 / 性能四档策略提示词 + 自定义引导流程；带请求时 Accept / 自定义输入… / Cancel 三选项选择框展示模型生成的实际方案；`plan.tier` 可固定档位（默认 `"always ask"`——钉档后选单与确认框均不弹，直接应用该档）。
+- **派发韧性**：settle 超时仅在成员 usage 证明该次尝试什么都没做时自动重试一次（绝不重复计费）；spawn/握手失败有界重试；failed 板任务可带上下文重派并随行 `detail` 提示。
 - **成员间消息**：成员经内置 `topo_team_msg` 工具直达通信——无需 bash，拓扑边对所有角色可用。
 - **协议层**（零 token 冒烟探针 `test/smoke/phase*.ts`）：spawn、握手、注册表持久化、任务图、socket 往返、预设与自定义角色加载、topo_team_msg 工具协议。
 - **涉模型路径**（沙箱内用测试 key 验证）：成员回复、同进程上下文记忆、按 session-id 重启恢复、成员间直达消息、队长工具调用端到端链路。
@@ -398,7 +400,7 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 ./sandbox/run.sh
 
 # 2. 在会话中依次让 LLM 执行：
-#    a. "创建一个 reviewer 成员审查 sandbox/project/src/app.ts"
+#    a. "创建一个 reviewer 成员审查 sandbox/project/src/tasks.js"
 #       → 验证 team_create_member + team_send（真实 LLM 回复）
 #    b. "用一句话向它总结你发现的问题"
 #       → 验证成员上下文记忆（同一进程内多轮）

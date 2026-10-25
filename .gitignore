@@ -16,7 +16,7 @@ sandbox/session-log-*.md
 sandbox/logs/
 sandbox/archive/
 # Local build of the pinned Step-Code submodule (see sandbox/build-step.sh)
-sandbox/step-build/
+sandbox/step-build
 # Sandbox test API key (see sandbox/TEST-KEY.md — never commit)
 sandbox/TEST-KEY.md
 

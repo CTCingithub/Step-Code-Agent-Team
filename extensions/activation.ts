@@ -105,7 +105,19 @@ export function ensureToolsAvailable(): void {
 // L3 (headless policy) live in index.ts.
 
 const NEGATION_RE = /(不要|不用|无需|没必要|先不|暂时不|禁止|别用|别提|别去|don'?t|do not|without|no need)/i;
-const META_RE = /(什么是|是什么|如何|怎么|怎样|文档|readme|提到|what is|how to)|\bdocs?\b/i;
+/** Definition questions about the plugin itself ("什么是智能体小队"). */
+const DEFINITION_RE = /(什么是|是什么|啥是|何为|what is|what's)/i;
+/** How-to phrasing — meta only when no request body remains in the sentence. */
+const HOWTO_RE = /(如何|怎么|怎样|how to|how do|how can|how does)/i;
+/** Doc references ("文档里提到智能体小队" / "智能体小队的文档"). */
+const DOCREF_RE = /(文档|readme|docs?|提到|说明文档|mention)/i;
+/** A linker between the keyword and a doc reference ("智能体小队的文档"). */
+const DOC_LINK_RE = /^[\s的里中上述该这那]{1,4}(文档|readme|docs?|说明)/i;
+/** Sentence end — the meta check may look past clause punctuation ("如何用智能体小队，并行审查…"). */
+const SENTENCE_END_RE = /[。！？.!?\n]/;
+/** Filler stripped when deciding whether a how-to sentence has a request body. */
+const HOWTO_FILLER_RE = /[，,。.、！!？?；;：:的了着呢吧呀啊哦嗯和与跟让把被给对向从往用来使用可以能会要想要]/g;
+const EN_STOP_RE = /\b(i|me|my|the|a|an|to|of|for|with|please|it|this|that|use|using)\b/gi;
 const CODEISH_RE = /(`|import |require\(|=>)/;
 /** Clause boundaries: a negation before one of these does not reach the keyword. */
 const CLAUSE_BOUNDARY_RE = /[\n,;:.!?。，；：！？…]/;
@@ -138,7 +150,34 @@ export function keywordMentionSuppressed(text: string, index: number, keywordLen
 		}
 	}
 	if (NEGATION_RE.test(text.slice(negationStart, index))) return true;
-	if (META_RE.test(text.slice(Math.max(0, index - 12), index))) return true;
+	// Meta-discussion veto (sentence-anchored). The old fixed 12-char window
+	// suppressed ordinary usage requests — "如何用智能体小队修复测试" has 如何
+	// right before the keyword. Now: definition questions and doc references
+	// are always meta; a how-to question is meta only when removing the
+	// how-to words and filler leaves no request body ("how to use the topo
+	// team" is meta; "如何用智能体小队修复测试" is a request and activates).
+	let sentenceEnd = text.length;
+	for (let i = index + keywordLength; i < text.length; i++) {
+		if (SENTENCE_END_RE.test(text[i])) {
+			sentenceEnd = i;
+			break;
+		}
+	}
+	const before = text.slice(negationStart, index);
+	const after = text.slice(index + keywordLength, sentenceEnd);
+	if (DEFINITION_RE.test(before)) return true;
+	if (DOCREF_RE.test(before)) return true;
+	if (DOC_LINK_RE.test(after)) return true;
+	if (HOWTO_RE.test(before) || HOWTO_RE.test(after)) {
+		// No \s in the filler class: stripping spaces first would glue English
+		// stop words ("use the" → "usethe") past their  boundaries.
+		const body = `${before}${after}`
+			.replace(HOWTO_RE, "")
+			.replace(HOWTO_FILLER_RE, "")
+			.replace(EN_STOP_RE, "")
+			.trim();
+		if (body === "") return true;
+	}
 	const lineStart = text.lastIndexOf("\n", index - 1) + 1;
 	const lineEnd = text.indexOf("\n", index);
 	if (CODEISH_RE.test(text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd))) return true;

@@ -489,4 +489,254 @@
 
 **最终状态**：`origin/main` = `f8b9a9e`（发布提交 + 脚本修复）；`origin/latest` = `06bc06c`（v0.2.0 发布提交）；`origin/develop` = `3fa45b8`；tag `v0.2.0` = 36a9dc8；工作树干净。第 1 条四项内容全部交付。
 
+### 48. 改进计划 P1 执行：分支切换与官方接口对齐三项（plan-86）
+
+**用户 prompt**：「请切换到develop分支，按照改进计划开始优化项目，并进行测试」（承接官方接口替代性审计的改进计划）
+
+**思路**：按审计计划的 P1 三项执行——P1-1/P1-2 工具描述边界声明（防模型混用团队系统与官方内置系统）、P1-3 config.ts 官方符号消费类型化；P2/P3 维持（P2 卡上游导出面、P3 明确不做）。分支按约定从 main 切新 develop。
+
+**工作**：① **分支**：本地旧 develop（3fa45b8，唯一提交已 cherry-pick 在 main）删除，从 main（cdbe5c2，发布后状态）切新 develop；远程旧 develop 替换（零损失）。② **周期基线**：`.gitignore` 修复（`sandbox/step-build/`→`sandbox/step-build`，构建产物实为符号链接、尾斜杠模式漏匹配）；submodule bump `b5dbed9`→`81e79bc`（35 个上游提交；附重建+新二进制冒烟全绿+4 个 LLM 探针+11 面冲突审计的验证记录）。③ **P1-1/P1-2**（tools.ts）：team_task 描述新增 Scope 行（团队共享板 vs 官方 `task_*` 个人 checklist，两系统独立不同步）；team_create_member 描述新增边界行——**执行中修正审计误判**：官方 subagent 的 agent 发现目录与我方 preset 目录实际重合（user 层同 `<agentDir>/agents`、项目层同 `<project>/.stepcode/agents`、同 frontmatter 形状），表述改为"同一文件可同时支撑 team 角色与 subagent agent，但两系统独立解析、状态不共享"。④ **P1-3**（config.ts）：4 处 `stepCore as Record<string, unknown>` 防御性 cast → `StepCoreConfigExports` 接口（4 个可选符号）+ 单次 Partial 断言；运行时守卫与回退保留（旧版 step 缺导出仍工作），我方拼写错误今后可被编译期捕获——submodule 本地 tsc 5.9.3（strict、映射真实 dist/index.d.ts）零错误。
+
+**验证**：全量冒烟门全绿（18 phase + manifest + 7 live + orphan-check）；tsc 对 config.ts 全导入图零错误。提交 b17c98e/92c7ab2/86ee984/81de343，推送 develop。
+
+### 49. UI 动画/配置审计/文档更新/综合检查四项轮（plan-87）
+
+**用户 prompt**：「1.请把'正在生成本次请求的实际团队方案'界面，改为根据用户发送 prompt 的语言的'正在生成智能体拓扑协作方案'，并尝试添加 UI 动画（尽量用 Step Code 现成的）；2.请检查现有的配置选项，是否有和官方重合，或者多余/错误/过时的内容；3.请更新优化所有文档；4.请检查并优化其他内容」
+
+**工作**：① **item 1（index.ts）**：方案生成等待期 UI 改造——notify 文案改为按 detectLang 的"正在生成智能体拓扑协作方案…"/"Generating the agent topology collaboration plan…"；新增 `startPlanProgress`——经 `ctx.ui.setWidget`（字符串数组形式）实现 braille 帧循环动画（120ms），**刻意不 import pi-tui**（会触发扩展双加载工具名冲突，见 run-smoke.sh 的 STANDALONE_PHASES 注记）；守卫按官方文档用 `mode === "tui"`（widget 属终端专用 UI，rpc/json/print 降级为单条 notify，无 widget 槽同样降级）；调用点 try/finally 确保动画必被清除。② **item 2（配置审计，只读）**：30+ 选项逐项消费核查——全部有真实读取点，无死选项/无多余项；与官方无名称冲突（节命名空间隔离），概念邻居（官方 MAX_RUNNING_LANES=8、LANE_IDLE_TTL_MS=10min 硬编码）分属不同子系统；无错误项（区间校验一致）；发现 4 处文档漂移移交 item 3。③ **item 3（文档，15 处双语）**：CONFIGURATION(_CN)——timeoutMs 注释补"覆盖成员整个回合含嵌套中继"、retries 改"仅对尚未启动的派发重试"（timeout 批漂移）、plan 行补实际方案确认流（plan-112 漂移）、Notes 增"管辖范围"边界声明；README(_CN) 方案节补实际方案流、CN 特性行同步；MANUAL-TESTING(_CN) 确认框注补进度动画；TEST-PLAN(_CN) 还原段补当前 11/12 基线。④ **item 4（类型硬化，9 处真实缺陷跨 6 文件）**：index.ts——`type Lang` 改从 plan.ts 导入（原导入 forward.ts 未导出符号）、context handler 按官方 ContextEvent/ContextEventResult 重写+structuredClone（联合类型恒等）、sessionFile 两处随签名放宽消解；members.ts/rpc-client.ts——usage 局部结构类型修正（cost 实为 `{total}` 对象而非 number）；rpc-client.ts——timer 定值分析；team-server.ts——闭包丢失 narrowing 处边界重断言；tools.ts——edges 映射隐式 any 显式化；render.ts——本地 Theme 结构替身改用官方 `@step-harness/coding-agent` 的 Theme（12 个渲染签名不匹配消解）、renderTeamCall 形参放宽 `object`+局部窄化（空 schema 的 `{}` 满足逆变）。tsc 全图错误 19→2，剩余 2 个均为环境伪影：context 重载的 **submodule dist 构建偏移**（源码有重载、dist 无，运行时用宿主实际 API 一直正常）；`Type.Optional` 双参的 **typebox@1.3.7 映射伪影**。
+
+**关键实证（负载匹配对照实验）**：本轮曾将 `Type.Optional` 改为单参内嵌 description 的"对齐"写法，随后满载冒烟 3 连败（phase9×2、phase18，均为"member handshake timeout"）；经 stash 基线、单项回退、**同负载复跑**（1.52 vs 失败时 1.48）三重对照，确认该写法与握手超时相关（机制未明——成员进程不加载 tools.ts，疑为宿主 typebox  schema 生成路径的隐性差异），**已回退为主机验证过的双参形式**；tsc 对该写法报的 TS2554 系映射到旧版 typebox 的伪影。教训：类型"对齐"不能脱离宿主实证，冒烟门（含满载时序）是唯一裁判。
+
+**遗留**：P1-4（activation.ts META_RE 对普通"如何/怎么"请求的过度抑制）仍为唯一已知遗留项——需 clause 锚定匹配+phase6 回归用例，属行为变更，建议专轮处理。
+
+**验证**：全量冒烟门全绿（18 phase + manifest + 7 live + orphan-check，回退终态）；双语文档 15 处更新经行数/锚点断言落盘。
+
+
 **验证**：发布前 develop 冒烟门全绿；release.sh 内冒烟门全绿（18 phase + manifest + 7 live + orphan-check）；hermetic 安装激活实测通过；远程 refs（main/latest/develop/v0.2.0）逐一核验指向正确。
+
+### 50. 遗留问题修复与测试流程更新（plan-88）
+
+**用户 prompt**：「1.请不要管可疑进程问题，解决前4项代码遗留问题；2.请检查测试流程是否需要修改更新；3.请检查更新优化文档」（性能档团队方案：Fixer-A/B 竞速修代码、TestLead 查测试流程、DocLead 更文档、Chief 终审；实际由队长直接实施+explore 子代理审计）
+
+**思路**：T1 四项代码遗留逐项修复并配回归；T2 派只读 explore 子代理系统审计测试流程（16 项发现），按严重度实施低风险项；T3 文档收尾。
+
+**工作**：① **P1-4 修复**（activation.ts）：元问题守卫从"关键词前 12 字符窗口命中即抑"改为**句子锚定**——定义问句（什么是/是什么/what is）与文档引用（文档/readme/提到，含"关键词+的+文档"链接形态）恒判元问题；how-to 问句仅在剔除 how-to 词与填充词后无请求主体时判元问题。"如何用智能体小队修复测试"类普通用法请求自此正常激活（此前必被误抑、headless 静默单干）；"how to use the topo team" 纯用法问句仍抑。phase6 新增 8 条回归用例；中途修复 filler 正则含 \s 致英文停用词黏连（"use the"→"usethe" 越过 \b 边界）的缺陷。② **Optional 写法警示**（tools.ts）：双参 Type.Optional 处加注释——单参内嵌写法经负载匹配对照实验（3 败 vs 2 胜）证实与成员握手超时相关，防未来"清理"改回。③ **runner 抖动硬化**（test/run-smoke.sh）：per-phase run+verdict 提取为 run_phase_attempt 函数，失败后以新 session id 有界重试一次——单个负载抖动（成员握手 grazing 15s 预算）不再 fail 整个套件与 release 门。④ **tsc 伪影处置**（index.ts）：context hook 经官方 ContextEvent 类型化窄 cast 注册（消除 submodule dist 构建偏移导致的重载缺失）；synthetic 消息内联进返回字面量获得上下文类型。tsc 全图错误 19→1（剩余 1 个为 typebox@1.3.7 映射伪影）。⑤ **T2 测试流程更新**（explore 审计 16 项发现）：HIGH#1 runner 重试由③实现；HIGH#2 createMember spawn 路径与 startTask 的重试策略不一致——产品侧变更，列为建议待专轮。MEDIUM——phase 清单 17→18 并补 phase22 行（TESTING/README/TEST-PLAN 双语 6 处）；Layer C 调用块补 mkdir -p sessions 与 --approval-mode auto；补 cfg-* fixture 重指向说明（消除 phase11 假绿）；sandbox/config.toml 陈旧 180000→600000。LOW——cfg-misc/cfg-on 死键 autonomousThinking→autonomousEffort；cfg-misc 移除 cwd 相对断链的 storage 覆盖；smoke-phase4 错误文案指向 sandbox/TEST-KEY.md；archive-round.sh git 命令路径限定；TESTING restore 表补 archive-first 警告；MANUAL-TESTING coverage 摘要补 phase22 自愈、确认框注补"仅交互式"限定；README 双语 Status 行更新为已发布；TESTING §0 补 OPT_OUT_PHASES/probe.sh/archive-round.sh 指引。
+
+**验证**：全量冒烟门全绿（18 phase + manifest + 7 live + orphan-check，runner 重构后正常路径实测）；phase6 八条新用例全过；tsc 19→1；双语编辑均经锚点断言落盘。
+
+**遗留建议**：members.ts createMember/ensureLive 与 startTask 重试策略不一致（握手类失败可安全重试——ensureLive 对已存在记录幂等），需配套探针后专轮实施；storage.dir 相对路径按 cwd 解析的 footgun 仍在（CONFIGURATION 未承诺相对路径语义，fixture 覆盖已移除）。
+
+### 51. 手动测试覆盖核查与文档收尾（plan-89）
+
+**用户 prompt**：「请检查需要我手动测试的流程是否都已经在 @docs/MANUAL-TESTING.md 和 @docs/MANUAL-TESTING_CN.md 中更新，然后给我更新HANDOFF和DEVELOPMENT HISTORY文档，我即将压缩上下文」
+
+**思路**：以"用户需要手动测试什么"为清单逐项核对双语 MANUAL-TESTING 覆盖，补齐缺口，再更新两份交接文档。
+
+**工作**：① **覆盖核查**：M1–M6（§1–§6 各节+总览行）、K1–K7（场景表+live 覆盖）、实际方案确认框+spinner（场景 5+确认框注）、P1-4 激活守卫、会话日志（§7）逐一比对。② **补齐 4 类缺口**（双语同步，锚点断言落盘）：状态总览 2026-10-20→2026-10-23（第 1/4/5 项改记 2026-10-22 用户轮结果——推翻此前"第三跳/maxLoopCount 拒绝未实测"的记录；新增第 7 项"实际方案确认框+生成 spinner 首验"、第 8 项"L1 守卫交互确认"）；场景表新增场景 7（L1 护栏可粘贴验证：`如何用智能体小队并行审查这个仓库？` 激活 vs `什么是智能体小队？` 抑制）、场景 8（K6 自定义角色：`sandbox/agent/agents/quickfix.md` frontmatter + 信任项目层）、场景 9（K7 旧关键词迁移一次性提示）；总览新增第 9/10 项映射 K6/K7。③ **HANDOFF 刷新**：§5 手动测试项更新为 9 场景清单与优先级（M3/场景 5 优先）。
+
+**验证**：全部编辑经锚点断言落盘；双语场景数（各 9）与总览行数（各 10 项+译文行）一致；结论——需要用户手动测试的流程已全部在双语文档中。
+
+### 52. 确认界面 Accept 化、spinner 去省略号与沙箱日志优化（plan-90）
+
+**用户 prompt**：「1."正在生成智能体拓扑协作方案..."的界面，删掉省略号；2.出具拓扑协作方案问yes或no的界面，改为Accept或者让用户自行输入信息；3.已经做了一次sandbox测试，请分析日志文件sandbox/logs/session-log-2026-10-23.md，并进行修改优化」+ 确认性能档实际方案（6 成员 mesh）后「刚刚出现错误，请继续」。
+
+**思路**：按批准方案组建 6 成员团队（总指挥·林/诊断师·陈/溯源员·赵/修复师·王/验证官·孙/记录官·周，mesh）分推进：日志分析 → 根因与方案 → 实施验证。派发在负载 6+ 的机器上屡发 settle 超时（7 次派发 3 次首发失败；王在被杀前已完成绝大部分实现，余项由队长补全），验证由队长亲跑 + lin 末轮审查。
+
+**工作**：① **溯源（赵）**：会话日志五条异常逐条实据判定——唯一真实代码缺陷是 `team_task start` 丢弃 detail（tools.ts:325 第三参硬编码 undefined，agg 未收到三方清单的铁证）；`Tool team_disband/ not found` 是模型发射带尾斜杠的畸形工具名（注册名正确，同会话 9 次成功调用反证，非插件缺陷）；R1/R2/R3 命名拒绝/8 人上限/maxLoopCount=2 限流均为既定护栏；ring 第三跳被限流暴露唯一真正误导用户的文档缺口（用户 Prompt 5 预期"巡游长度=3，在上限内"与默认值矛盾）；**"刚刚出现错误"在所有可读会话记录中无实迹**（不猜测）。② **诊断（陈）**：宿主 confirm 无自定义按钮标签（types.ts:185 选项仅 mirror/signal/timeout/overlay/examples/searchable），"Accept"只能用 select 实现；**RPC 模式 hasUI===true**（runner.ts:518 + rpc-mode.ts:337）使 select 超时→undefined 的陷阱真实可达，必须 `picked === acceptLabel` 严格相等映射；推荐方案 A（select 双选项），自由输入列为后续轮次。③ **实施**：index.ts——select 双选项 + 严格相等映射、spinner 双语去省略号；tools.ts——start 透传 detail 并与 taskPrompt 合并（team_send 路径与无 detail 默认行为不动）；forward.ts——任务编号从 1 起的提示；member-messaging.ts——三处返回补宿主必填的 details（全导入图 tsc 暴露的既存类型契约违背，纯元数据零行为变化）。④ **文档双语 10 文件**：MANUAL-TESTING(_CN)（Accept/Cancel 措辞、ring 闭环警示、建团前 team_status 核对）、README(_CN)（措辞 + ring 段）、CONFIGURATION(_CN)、TEST-PLAN(_CN)（K2/M3）、PROTOCOL(_CN)（detail 参数语义、成员命名规则）。⑤ **验证**：冒烟门全绿；全 extensions 导入图 tsc 仅剩 1 个既知 typebox 映射伪影；lin 末轮审查 6/6 PASS（2 处 LOW 措辞 nit 当轮修掉）。
+
+**验证**：冒烟 exit 0（18 phase + manifest + 7 live + orphan-check）；tsc 1 伪影；grep 确认省略号与方案确认语境的 yes/no 措辞零残留（唯一命中为禁改的历史行）；提交 53b6944/e776f63 + 收尾提交，演示项目未提交改动未被裹挟。
+
+**遗留**：①"允许用户自行输入信息"（input 路径 + note 注入链路）列为后续独立轮次——需先定 note 语义与专属 TUI 验证；② 派发在负载下的 settle 抖动——建议后续为 team_send/team_task start 增加与冒烟 runner 同构的有界重试；③ M3 手动 TUI 目验（Accept/取消 选择框 + spinner）仍待用户执行。
+
+### 53. 方案确认框倒计时取消（plan-91）
+
+**用户 prompt**：「出具拓扑协作方案的界面，在用户按下任意键后，取消倒计时」
+
+**思路**：先查宿主机制再定插件侧可行解。宿主 select 的倒计时是 TUI 组件（apps/cli/src/ui/view/dialogs/countdown-timer.ts + extension-selector.ts:103-113）：`handleInput` 处理按键但完全不碰计时器，仅 `dispose()`（对话框关闭）才停——**宿主不支持按键取消倒计时**，插件也无法给对话框挂键盘监听（ExtensionUIDialogOptions 仅 mirror/signal/timeout/overlay/examples/searchable）。宿主侧正解是 handleInput 里 dispose 计时器，但 sandbox/step 是固定 pin 的子模块、插件须对已发布宿主工作，故不走宿主修改。
+
+**工作**：`extensions/index.ts` confirmChoice 的 select 改**模式分流**——TUI（`ctx.mode === "tui"`，倒计时可见且扰人的场景）不传 timeout：无倒计时、对话框等待用户决定（Esc/取消仍落拒绝，`picked === acceptLabel` 严格相等映射不变）；RPC（hasUI===true 可达、无可见倒计时）保留 30s deadline 作无应答兜底。文档同步：TEST-PLAN(_CN) M3 行、MANUAL-TESTING(_CN) 场景 5 注意列去掉"30s 倒计时"表述；README(_CN) 的 30s 措辞指档位选单回退（行为未动）故保留。
+
+**验证**：tsc 仅剩既知 typebox 伪影；冒烟门全绿（confirmChoice 交互路径冒烟零覆盖，本轮仅改 opts 传参）；待用户场景 5 目验（无倒计时 + Esc 取消 + Accept 组队）。
+
+**遗留（宿主缺口，建议上游）**：extension-selector.ts 的 handleInput 应在任意按键时 `this.countdown?.dispose()` 并复位标题——这才是"按键取消倒计时"的完整实现；插件侧对已发布宿主只能以不设超时规避。
+
+### 54. typebox Optional 单参化：「伪影」定性的修正（plan-92）
+
+**用户 prompt**：「请给我解释typebox映射伪影问题，并给出一个可能的解决方案」+ 确认经济档单成员方案（Lin）+「我选择最推荐方案，请给我进行修改」。
+
+**思路**：先实证再定性。查证：子模块 coding-agent 与 cli 的 package.json 均 pin `typebox: 1.3.7`（store 唯一版本；本仓库无 typebox 依赖，扩展的 import 在宿主进程内解析）——**paths 映射一直是对的**；1.3.7 的 d.ts 声明 `Optional(type)` 单参，运行时 `AddOptional(type)` 不读第二参；node 实测双参调用得 `{"type":"string"}`（描述丢失）、单参内嵌得 `{"type":"string","description":"..."}`（描述落地）。
+
+**工作**：① **定性修正**——TS2554 不是"映射伪影"，而是对真实依赖版本的真实类型错误；更实质的是两参写法的第二参数被静默丢弃，`reason` 参数的描述从未进入工具 schema（tools.ts 里"宿主两种写法都接受"的注释说法不准确，JS 不报错≠参数被使用）。② **实施方案 1**（用户确认的最推荐方案）：`Type.Optional(Type.String({ description: "Failure reason for fail" }))`——类型正确且描述真正送达模型，与同文件 detail 参数现有写法一致；注释重写说明单参缘由及 entry-49 相关性的负载混淆本质（成员根本不加载 tools.ts）。③ **执行方式**：经济档单成员（Lin，low，star）；成员派发两度 settle 超时（负载抖动），改动由成员在被杀前落盘、验证与提交由队长完成。
+
+**验证**：tsc 全导入图**归零**（此前唯一错误即本处）；冒烟门低负载（2.37）连跑两轮均 exit 0、all phases passed（复核 entry-49 握手相关性）；git diff 仅 extensions/tools.ts 一处，演示项目未提交改动未裹挟。
+
+**遗留**：无。typebox 类型门自此全绿；entry 49/50 中"伪影/宿主两种写法都接受"的表述以本条为准（历史条目按惯例不回改）。
+
+### 55. 测试覆盖加固：schema 契约守卫与两个可测性重构（plan-93）
+
+**用户 prompt**：确认经济档单成员实际方案（Solo·全栈执行，custom 单节点，T1 修改优化→T2 更新文档）后「请开始修改优化，并更新文档」。
+
+**思路**：落实三路只读审查轮结论中的全部零 token 测试优化项——补"交互路径与工具 schema 零覆盖"的三个缺口，并把两处内联决策提为纯函数使其可断言。
+
+**工作**：① **新 phase23（standalone）**：假 pi 捕获 `registerTeamTools` 注册的六个团队工具，断言每个工具与每个顶层参数均有非空 description——早些时候 typebox 双参致 `reason` 描述被运行时静默丢弃的事件正可被这条断言捕获（整类回归守卫）；另断言各工具参数名册与 `parameters.type==="object"`。② **两个纯函数提取**：`tasks.ts` 增 `dispatchPrompt(task, startDetail?)`（验收标准+start 时 detail 合并，trim 防空白 detail），tools.ts start 分支改用它；`plan.ts` 增 `planConfirmDialogOpts(mode, timeoutMs)`（TUI→无 timeout 即无倒计时、其他模式保留 30s 兜底），index.ts confirmChoice 改用它。③ **既有 phase 补断言**：phase16 四条 dispatchPrompt、phase21 两条 planConfirmDialogOpts、phase3 两条 `details.to` 回显。④ **runner**：phase23 注册 STANDALONE；首发失败行改 "attempt1 FAILED … retrying once"（消除重试成功后残留裸 FAILED 行对 CI 的误导）。⑤ **文档**：TESTING(_CN) phase23 行+清单注释、README(_CN) 清单补 22/23、TEST-PLAN(_CN) R4 行+尾句修正（K1/K4/K5/K8 已覆盖）、HANDOFF 同步。⑥ **执行方式**：Solo 派发 settle 超时（负载 10）但全部改动在被杀前落盘且与清单逐条吻合，验证与提交由队长完成；**cfg-misc 补节建议经查证搁置**——该 fixture 全仓无 live 消费方（仅文档引用），补节无验证载体。
+
+**验证**：`bash -n` 通过；phase23/16/21/3 单跑全过（runner verdict 要求 DONE 标记+零 FAIL，排除"没跑也算过"）；全量冒烟门 exit 0、**19 phase 全绿**（phase23: OK fails=0）；tsc 零错误；diff 逐行复核与清单一致。
+
+**遗留**：cfg-misc 的"full-section coverage"表述待校正或接线探针；createMember 重试、storage.dir、自由输入链路、settle 抖动兜底维持 deferred（见 HANDOFF §4）。
+
+### 56. 沙箱日志（10-24）修理：任务板 failed 重派与预设提示（plan-94）
+
+**用户 prompt**：「1.确认页面，改为只有Accept和Cancel两个选项，不要写多余文本；2.我已经完成了一轮沙箱测试，请阅读日志 sandbox/logs/session-log-2026-10-24.md，并进行修理与优化」
+
+**思路**：对日志（修复链 + 并行审查 + ring 巡回三轮）的异常逐条定性——演示项目审查发现（M1-M4/m1-m11）与 README 陈旧文案按既往裁定不出插件范围；settle 超时为负载性环境因；真正插件侧三件事：任务板 failed 卡死、预设可发现性、topo_team_msg 自报不可靠。分析员派发 settle 超时（负载 10），队长自读全日志接管分析。
+
+**工作**：① **确认框精简**（请求 1）：Accept/取消 选项去掉「· 按此方案组建 / form this team」后缀，两语言均为精确 `Accept`/`Cancel`。② **任务板 failed 可重派**（日志阶段 2/3 两度卡死 + 队长多轮同症）：`assertDispatchable(task)` 提取至 tasks.ts（ready/failed 可派发；pending/running/done 抛错并带 blockers），members.ts 两处守卫改调它；team_task 工具描述注明 failed 可重派；phase16 补 6 条门禁断言。③ **未知 role 静默回退修复**（日志「四轮创建均回退 worker」的 footgun——审查员因此未获只读白名单）：显式传入但无预设匹配时 create 结果追加提示（可用预设清单 + 各层目录说明）；CONFIGURATION(_CN) 明示预设随包发布且可被 agentDir/信任项目层遮蔽。④ **topo_team_msg 自报不可靠**（三方汇报互相矛盾、R1 将已投递消息误判「无应答」）：契约与 180s 回复超时均无缺陷，属模型侧误读——MANUAL-TESTING(_CN) 新增「派发异常与恢复」运维块（settle 恢复、failed 重派、以会话 JSONL 核实投递、板 id 以 create 返回为准、沙箱预设可用）。
+
+**验证**：tsc 零错误；phase16/2/18/1 单跑全过（含 6 条新门禁断言与 role:「smoke」提示路径）；全量冒烟门 exit 0 全绿。
+
+**遗留**：演示项目 M1-M4/m1-m11 修复（sandbox/project，按既往裁定待用户明确要求）；settle 抖动兜底（team_send 重试的幂等/harvest 策略）维持 deferred；其余见 HANDOFF §4。
+
+### 57. 全面修改与优化轮：spawn 重试、respawn 陷阱与文档销账（plan-95）
+
+**用户 prompt**：确认均衡档实际方案（Scout/Planner/Executor/Reviewer 四成员，planner 中枢 custom 拓扑，T1 调研→T2 计划→T3 实施→T4 审查）后「请创建合理的计划后，开始对项目进行全面的修改与优化」。
+
+**思路**：按批准的四阶段流水线执行——只读成员（Scout/Planner/Reviewer）不碰文件，实施归 Executor、提交与记录归队长。
+
+**工作**：① **T1 调研（Scout）**：A1–A4/B1/B2/C/E 全部确证（附 文件:行号）；B1 实为「表述过时」（phase9 已迁 mktemp 自建 fixture，cfg-misc 无 live 消费方）；**D（演示项目修复）结论「不做」**——restore-project.sh 每轮从 project-pristine/ 复位，修复易失，保留修复须同步改快照而会摧毁种子 bug 演示前提；恢复 B3（P2-8a/b/c/e、P2-9）细节。**重要交叉验证**：Scout 报告同轮 7 个 live 检查全红，队长在干净环境复跑**全绿**——确证「live 检查在成员进程受限环境下假阴性」，教训写入 MANUAL-TESTING 运维块。② **T2 计划（Planner）**：6 处编辑（E1 HANDOFF 计数、E2 CONFIGURATION 双语 storage.dir 绝对路径、E3 TEST-PLAN 双语 cfg-misc 标签、E4 A1 代码、E5 phase1 零 token 回归、E6 restore 卫生）。③ **T3 实施（Executor）**：E2–E5 全部落盘（派发 settle 超时被杀前完成，与计划逐条吻合），队长补跑验证。④ **T4 审查（Reviewer）PASS**：范围零越界、逐项对照逐字吻合、tsc 与 phase1/2/18 复跑全绿；并发现**既有隐患**——augmentDispatchError 追加的 "will respawn with its context resumed" 命中旧内联正则 /spawn/ 的 respawn 子串，settle 超时被 startTaskLocked 判为可重试（重复计费陷阱）。⑤ **队长修复该隐患**：正则改词边界（"spawn step ENOENT" 仍命中、"respawn" 不再命中），phase1 fatal 集补增强错误断言；node 快验 + phase1 + tsc + 全量冒烟门全绿。⑥ E1/E6 由队长执行（HANDOFF §5-1 计数、restore 复位演示项目且日志自动归档）；提交 fc29a94。
+
+**验证**：tsc 零错误；phase1 单跑 OK（10 条判定断言 + 3 个打桩场景）；phase2/18 复跑 OK；全量冒烟门 exit 0（19 phase + manifest + 7 live + orphan-check）。
+
+**遗留（不变）**：A3 自由输入链路、A4 settle 抖动兜底设计、B2 端到端交互覆盖、B3 各项（P2-8c 低成本优先）、E 合 main 前带 key 复跑 phase4/10/11/12；D 演示项目修复（待用户明确退役种子 bug 才做）。
+
+### 58. 剩余项确认与全量测试轮：LLM 探针 22 项全绿（plan-96）
+
+**用户 prompt**：「请给我罗列，现在确认需要修改或优化的内容。如果没有，请开始测试，直至只剩下需要我手动测试的内容」
+
+**思路**：先逐项取证确认剩余修改/优化清单，再进入测试阶段，驱动至「只剩手动项」。
+
+**工作**：① **清单确认**（全部附新取证）：A3 自由输入链路（index.ts:400/448 仍返 boolean、无 note 回流）、A4 settle 兜底（members.ts:658 sendMessage 无重试环）、B2 端到端覆盖（test/ 对 confirmChoice 仅 phase21 纯函数断言）、B3（phase7 无工具层 topology scoping、phase3 无 formatTeammateReply socket E2E、tasks 配置→消费方联动断言缺位、P2-8e 需 key、P2-9 待原审计细节）——四项均为 deferred-by-design 增强，无阻塞、无回归。② **测试阶段**：全量冒烟门 exit 0（19 phase + manifest + 7 live + orphan-check）；**LLM 探针带 key 全绿**——phase4 4/4（回复/上下文/重 spawn 恢复/shim 消息）、phase10 Branch A（cfg-conc）3/3、phase10 Branch B（cfg-deadlock）2/2（maxConcurrent=1 下嵌套消息无死锁）、phase11（cfg-deep2）4/4（深度 2 链 LEAF-OK 回传）、phase12（默认）9/9（oneshot/任务链/unicode/SIGKILL 恢复/流式）。③ **测试中发现并处置一个假绿陷阱**：全局 config.toml 位于 agentDir 旁边且优先级高于 fixture 的 settings.json——本地 `sandbox/config.toml`（gitignored）静默遮蔽 cfg-* fixture，phase10 首跑因此走了 Branch A（报 maxConcurrent=5 而非 fixture 的 1）；以临时 agentDir 隔离后 Branch B 正确执行。TESTING(_CN) Layer C 补该警示与隔离手法。
+
+**验证**：冒烟门全绿；探针合计 22 项断言全过（均在隔离 agentDir 下执行，排除本地配置干扰）。
+
+**遗留**：A3/A4（待用户设计决策）、B2/B3（测试加固排期）；**至此自动化可测内容全部验证通过，剩余全部为用户手动测试项**（场景 5/7/8/9、M1、M2）与 develop→main 合并拍板。
+
+### 59. 测试流程文档审阅与更新（plan-97）
+
+**用户 prompt**：「请审阅所有文档，检查测试流程是否需要更新」。
+
+**思路**：两名只读审查员并行（自动化流程线 / 人工测试线）+ 队长机械一致性核查（phase 计数、fixture 名、命令块跨文档比对），合并发现后统一实施。
+
+**工作**：① **审阅发现**：流程线 7 项必须更新（TESTING_CN 的 Layer C 命令块缺 `mkdir -p` 与 `--approval-mode auto`、TEST-PLAN A1 仍写 17 phase、runner 已实现行为（attempt1 重试/240s rc=124/orphan 轮询/manifest）无文档、覆盖表 phase3/16/21 三行滞后、§I 基线表只列 phase1–8、K8 尾句轮次过时、sandbox README 的 cfg-* 表述失准）；人工线 4 项（MANUAL-TESTING Step 1 写 18 phase、Step 0 与 §0 表"restore 删 logs"表述与自动归档现状不符、README_CN 陈旧 `src/app.ts` 路径、K8 尾句同）。② **实施 16 处双语更新**：TESTING(_CN)——Layer C 命令块对齐英文版、§2 新增"runner 行为与通过标准"段（磁盘派生清单、attempt1 单次重试、rc=124 hang 判定、manifest+7 live+15s orphan 轮询、**live 检查须队长自身进程跑**的假阴性警示）、覆盖表三行补 details.to / dispatchPrompt+assertDispatchable / planConfirmDialogOpts；TEST-PLAN(_CN)——A1 改 19 phase 并注明磁盘派生、§I 表后补全清单指向、K8 尾句改为 2026-10-25 重跑 22/22；MANUAL-TESTING(_CN)——Step 1 改 19 phase、Step 0 与 §0 表修正 restore 自动归档表述（archive-round 仍应跑——保留 session JSONL 与团队注册表）、状态总览补 2026-10-25 自动化基线行、头部补 phase23 schema 守卫、运维块补"spawn/handshake 类失败自动重试"与"failed 重派时 detail 追加"两条；sandbox/README(_CN)——cfg-* 表标注活跃三名（cfg-conc/cfg-deadlock/cfg-deep2）与本地配置遮蔽陷阱；README_CN——app.ts→tasks.js。③ **机械核查确认**：DEVELOPMENT-HISTORY 中的"17 phase"均为历史记录（禁改）；README/TESTING 冒烟命令块已同步 19 phase；cfg-misc 残留仅存于有意保留的历史行。
+
+**验证**：纯文档改动（零代码变更，无需冒烟门）；关键行抽查全部落盘、双语成对。
+
+**遗留（低优先建议项）**：sandbox README 增加测试小节（19 phase/派生/OPT_OUT/manifest/live/orphan + archive 先于 restore）；Layer C 通过标准补 phase10 B 支 60s 无死锁与 phase11 须实跑 4/4 两项；零 token 自动化轮次的 R 行记录规约。
+
+### 60. 手动测试 prompt 去混用：斜杠命令与提示词触发二选一（plan-98）
+
+**用户 prompt**：「请注意，在手动测试的prompt中，斜杠命令和提示词触发二选一，不要像现在这样都使用」。
+
+**思路**：用户指出 §5 演示三幕的 prompt 同时以 `/topo` 开头又含关键词措辞（EN 的 "Use the topo team to…"、CN 的「请用智能体小队…」）——命令路径与关键词路径混在一条 prompt 里，两条都测不干净。
+
+**工作**：① 三幕 prompt 保留 `/topo` 命令路径（与 2026-10-18/19 实测记录一致），剥去关键词措辞，共 6 处（双语）；② runbook 第 2 步新增「两条激活路径——每条 prompt 只用其一，勿混用」说明（双语），明确 §5 走命令路径、§1 步骤 1 与场景 7/8/9 测关键词路径，防止复复发；③ grep 复检确认两份文档中无 `/topo` 与关键词同现的 prompt。
+
+**验证**：复检零混用；纯文档改动（无代码变更，无需冒烟门）。
+
+**遗留**：无（此项完结）。
+
+### 61. 交接状态整理：剩余项盘点（plan-99）
+
+**用户 prompt**：「请修改HANDOFF和DEVELOPMENT HISTORY文档，然后告诉我现在还有哪些内容等待修改优化。若没有，请告诉我还有哪些手动测试需要我做」。
+
+**思路**：全部轮次完成后对交接文档做一次状态整理——修正滞后项、补齐缺失轮次记录、把剩余项盘点成一张确定清单。
+
+**工作**：① **HANDOFF §1**：日期 2026-10-23→2026-10-25；总览补入缺失的 plan-96/97/98 三个轮次 bullet，轮次表述改十轮→十一轮（补「手动测试 prompt 去混用」）；提交计数按 `git rev-list --count` 实测改 30→31。② **§4**：storage.dir 条目更新（文档半已于 plan-95 完成，仅剩行为半）；补入 plan-97 审阅遗留的 3 项低优先文档建议。③ **§5**：合并项计数 25→31，探针建议更新为「plan-96 已全量重跑且其后无代码改动，合入前无需重跑；若有新代码改动则须重跑」。④ **盘点结论**：等待修改/优化的内容仅剩 **4 项 deferred-by-design 增强**（A3 自由输入链路、A4 settle 抖动兜底、B2 确认路径端到端覆盖、B3 测试加固五项）+ **3 项低优先文档建议** + **1 项上游缺口**（宿主 select 倒计时不响应按键）；无阻塞、无回归、无已知缺陷；自动化可测内容已全部验证通过（冒烟 19 phase + manifest + 7 live + orphan-check、探针 22/22、tsc 零错误）。
+
+**验证**：纯文档整理（无代码变更，无需冒烟门）；计数以 git rev-list --count 实测为准。
+
+**遗留**：见 HANDOFF §4/§5——A3/A4 待用户设计决策、B2/B3 排期、3 项低优先文档建议；其余全部为用户手动测试项（场景 5/7/8/9、M1、M2）与 develop→main 合并拍板。
+
+### 62. 性能档竞速轮：自由输入落地、settle 守卫重试与确认路径端到端覆盖（plan-100）
+
+**用户 prompt**：确认性能档实际方案（顾竞/林拓/沈锐/苏衡/白验 五成员，custom 星型+mesh，T1–T7）后「请创建合理的计划后做：1.输入文本的需求是用户写的，我不确定，直接发送给模型；2.事项2到5都要修改优化；3.调整相关文档与测试内容」。
+
+**思路**：按批准的五成员七任务流水线执行。**派发机制本轮持续故障**（T2–T4 连续 6 次 settle 超时，空闲成员重派亦失败——与负载无关的机制性退化），按既定模式队长接管执行；甲乙竞速由队长双案自评定夺。
+
+**工作**：① **T1（顾竞，第 3 次派发成功）**：A3 语义定案——确认框三选项（Accept / 自定义输入… / Cancel）；**用户输入文本原样直达模型**（trim 后以 `\n\n` 并入 effectiveRequest，经 sendUserMessage 发出，不作解释不结构化）；空提交=按原样接受、Esc/超时=取消、headless 隐式同意无 note、RPC 保留 30s 且 input 复用无倒计时 opts；activeChoice 条件改 `!effectiveRequest`。提交 de4854e。② **T2/T3（事项2-3，队长接管，双案自评）**：**A4 采用甲案（usage 守卫重试）**——settle 超时后仅当成员 usage.turns 增量为 0（usage 服务端持久化，证明该次尝试什么都没做）才重发一次，经 `dispatchWithSettleGuard` 覆盖 team_send 与 team_task start；有真实工作的超时不重试（保留既有排除语义与 harvest 指引，防重复计费）。乙案（harvest 提示重试）评估后弃置（改变结果语义、边界更多）。**B2 采用新 phase24 端到端探针**（standalone）：假 pi 捕获 registerCommand/sendUserMessage/context 钩子 + 脚本化 ctx（select/input 队列），驱动完整确认链；plan.enabled 经 resetConfigCache 钩子切换并还原（注意全局 config.toml 位于 agentDir 旁边——首版写错位置致静默失败，复跑修正）。③ **T4（事项4-5，队长接管）**：P2-8c（phase16 配置→消费方联动：nextTaskId 满板报错文案与 truncateOutput 默认 cap 均取自 `[tasks]`）、P2-8a（phase23 team_set_topology 工具层 schema 契约）；**P2-8b/8e/9 留档**（分别需 live 成员空回复回合/需 key/原审计细节不可恢复）。3 项低优先文档建议全部落地（sandbox/README 测试小节、TESTING Layer C 通过标准补 cfg-deadlock 60s 与 phase11 须实跑 4/4、TEST-PLAN R 行记录规约）。④ **文档调整**：MANUAL-TESTING(_CN) 三选项与自定义输入语义+场景 5 改 `/topo <请求>`+settle 自动重试注记；README(_CN) 方案段；TEST-PLAN(_CN) K2/M3 行。
+
+**验证**：tsc 零错误；phase16/23/24 单跑全过（phase24 六断言：Accept 原样转发+方案注入 / 自定义输入 note 原样合并 / 空输入按原样接受 / Cancel 仅激活注入）；全量冒烟门 exit 0（**20 phase** + manifest + 7 live + orphan-check）。
+
+**遗留**：P2-8b/8e/9（原因见上）；竞速机制因派发故障未实际发生（队长双案自评代替）；A3 三选项与 A4 重试的真实 TUI 目验并入 M3 手动项。
+
+### 63. 探针复跑与交接整理：合入就绪状态确认（plan-101）
+
+**用户 prompt**：「请修改HANDOFF和DEVELOPMENT HISTORY文档，然后告诉我现在还有哪些内容等待修改优化。若没有，请告诉我还有哪些手动测试需要我做」。
+
+**思路**：plan-100 后有 3 个代码提交（A3/A4/B2），HANDOFF §5-1 的「探针无需重跑」表述已失效——先带 key 复跑探针让「合入就绪」重新成立，再整理交接文档并盘点剩余项。
+
+**工作**：① **LLM 探针全量复跑**（每条均在隔离 agentDir 下执行，避开本地 sandbox/config.toml 对 fixture 的遮蔽）：phase4 4/4、phase10 A 支（cfg-conc）3/3、B 支（cfg-deadlock）2/2 无死锁、phase11（cfg-deep2）4/4、phase12 9/9——**合计 22/22 断言全过**，且运行在含 A3 自由输入与 A4 usage 守卫重试的代码上（派发路径被 phase4/10/12 实际走过）。② **HANDOFF 整理**：§1 计数 35→37、总览补 plan-99/100 两个缺失轮次 bullet、§5-1 计数 31→37 且探针结论更新为「plan-101 复跑通过、合入前无需重跑（除非再有代码改动）」、§5-2 手动项描述更新为三选项确认框+自定义输入。③ **TEST-PLAN R10 行**记录本次复跑。
+
+**验证**：探针 22/22（隔离环境）；冒烟门 20 phase 全绿、tsc 零错误（plan-100 时状态，本轮无代码改动）。
+
+**遗留（最终盘点，无其他代码/文档待改项）**：① **P2-8b/8e/9** 三项测试加固（分别需 live 成员空回复回合 / 需 key / 原审计细节不可恢复）；② **有真实工作后 settle 超时的自动 harvest**（A4 只自动化了零用量场景，手动恢复有效）；③ **宿主 select 倒计时不响应按键**（上游缺口，插件已规避）；④ **演示项目 M1-M4/m9/m10**（决议不做——restore 每轮复位、保留修复会摧毁种子 bug 演示前提）；⑤ **storage.dir 行为半**（改按 agentDir 解析，需决策+探针）。**剩余全部为用户手动测试项**（场景 5 三选项确认框+自定义输入首验、场景 7/8/9、M1、M2、建议 M5）与 develop→main 合并拍板。
+
+### 64. 沙箱实测日志驱动轮：拓扑渲染、免重发回执、方案拓扑自洽（plan-102）
+
+**用户 prompt**：「我已经完成了沙箱测试，请阅读分析 @sandbox/logs/session-log-2026-10-25.md ，然后进行修改优化」（团队激活态）。
+
+**思路**：用户按 MANUAL-TESTING runbook 完成一轮完整沙箱测试（16 条 prompt：§1 TUI 走查 + §4 ring 巡回 + §5 三幕演示 + 两轮并行审查；异常均原文引用，日志质量高）。按组队判据组 2 人只读小队分头取证——**派发机制连续 3 次 settle 超时失败**（成员零用量被 fail-fast 杀死，与用户日志记录的基础设施现象同源），按既定模式队长接管执行。日志证据已 archive-round.sh 归档至 `sandbox/archive/20261025-194159-20261025-manual-round/`。
+
+**取证与修复**（5 项，均有日志原文佐证）：
+- **B 拓扑表残留已解散成员**（阶段 10：解散 r1–r3 后重声明 pipeline，输出仍列 r1/r2/r3 "→ (no direct peers)"）：根因 `describeTopology` 渲染**全部**注册表成员，而 disband 只 prune 边、保留 dead 记录供 session 恢复。修复：只渲染**参与边的成员**（topology.ts），无匹配时回退边列表直述。
+- **C 首发送被误判"无回执"而重发**（阶段 9 异常 1：r1 自述"工具返回 No result provided，已重发"）：取证确认唯一返回路径已有占位符守卫（`formatTeammateReply` 把空轮次转为明确送达回执）——**非缺陷**，成员看到的是回执、其自述为转述；但回执未说清"勿重发"，成员重发导致队友重复工作。修复：回执补 "Delivery is asserted, so do not resend"。
+- **D 档位方案与拓扑矛盾**（阶段 12 异常 4：R1–R4 方案承诺 R4「直接收集」，star 下无成员间消息，队长被迫人工中转三份报告）：根因是规划调用指令未要求方案与拓扑自洽。修复：`teamPlanPrompt` 双语加第 4 条约束——star 下成员间没有任何直连消息，汇总/协调角色只能经队长中转收集。
+- **E "leader 非消息目标"的成员侧困惑**（阶段 9：r3 声称「逐条完整终稿由 r3 直接交回队长」，该通道不存在）：成员侧协议（members.ts:524-526）早已成文，缺口在**队长侧激活协议**未要求接力链任务书写明终稿回传路径。修复：`teamActivationInstruction` 第 2 条补 relay 规则（终稿沿调用链回传、leader 不是消息目标）。
+- **A 预设 effort 与文档不符**（阶段 1 备注：README 称 scout=low、实际返回 high）：取证确认为**设计行为**——`models.autonomousEffort=true` 时预设 effort 一律失效（resolveEffort）；ROLES/CONFIGURATION 已成文，缺口仅在 README 顶部消耗警告 Callout。修复：双语补注。
+- **F 同名重建提示**（阶段 12：「同名重建会恢复旧 session 并忽略新参数」）：`resumeIgnoredParams` 已上报冲突参数，但无冲突时不告知"已恢复"。修复：create 结果无条件说明恢复事实。
+
+**测试**：phase14 新增 describeTopology 3 断言（只渲染边参与者 / star 无成员行 / ring 列全参与者）、phase16 补免重发断言、phase21 补激活协议 relay 规则 + 规划提示词拓扑自洽 4 断言；三 phase 单跑全过，tsc 零错误，全量冒烟门 exit 0（20 phase + manifest + 7 live + orphan-check）。
+
+**遗留**：演示项目两轮并行审查的 18/20 条 findings 与演示 README 陈旧（load() fail-loud 描述过期）按既定决议只记录不修（restore 每轮复位、保留修复会摧毁种子 bug 演示前提）；用户轮次遗留的 4 个 idle 成员由用户下轮收尾时解散；**自定义输入路径仍未人工实测**（本轮三档均走 Accept 确认）。
+
+### 65. 手动场景收口轮：五场景 live 驱动验证与文档补齐（plan-103）
+
+**用户 prompt**：（团队激活 + 性能档方案确认）「请修改手动测试的相关文档，把场景789等必须手动测试的内容也加入进去，然后检查更新所有文档、做还没做完的测试」。
+
+**思路**：按批准的 5 成员性能档方案执行（场景分析师/文档专家A/文档专家B 竞速/质量审查员/测试工程师，custom 拓扑 2 边表达"双路竞速→审查接续"）。派发机制仍不稳定（并行 3 路全超时、test-engineer 三次零用量），T1/T2A 派发成功、其余由队长接管；**竞速改择优审查**（A 稿已落盘，B 再改同文件会互相覆盖）。
+
+**工作**：① **T1（scenario-analyst）**：产出必测清单——7 项必做（5a 自定义输入、5b 固定档、7 L1、8 K6、9 K7、M1、M2）+ 条件/可选项 + 10 项降级依据（K1/K4/K5/K8、Accept 路径、ring、三幕、TUI 走查均已被自动化或上轮实测覆盖）。② **T2A（doc-writer-a）**：MANUAL-TESTING(_CN) 新增 §8–§11（场景 5a/5b/7/8/9 明细节，六要素：测什么/前置/可复制粘贴/预期/自动化覆盖/为何人工），场景表明细列改指新节，状态总览标注 M1/M2 必做。③ **T4（队长接管）——五个 live 探针全部 PASS**：新 `sandbox/probe-remaining-manual.mjs`（脚本化 RPC 客户端应答宿主对话框 select/input/confirm——rpc-mode.ts:137-151 的对话框承诺可应答是本轮关键发现）——**5a**：档位选单→spinner+模型起草方案→确认框选「自定义输入…」→input，用户文本**原样**（空行追加）进入转发的 user 消息且模型随即 team_create_member；**5b**：`plan.tier="fast"` 钉档后选单不出现（负向断言）、确认框仍出现；**7**：元问题零团队动作、how-to 带主体激活且 team_create_member 真实可用；**8**：frontmatter `tools/effort`（autonomousEffort=false）落到真实 spawn、成员自报白名单含 topo_team_msg；**9**：迁移提示每会话恰好一次。④ **文档同步**：TESTING(_CN) 探针表登记 5 行、sandbox/README(_CN) 探针清单、TEST-PLAN(_CN) K2/K3/K6/K7 行标注 live 结论；MANUAL-TESTING 双语补 live 验证段；**补文档缺口**：关键词激活路径默认先弹 L2 确认框（`confirmBeforeActivate`）——runbook §1 步骤 1 与场景 7 此前未提及。
+
+**验证**：五个探针子命令实跑全 PASS；全量冒烟门 exit 0（20 phase）。**自查纠错**：门禁曾在 phase6/9 失败 7–9 项——根因是队长早前取证脚本把 config.toml 写到了 `/tmp/config.toml`，而 runner 的 mktemp agentDir 的全局配置正是 `dirname(agentDir)/config.toml`= `/tmp/config.toml`，遮蔽了所有 fixture；清理后全绿（探针文件头已补该陷阱警示）。
+
+**遗留**：M1（真实 install/remove，写用户 settings 须本人执行）、M2（信任弹窗）、M5（英文译文审阅）为纯人工项；5b 关键词路径、K6 项目级角色层各留一轮人工抽查；TUI 像素/按键观感（M3/M4）仍属人工。**原 7 项必测中 5 项的语义已验证，剩余全部是不可自动化的交互/UX 项。**
+
+### 66. 钉档一致性修复：命令路径与关键词路径统一「别再问」（plan-104）
+
+**用户 prompt**：（性能档方案确认 + 团队激活）「我做了sandbox测试，日志记录是 sandbox/logs/session-log-2026-10-25.md 和 -parallel-review.md 和 -2301.md。请阅读分析日志后开始修改优化，此外：修改沙箱环境config.toml后，斜杠命令方式依旧会询问方案，prompt方式直接进入fast档位」。
+
+**思路**：按批准的 4 成员性能档方案执行（裁剪为 2 名只读成员——LogAnalyst-B 的日志已由队长亲读、CodeOptimizer 由队长单写，偏离已记录）。派发仍不稳定（log-analyst-a 两次零用量被杀），日志分析由队长完成；rootcause-diagnostician 一次成功，交付完整根因+边界枚举+修复方案。
+
+**日志分析结论**：两份新日志均**无插件缺陷**——parallel-review 轮是干净的 star 三轮并行审查（三次派发一次成功、零异常、12/12），findings 全属演示项目代码（save 非原子写、CLI parseInt 宽松解析、load 归一化、测试缺口、README 过期、缺 engines、sk- 前缀误报）；2301 轮走宿主 subagent（未用插件团队工具），quickfix frontmatter（tools/effort）被正确应用。唯一注意项：parallel-review 轮队长曾 `cat secret-sample.txt`（刻意入库的护栏夹具、非真实凭证）——用户操作注意项，非插件缺陷。
+
+**修复（钉档语义不一致）**：根因——命令路径 `runTeamCommand`（index.ts）的钉档分支只跳过 `pickChoice` 选单，其后的规划调用（`generateTeamPlan`）与三选项确认（`confirmChoice`）对一切 tier 类选择无条件执行；而关键词路径 `applyStandingTier` 直接注入 tierInstruction、不过问。**README/CONFIGURATION 早已文档化「applies it without asking」——是代码没跟上文档**。修复：新增 `pinnedTier` 来源标志（仅钉档分支置真），同时跳过规划调用与确认框；显式 `/topo <档位>` 与选单路径**保留**确认（实际方案预览 + 自由输入通道在该场景价值最高）。**本次反转了 plan-103 的刻意决策**（当时 probe 5b 注释写明"命令路径钉档仍留确认框"）——已在向用户的报告中点明该语义变更。
+
+**验证**：phase24 新增钉档零 token 场景（2 断言：无任何对话框——脚本化 ctx 遇对话框即抛 unexpected select；fast 档指令注入）全过；probe 5b 断言翻转（从"确认框必须出现"改为双负向：选单与确认框均不出现）后 live 复跑 PASS；tsc 零错误；全量冒烟门 exit 0（20 phase）。
+
+**边界（diagnostician 枚举，未改）**：`/topo custom` 优先级高于钉档（customArg 分支在前）——显式走自定义流程时钉档被绕过，属合理；headless 下 `/topo custom` 回退 balanced 而非钉档——既有边界，留档。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

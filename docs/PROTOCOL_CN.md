@@ -124,9 +124,9 @@ shim 从 spawn env 取身份与地址：`STEPCODE_TEAM_SOCK`、`STEPCODE_TEAM_ME
 
 | 工具 | 关键参数 | 行为 |
 |---|---|---|
-| `team_create_member` | `name` 必填；`role`/`model`/`effort`/`tools`/`systemPrompt` 可选 | 幂等创建/恢复；角色命中 `agents/<role>.md` 预设；显式参数优先于预设；模型解析见 CONFIGURATION.md `models` 节；**恢复时传入的配置参数被忽略，结果文本逐项列明** |
+| `team_create_member` | `name` 必填（小写字母/数字/`-`/`_`，字母开头，≤32 字符）；`role`/`model`/`effort`/`tools`/`systemPrompt` 可选 | 幂等创建/恢复；角色命中 `agents/<role>.md` 预设；显式参数优先于预设；模型解析见 CONFIGURATION.md `models` 节；**恢复时传入的配置参数被忽略，结果文本逐项列明** |
 | `team_send` | `member`、`message` 必填；`taskId` 或 `mode` 可选 | 等待完整回复；同成员串行、跨成员并行；`taskId` 以任务方式派发（running→done，失败重试 `dispatch.retries` 次）；`mode:"oneshot"` 无状态一次性进程；`taskId` 与 oneshot 同传即抛错；`dispatch.timeoutMs` 覆盖整条嵌套接力链，超时错误提示接力可能仍在途并列出成员名册 |
-| `team_task` | `action`（create/start/complete/fail/list）+ `id`/`title`/`blockedBy`/`assignee`/`result`/`reason` | DAG 任务板；终态任务不可再 complete/fail |
+| `team_task` | `action`（create/start/complete/fail/list）+ `id`/`title`/`detail`/`blockedBy`/`assignee`/`result`/`reason` | DAG 任务板；终态任务不可再 complete/fail；create 时的 `detail` 为任务验收标准，start 时的 `detail` 追加到派发 prompt |
 | `team_set_topology` | `shape`（star/pipeline/mesh/ring/custom）+ `edges`（custom 必填）+ `members`（将 pipeline/mesh/ring 限定为当前成员的子集；默认全部） | 建成员后、派活前声明拓扑；未知成员/自环抛错；每个成员都内置 `topo_team_msg` 工具（无需 bash），边对所有角色可用——被拒时会列出发送方的可用队友 |
 | `team_disband` | `member` 可选 | 省略即解散全队；session 保留，重建即续聊 |
 | `team_status` | 无 | 成员状态/用量 + 任务板 + 累计花费（超阈值附告警，阈值 0 禁用） |

@@ -28,8 +28,8 @@ import {
 	saveRegistry,
 	teamDir,
 } from "./registry.ts";
-import { type AgentPreset, extensionEntryPath, loadPreset, memberMessagingEntryPath } from "./presets.ts";
-import { nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
+import { type AgentPreset, extensionEntryPath, loadPreset, loadPresets, memberMessagingEntryPath } from "./presets.ts";
+import { assertDispatchable, nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
 import {
 	DEFAULT_EFFORT,
 	type PluginConfig,
@@ -141,6 +141,34 @@ export function augmentDispatchError(err: unknown, members: readonly MemberRecor
 	return new Error(note, { cause: err });
 }
 
+/**
+ * Retryable spawn-path failures: only errors proving the work never started
+ * (spawn / handshake). A settle timeout or mid-run exit may mean the work is
+ * done — retrying duplicates it. Shared by startTaskLocked's dispatch retry
+ * and createMemberLocked's ensureLive retry so both stay isomorphic.
+ */
+export function isRetryableSpawnError(err: unknown): boolean {
+	const msg = err instanceof Error ? err.message : String(err);
+	// Word boundaries matter: augmentDispatchError appends "will respawn with
+	// its context resumed" to settle-timeout / mid-run-exit errors, and a bare
+	// /spawn/ matches inside "respawn" — retrying exactly the failures whose
+	// work may already be done (the duplicate-billing trap this policy exists
+	// to prevent). Genuine spawn failures still match ("spawn step ENOENT").
+	return /\baborted before start\b|\bhandshake\b|\bspawn\b|\bfailed to start\b/i.test(msg);
+}
+
+/**
+ * Settle-timeout failures: the leader's wait for the member to settle expired.
+ * Unlike spawn/handshake errors they say nothing about whether the work
+ * started — the member may have finished (its usage is persisted server-side
+ * either way) — so they are retried only when the usage delta proves nothing
+ * ran (see dispatchWithSettleGuard).
+ */
+export function isSettleTimeoutError(err: unknown): boolean {
+	const msg = err instanceof Error ? err.message : String(err);
+	return /timeout waiting for member to settle/i.test(msg);
+}
+
 /** Depth of this process in the team tree (the leader session is 0). */
 export function currentDepth(): number {
 	const raw = process.env.STEPCODE_TEAM_DEPTH;
@@ -154,7 +182,7 @@ function sanitizeTeamId(sessionId: string): string {
 }
 
 /** Team id a session file maps to (null for ephemeral sessions without a file). */
-export function teamIdForSession(sessionFile: string | null): string | null {
+export function teamIdForSession(sessionFile: string | null | undefined): string | null {
 	if (!sessionFile) return null;
 	const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
 	// Session files are named "<timestamp>_<sessionId>.jsonl"; strip the ts prefix.
@@ -201,7 +229,7 @@ export class TeamManager {
 	) {}
 
 	/** Load (or create) the team bound to the leader session. */
-	static forSession(sessionFile: string | null, cwd: string, projectTrusted = false): TeamManager {
+	static forSession(sessionFile: string | null | undefined, cwd: string, projectTrusted = false): TeamManager {
 		let teamId: string;
 		if (sessionFile) {
 			const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
@@ -322,7 +350,10 @@ export class TeamManager {
 		return reaped;
 	}
 
-	async createMember(params: CreateMemberParams, leaderModel?: string): Promise<{ member: MemberRecord; created: boolean }> {
+	async createMember(
+		params: CreateMemberParams,
+		leaderModel?: string,
+	): Promise<{ member: MemberRecord; created: boolean; note?: string }> {
 		const name = params.name.trim();
 		if (!MEMBER_NAME_RE.test(name)) {
 			throw new Error(
@@ -349,11 +380,11 @@ export class TeamManager {
 		name: string,
 		params: CreateMemberParams,
 		leaderModel?: string,
-	): Promise<{ member: MemberRecord; created: boolean }> {
+	): Promise<{ member: MemberRecord; created: boolean; note?: string }> {
 		const existing = this.findMember(name);
 		if (existing) {
 			// Idempotent: ensure it is alive, but never duplicate.
-			await this.ensureLive(existing);
+			await this.ensureLiveWithRetry(existing);
 			return { member: { ...existing }, created: false };
 		}
 
@@ -372,6 +403,17 @@ export class TeamManager {
 		const role = params.role?.trim() || config.members.defaultRole;
 		const preset = loadPreset(role, this.cwd, this.projectTrusted);
 		const systemPrompt = params.systemPrompt?.trim() || preset?.systemPrompt;
+		// An explicitly requested role that matches no preset used to fall back
+		// silently — the member quietly ran without the preset's prompt, tools,
+		// or effort (the 2026-10-24 sandbox round lost its read-only reviewer
+		// guardrails that way). Surface it in the create result instead.
+		const presetNote =
+			params.role?.trim() && !preset
+				? `role "${role}" matched no preset — using explicit params/defaults. Presets ship with the package (agents/<role>.md) and can be shadowed by <agentDir>/agents/ and a trusted project's .stepcode/agents/. Available: ${loadPresets(this.cwd, this.projectTrusted)
+						.map((p) => p.name)
+						.sort()
+						.join(", ") || "none"}.`
+				: undefined;
 
 		const record: MemberRecord = {
 			name,
@@ -397,8 +439,8 @@ export class TeamManager {
 		this.reg.members.push(record);
 		this.save();
 
-		await this.ensureLive(record);
-		return { member: { ...record }, created: true };
+		await this.ensureLiveWithRetry(record);
+		return { member: { ...record }, created: true, note: presetNote };
 	}
 
 	/**
@@ -566,6 +608,26 @@ export class TeamManager {
 		return run;
 	}
 
+	/**
+	 * ensureLive with the same bounded, spawn/handshake-only retry as
+	 * startTaskLocked: a failed handshake is transient, and re-spawning is
+	 * safe — the record and its deterministic session id already exist, so a
+	 * retry resumes instead of duplicating. Attempts come from
+	 * dispatch.retries, exactly like dispatch.
+	 */
+	private async ensureLiveWithRetry(member: MemberRecord): Promise<MemberRpc> {
+		let lastError: unknown;
+		for (let attempt = 0; attempt <= getConfig().dispatch.retries; attempt++) {
+			try {
+				return await this.ensureLive(member);
+			} catch (err) {
+				lastError = err;
+				if (!isRetryableSpawnError(err)) break;
+			}
+		}
+		throw lastError instanceof Error ? lastError : new Error(String(lastError));
+	}
+
 	private async doSpawn(member: MemberRecord): Promise<MemberRpc> {
 		fs.mkdirSync(memberSessionsDir(this.reg.teamId), { recursive: true });
 		let rpc: MemberRpc | undefined;
@@ -618,12 +680,34 @@ export class TeamManager {
 		const prev = this.queues.get(name) ?? Promise.resolve();
 		const run = prev
 			.catch(() => {})
-			.then(() => this.dispatch(member, message, options))
+			.then(() => this.dispatchWithSettleGuard(member, message, options))
 			.finally(() => {
 				if (this.queues.get(name) === run) this.queues.delete(name);
 			});
 		this.queues.set(name, run);
 		return run;
+	}
+
+	/**
+	 * Bounded safety net for settle jitter — covers team_send and team_task
+	 * start alike. A settle timeout is retried once, but only when the
+	 * member's usage proves the failed attempt did nothing: turns are
+	 * persisted server-side even when the leader never sees the reply, so a
+	 * zero delta means re-sending cannot duplicate work or billing. A settle
+	 * timeout after real work is never retried — the member's resumed context
+	 * holds the result, and re-sending would duplicate it (the duplicate-
+	 * billing trap startTaskLocked's retry loop warns about).
+	 */
+	private async dispatchWithSettleGuard(member: MemberRecord, message: string, options: SendOptions): Promise<SendResult> {
+		const before = member.usage.turns;
+		try {
+			return await this.dispatch(member, message, options);
+		} catch (err) {
+			if (options.signal?.aborted || !isSettleTimeoutError(err)) throw err;
+			const after = this.findMember(member.name)?.usage.turns ?? before;
+			if (after > before) throw err;
+			return await this.dispatch(member, message, options);
+		}
 	}
 
 	private async dispatch(member: MemberRecord, message: string, options: SendOptions = {}): Promise<SendResult> {
@@ -735,10 +819,7 @@ export class TeamManager {
 	): Promise<{ task: TaskRecord; text: string }> {
 		this.assertTopologyDeclared();
 		const task = this.findTask(id);
-		if (task.status !== "ready") {
-			const blockers = task.blockedBy.join(", ") || "none";
-			throw new Error(`Task "${id}" is "${task.status}", not "ready" (blocked by: ${blockers}).`);
-		}
+		assertDispatchable(task);
 		const target = assignee?.trim() || task.assignee;
 		if (!target) throw new Error(`Task "${id}" has no assignee. Pass assignee or set it when creating the task.`);
 		if (!this.findMember(target)) {
@@ -757,10 +838,7 @@ export class TeamManager {
 		options: SendOptions,
 	): Promise<{ task: TaskRecord; text: string }> {
 		const task = this.findTask(id);
-		if (task.status !== "ready") {
-			const blockers = task.blockedBy.join(", ") || "none";
-			throw new Error(`Task "${id}" is "${task.status}", not "ready" (blocked by: ${blockers}).`);
-		}
+		assertDispatchable(task);
 		task.assignee = target;
 		task.status = "running";
 		this.save();
@@ -787,8 +865,7 @@ export class TeamManager {
 				// may already have done the work — re-sending the same prompt to
 				// the respawned member duplicates it (its resumed context holds
 				// the result), which is what made timeouts recur in a loop.
-				const msg = err instanceof Error ? err.message : String(err);
-				if (!/aborted before start|handshake|spawn|failed to start/i.test(msg)) break;
+				if (!isRetryableSpawnError(err)) break;
 			}
 		}
 		const aborted = options.signal?.aborted === true;
@@ -1027,7 +1104,7 @@ export class TeamManager {
 					return;
 				}
 				const msg = event.message as
-					| { role?: string; content?: unknown[]; usage?: Record<string, number> }
+					| { role?: string; content?: unknown[]; usage?: { input?: number; output?: number; cost?: { total?: number } } }
 					| undefined;
 				if (event.type === "message_end" && msg?.role === "assistant") {
 					usage.turns += 1;

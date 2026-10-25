@@ -215,3 +215,15 @@ export interface CustomPicks {
 	shape?: TopologyShape;
 	effort?: EffortLevel;
 }
+
+/**
+ * Dialog options for the plan-confirmation select. The host's countdown is a
+ * TUI-only component that ignores keypresses — it runs to expiry and can
+ * dismiss the dialog while the user is still reading the plan — and the
+ * plugin cannot hook the dialog's keys. The TUI therefore gets no timeout at
+ * all: no countdown, and the dialog waits for the decision. Other modes keep
+ * a deadline as a no-answer guard.
+ */
+export function planConfirmDialogOpts(mode: string, timeoutMs: number): { timeout: number } | undefined {
+	return mode === "tui" ? undefined : { timeout: timeoutMs };
+}

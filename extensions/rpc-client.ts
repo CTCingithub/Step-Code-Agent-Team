@@ -176,7 +176,12 @@ export class MemberRpc {
 				break;
 			case "message_end": {
 				const msg = event.message as
-					| { role?: string; content?: unknown[]; usage?: Record<string, number>; model?: string }
+					| {
+							role?: string;
+							content?: unknown[];
+							usage?: { input?: number; output?: number; cost?: { total?: number } };
+							model?: string;
+						}
 					| undefined;
 				if (msg?.role === "assistant") {
 					this.usage.turns += 1;
@@ -385,12 +390,12 @@ export class MemberRpc {
 		if (this.closed) return;
 		if (!this.proc.killed) this.proc.kill("SIGTERM");
 		const close = this.waitForClose();
-		let timer: NodeJS.Timeout;
+		let timer: NodeJS.Timeout | undefined;
 		const timeout = new Promise<void>((resolve) => {
 			timer = setTimeout(resolve, timeoutMs);
 		});
 		await Promise.race([close.promise, timeout]);
-		clearTimeout(timer);
+		if (timer) clearTimeout(timer);
 		close.cancel();
 		if (!this.closed) this.proc.kill("SIGKILL");
 	}

@@ -19,6 +19,7 @@ import type { PluginConfig } from "./config.ts";
 import { getConfig, VALID_EFFORT } from "./config.ts";
 import { isActive } from "./activation.ts";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
+import { dispatchPrompt } from "./tasks.ts";
 
 type GetManager = (ctx: ExtensionContext) => TeamManager;
 
@@ -80,6 +81,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"topo_team_msg tool (no bash needed — read-only presets can use their topology edges too).",
 			"After creating the members, design the communication topology with team_set_topology before dispatching work.",
 			"Keep teams small (2-4 members) and give each member a distinct focus.",
+			"Role presets (bundled, <agentDir>/agents/, trusted <project>/.stepcode/agents/) are this plugin's own system; the built-in subagent extension reads the same directories with the same frontmatter shape independently — one file can back both a team role and a subagent agent, but the two systems keep separate state and never share it.",
 		].join(" "),
 		parameters: Type.Object({
 			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
@@ -112,7 +114,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			const manager = getManager(ctx);
 			assertActive();
 			const leaderModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
-			const { member, created } = await manager.createMember(
+			const { member, created, note } = await manager.createMember(
 				{
 					name: params.name,
 					role: params.role,
@@ -128,15 +130,17 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 				`Model: ${member.model ?? "leader default"}; effort: ${member.effort ?? "default"}; tools: ${member.tools?.join(", ") ?? "all"}.`,
 				`Status: ${member.status}. Use team_send to give it work.`,
 			];
+			if (note) lines.push(note);
 			if (!created) {
-				// Resume is idempotent: the existing record wins, so say which
-				// passed params were dropped instead of implying a reconfiguration.
+				// Resume is idempotent: the existing record wins. Say so
+				// unconditionally (even when nothing conflicted) and name the
+				// dropped params instead of implying a reconfiguration happened.
 				const ignored = resumeIgnoredParams(params, member);
-				if (ignored.length > 0) {
-					lines.push(
-						`Note: "${member.name}" already existed and was resumed; the passed ${ignored.join(", ")} ${ignored.length > 1 ? "were" : "was"} ignored (existing configuration kept). Disband the member and recreate it to change its configuration.`,
-					);
-				}
+				lines.push(
+					ignored.length > 0
+						? `Note: "${member.name}" already existed and was resumed; the passed ${ignored.join(", ")} ${ignored.length > 1 ? "were" : "was"} ignored (existing configuration kept). Disband the member and recreate it to change its configuration.`
+						: `Note: "${member.name}" already existed and was resumed with its existing configuration. Disband the member and recreate it to change its configuration.`,
+				);
 			}
 			return {
 				content: [
@@ -243,11 +247,12 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		description: [
 			"Manage the team task board.",
 			"create: add a task (optionally with blockedBy dependencies and an assignee).",
-			"start: dispatch a ready task to its assignee (or the given one) and wait for completion.",
+			"start: dispatch a ready task — or re-dispatch a failed one (its member resumes with context) — to its assignee (or the given one) and wait for completion.",
 			"complete / fail: set a task's terminal status manually (result / reason recorded).",
 			"list: show the board.",
 			"A task is ready when every task in blockedBy is done; cycles are rejected.",
 			"Prefer blockedBy dependencies over member-to-member messages.",
+			"Scope: this is the team's shared board — tasks have assignees and live with the team, not the session; for your own in-session checklist use the built-in task_* tools. The two systems are separate and do not sync.",
 		].join(" "),
 		parameters: Type.Object({
 			action: StringEnum(["create", "start", "complete", "fail", "list"] as const, {
@@ -255,11 +260,19 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			}),
 			id: Type.Optional(Type.String({ description: "Task id (required for start/complete/fail)" })),
 			title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
-			detail: Type.Optional(Type.String({ description: "Task detail / acceptance criteria" })),
+			detail: Type.Optional(
+				Type.String({ description: "Task detail / acceptance criteria — on start it is appended to the dispatch prompt" }),
+			),
 			blockedBy: Type.Optional(Type.Array(Type.String(), { description: "Task ids this task depends on" })),
 			assignee: Type.Optional(Type.String({ description: "Member name for start, or default assignee for create" })),
 			result: Type.Optional(Type.String({ description: "Result text for complete" })),
-			reason: Type.Optional(Type.String(), { description: "Failure reason for fail" }),
+			// Single-argument form: the pinned typebox (1.3.7) declares
+			// Optional(schema) with one parameter — a second options argument is
+			// both a TS2554 error and silently dropped at runtime, so the
+			// description never reached the tool schema. Attaching it to the
+			// inner String keeps it in the schema. (The entry-49 handshake
+			// correlation was load-confounded: members never load this file.)
+			reason: Type.Optional(Type.String({ description: "Failure reason for fail" })),
 		}),
 		renderCall: renderTeamCall("team_task"),
 		renderResult: renderTeamResult("team_task"),
@@ -316,7 +329,12 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 								})
 						: undefined,
 				};
-				const { task, text } = await manager.startTask(params.id, params.assignee, undefined, options);
+				let dispatchMessage: string | undefined;
+				if (params.detail) {
+					const board = manager.snapshot().tasks.find((t) => t.id === params.id);
+					dispatchMessage = board ? dispatchPrompt(board, params.detail) : params.detail;
+				}
+				const { task, text } = await manager.startTask(params.id, params.assignee, dispatchMessage, options);
 				return {
 					content: [
 						{
@@ -385,7 +403,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const manager = getManager(ctx);
 			assertActive();
-			const edges = params.edges?.map((e) => [e.from, e.to] as [string, string]);
+			const edges = params.edges?.map((e: { from: string; to: string }) => [e.from, e.to] as [string, string]);
 			const topology = manager.setTopology(params.shape, edges, params.members);
 			const lines = ["Topology set:", manager.describeTopology()];
 			return {

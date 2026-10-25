@@ -57,6 +57,7 @@ export function formatTeammateReply(to: string, reply: string | undefined): stri
 	if (text === "" || text === EMPTY_TURN_PLACEHOLDER) {
 		return (
 			`Delivered to ${to}. Their turn produced no text reply — the answer does not flow back through this tool. ` +
+			"Delivery is asserted, so do not resend (a resend makes the teammate repeat the work). " +
 			"Put everything the team needs in your own final report; the leader collects member output (team_send / team_task)."
 		);
 	}
@@ -153,9 +154,10 @@ export default function (pi: ExtensionAPI) {
 							},
 						],
 						isError: true,
+						details: { to: params.to },
 					};
 				}
-				return { content: [{ type: "text", text: formatTeammateReply(params.to, res.reply) }] };
+				return { content: [{ type: "text", text: formatTeammateReply(params.to, res.reply) }], details: { to: params.to } };
 			}
 			// Policy rejections (topology) are actionable — the server lists the
 			// allowed teammates. Infrastructure failures get the "don't
@@ -166,6 +168,7 @@ export default function (pi: ExtensionAPI) {
 			return {
 				content: [{ type: "text", text: `topo_team_msg to "${params.to}" failed: ${res.error ?? "unknown error"}.${guidance}` }],
 				isError: true,
+				details: { to: params.to },
 			};
 		},
 	});

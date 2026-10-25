@@ -195,6 +195,18 @@ export default function (pi: ExtensionAPI) {
 				detectKeyword("there are no tests here, use an agent squad to review this repo"),
 			);
 			check("guard: meta-discussion suppressed", !detectKeyword("什么是智能体小队？"));
+			// P1-4: the old fixed 12-char window suppressed ordinary usage
+			// requests (如何/怎么 right before the keyword). Sentence-anchored:
+			// a how-to question is meta only when no request body remains.
+			check("guard: usage request with 如何 activates", detectKeyword("如何用智能体小队修复这个项目里失败的测试？"));
+			check("guard: usage request with 怎么 activates", detectKeyword("怎么让智能体小队并行审查这个仓库"));
+			check("guard: how-to with clause-comma body activates", detectKeyword("如何用智能体小队，并行审查这个仓库"));
+			check("guard: pure how-to question suppressed", !detectKeyword("智能体小队怎么用"));
+			check("guard: doc reference after keyword suppressed", !detectKeyword("智能体小队的文档在哪里"));
+			check("guard: doc reference before keyword suppressed", !detectKeyword("文档里提到智能体小队"));
+			check("guard: request whose object is docs activates", detectKeyword("用智能体小队审查这个仓库的文档"));
+			check("guard: usage request with how-to activates (en)", detectKeyword("how do i use the topo team to review this repo"));
+			check("guard: pure how-to question suppressed (en)", !detectKeyword("how to use the topo team"));
 			check("guard: code reference suppressed", !detectKeyword("把 `智能体小队` 加进 keywords"));
 			check("guard: bare topo is not a keyword", !detectKeyword("topo"));
 			check("guard: topology does not match topo team", !detectKeyword("阅读 topology.ts 的设计"));
