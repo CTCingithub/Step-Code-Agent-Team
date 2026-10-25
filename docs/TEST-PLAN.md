@@ -21,7 +21,7 @@
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero-token |
 | phase8 | Recursion depth /proc real check + sub-team self-bootstrap + concurrency defaults | zero-token |
 
-> The full current phase list (19 phases, derived on disk from `test/smoke/phase*.ts`) with per-phase coverage is in [docs/TESTING.md](TESTING.md) §2; the table above is the historical baseline snapshot.
+> The full current phase list (20 phases, derived on disk from `test/smoke/phase*.ts`) with per-phase coverage is in [docs/TESTING.md](TESTING.md) §2; the table above is the historical baseline snapshot.
 ## II. Coverage gaps targeted this round
 
 1. **Concurrency cap live**: the queue-before-start semantics of `maxConcurrent` have never been verified with real dispatches (phase5 only tests spawn mutual exclusion)
@@ -132,7 +132,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Check | Command / probe | Expected |
 |---|---|---|---|
-| A1 | Full zero-token regression | `npm run smoke` | all phases passed (19 phases — the list is derived on disk from `test/smoke/phase*.ts` — + manifest + 7 live checks + orphan-check) |
+| A1 | Full zero-token regression | `npm run smoke` | all phases passed (20 phases — the list is derived on disk from `test/smoke/phase*.ts` — + manifest + 7 live checks + orphan-check) |
 | A2 | Protocol probe | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
 | A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |

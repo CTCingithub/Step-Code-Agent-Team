@@ -68,7 +68,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -97,6 +97,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议）+ `planConfirmDialogOpts`（TUI 无倒计时） | 零 token |
 | phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
 | phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
+| phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言 Accept 原样转发请求并注入方案指令、自定义输入 note 原样合并、空提交按原样接受、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
 
 **runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。
 

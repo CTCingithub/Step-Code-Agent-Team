@@ -86,7 +86,7 @@ throwaway temporary agentDir (mktemp), so they do not pollute `~/.stepcode` or
 the gitignored `sandbox/`:
 
 ```bash
-npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23)
+npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24)
 bash test/run-smoke.sh 9 13   # run only the given phases
 ```
 
@@ -116,6 +116,7 @@ either set, phase5 is part of the regression run.
 | phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) + `planConfirmDialogOpts` (no countdown in the TUI) | zero token |
 | phase22 | Tool-availability self-heal: `ensureToolsAvailable` restores tools after a host reset, no-ops while inactive, and `session_start` re-activates a session whose team registry already exists | zero token |
 | phase23 | Team-tool JSON-schema contract: every tool and every top-level parameter carries a non-empty description (guards the typebox two-argument Optional class of regression, which once dropped `reason`'s description) | zero token |
+| phase24 | End-to-end confirmation path: a fake ExtensionAPI plus a scripted context drives the real extension factory — asserts Accept forwards the request verbatim with the plan instruction injected, a custom input's note merges verbatim, an empty submission accepts as shown, and Cancel injects the activation-only instruction (`plan.enabled` switched through the resetConfigCache hook and restored) | zero token (standalone) |
 
 **Runner behavior and pass criteria**: the phase list is derived on disk from `test/smoke/phase*.ts` (run-smoke.sh:37); a failed phase is retried once on a fresh session id (the first-failure line is prefixed `attempt1`, so a passing retry leaves no bare `FAILED` line for CI to misread); a phase that logs no `DONE` within 240s is reported as a hang (rc=124), distinct from assertion failures; a verdict requires a DONE marker and zero FAIL lines. After the phases: a manifest check, the 7 live checks, and a 15s orphan-process poll (a skipped phase17 makes it report `SKIPPED` rather than silently passing). **The live checks must run from the leader's own clean process** — inside a member process's restricted environment they fail wholesale (a false negative observed 2026-10-25; the leader's run was green).
 

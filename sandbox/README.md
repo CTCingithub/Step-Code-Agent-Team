@@ -110,7 +110,7 @@ npm run smoke            # full zero-token smoke (no key needed)
 bash test/run-smoke.sh 5 # phase5 needs a key (from the environment or sandbox/TEST-KEY.md)
 ```
 
-**What the gate runs**: 19 phases — the list is derived on disk from
+**What the gate runs**: 20 phases — the list is derived on disk from
 `test/smoke/phase*.ts`; phases 15/16/23/24 run standalone (no extension loaded,
 avoiding the tool-name conflict with an installed package copy); phase 5 needs a
 key; after the phases: a manifest check, 7 live checks (which must run from the

@@ -26,7 +26,7 @@
 
 ## Status overview (2026-10-23)
 
-> Automation baseline re-verified 2026-10-25: smoke 19 phases + manifest + 7 live + orphan-check all green; LLM probes 22/22 (K8).
+> Automation baseline re-verified 2026-10-25: smoke 20 phases + manifest + 7 live + orphan-check all green; LLM probes 22/22 (K8, re-run in plan-101 on the code with free-text input and the settle retry).
 
 | # | Item | Status |
 |---|---|---|
@@ -63,7 +63,7 @@ required; without one those steps fail.
 ### Step 1 — automated gate (must be green before any manual work)
 
 ```bash
-npm run smoke   # 19 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
+npm run smoke   # 20 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
 ```
 
 ### Step 2 — interactive scenarios (in order, one prompt at a time)
@@ -84,7 +84,7 @@ npm run smoke   # 19 phases + manifest + 7 live checks (+ orphan-check); stop an
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
 a tier is picked, the plugin first asks the model (one-off, plan-only call with a
-"正在生成智能体拓扑协作方案" spinner) to draft the actual team plan for that request; the Accept/Cancel selection then shows that plan,
+"正在生成智能体拓扑协作方案" spinner) to draft the actual team plan for that request; the three-option selection (Accept / 自定义输入… / Cancel) then shows that plan,
 and on approval it is injected with precedence over the tier's general guidance. Bare
 `/topo` (no request) or a failed planning call falls back to the tier's standard
 shape — there is nothing request-specific to show yet.

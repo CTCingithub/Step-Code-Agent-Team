@@ -134,7 +134,7 @@
 
 | # | 检查项 | 命令 / 探针 | 预期 |
 |---|---|---|---|
-| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（19 phase——清单由 `test/smoke/phase*.ts` 磁盘派生——+ manifest + 7 live + orphan-check） |
+| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（20 phase——清单由 `test/smoke/phase*.ts` 磁盘派生——+ manifest + 7 live + orphan-check） |
 | A2 | 协议探针 | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
 | A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |
@@ -188,7 +188,7 @@
 
 **轮次记录规约**：每轮改动代码、测试或测试流程（零 token 轮次也包括）都应追加 R 行——日期、跑了什么、结果、异常；人工沙箱轮另产 §7 会话日志。
 
-剩余交互项：K2/K3（方案选单 + Accept/取消 确认框）、K6（自定义角色）、K7（迁移提示）——见 MANUAL-TESTING 场景 5/8/9；K1/K4/K5/K8 已被自动化覆盖（K8 于 2026-10-25 重跑：22/22 断言，phase10 双分支）。人工项：M1–M6（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
+剩余交互项：K2/K3（方案选单 + 三选项确认框 Accept / 自定义输入… / Cancel）、K6（自定义角色）、K7（迁移提示）——见 MANUAL-TESTING 场景 5/8/9；K1/K4/K5/K8 已被自动化覆盖（K8 于 2026-10-25 重跑：22/22 断言，phase10 双分支）。人工项：M1–M6（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
 ### 2026-10-20 沙箱会话发现
 
