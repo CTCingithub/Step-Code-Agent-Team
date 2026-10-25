@@ -128,10 +128,22 @@ export function topologyOutbound(data: TopologyData, from: string): string[] {
 
 export function describeTopology(data: TopologyData, members: string[]): string {
 	if (data.edges.length === 0) return "star — all communication routes through the leader (no direct member messaging)";
-	const lines = members.map((m) => {
-		const out = topologyOutbound(data, m);
-		return `${m} → ${out.length > 0 ? out.join(", ") : "(no direct peers)"}`;
-	});
+	// Render only members that participate in an edge. Registry members without
+	// edges — disbanded members are kept as dead records for session resume —
+	// used to render as confusing "no direct peers" rows (observed 2026-10-25:
+	// re-declaring a pipeline still listed three disbanded reviewers).
+	const linked = new Set(data.edges.flat());
+	const lines = members
+		.filter((m) => linked.has(m))
+		.map((m) => {
+			const out = topologyOutbound(data, m);
+			return `${m} → ${out.length > 0 ? out.join(", ") : "(no direct peers)"}`;
+		});
+	if (lines.length === 0) {
+		// Defensive: an edge whose endpoints are absent from the member list
+		// (impossible after validateTopology) still renders readably.
+		return `${data.shape} (${data.edges.length} edge(s)): ${data.edges.map(([f, t]) => `${f} → ${t}`).join(", ")}`;
+	}
 	return `${data.shape} (${data.edges.length} edge(s)):\n  ${lines.join("\n  ")}`;
 }
 

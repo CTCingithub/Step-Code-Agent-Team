@@ -57,6 +57,7 @@ export function formatTeammateReply(to: string, reply: string | undefined): stri
 	if (text === "" || text === EMPTY_TURN_PLACEHOLDER) {
 		return (
 			`Delivered to ${to}. Their turn produced no text reply — the answer does not flow back through this tool. ` +
+			"Delivery is asserted, so do not resend (a resend makes the teammate repeat the work). " +
 			"Put everything the team needs in your own final report; the leader collects member output (team_send / team_task)."
 		);
 	}

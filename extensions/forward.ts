@@ -41,14 +41,14 @@ export function teamActivationInstruction(lang: Lang): string {
 		? [
 				"[智能体团队已启用] 请用团队工具完成用户的请求，并遵守以下协议：",
 				"1. 组队判据：任务有独立并行 strand 才组队；2–4 成员为宜，每人一个明确焦点；单点小改动不要过度拆分。熟悉/了解/介绍类请求 1–2 名只读成员即可；用户未要求改动时保持只读，不要顺手修改文件。",
-				"2. 拓扑先行：建成员后、派活前用 team_set_topology 声明拓扑——默认 star（队长中转）；顺序精炼用 pipeline；同伴互查用 mesh/ring。成员经内置 topo_team_msg 工具直达通信（无需 bash，只读角色同样可用）；依赖请用任务板 blockedBy 表达。",
+				"2. 拓扑先行：建成员后、派活前用 team_set_topology 声明拓扑——默认 star（队长中转）；顺序精炼用 pipeline；同伴互查用 mesh/ring。成员经内置 topo_team_msg 工具直达通信（无需 bash，只读角色同样可用）；依赖请用任务板 blockedBy 表达。ring/relay 链路中，每一跳的任务书必须写明：终稿沿调用链回传——leader 不是消息目标，勿试图直发队长。",
 				"3. 运行流程：team_create_member 建成员 → team_set_topology 声明拓扑 → team_task 拆解任务（blockedBy 表达依赖）→ team_send / team_task start 派活（指令短小自包含，成员看不到你的对话）→ 自己合并各成员结论 → 完工后 team_disband。",
 				'4. 成本纪律：不要把同一任务分给两个成员"求保险"；无状态扇出用 mode: "oneshot"；留意 team_status 的累计花费。',
 			].join("\n")
 		: [
 				"[Agent team active] Use the team tools for the user's request, following this protocol:",
 				"1. When to form a team: only when the work has independent parallel strands; 2–4 members is the sweet spot, each with a distinct focus; do not over-split a single small edit. Familiarization/overview requests need only 1–2 read-only members; when the user did not ask for changes, stay read-only — do not modify files as a side effect.",
-				"2. Topology first: after creating members and before dispatching, declare the topology with team_set_topology — star by default (leader relays); pipeline for sequential refinement; mesh/ring for cross-checking. Members message teammates through the built-in topo_team_msg tool (no bash needed — read-only roles included); express dependencies with the task board's blockedBy.",
+				"2. Topology first: after creating members and before dispatching, declare the topology with team_set_topology — star by default (leader relays); pipeline for sequential refinement; mesh/ring for cross-checking. Members message teammates through the built-in topo_team_msg tool (no bash needed — read-only roles included); express dependencies with the task board's blockedBy. In ring/relay chains, every hop's task book must state that the final report returns along the reply chain — the leader is never a message target; do not try to message it directly.",
 				"3. Run loop: team_create_member → team_set_topology → team_task with blockedBy → team_send / team_task start (short, self-contained instructions; members do not see your conversation) → merge the results yourself → team_disband when done.",
 				'4. Cost discipline: never give two members the same task "for safety"; use mode: "oneshot" for stateless fan-out; watch cumulative spend in team_status.',
 			].join("\n");
@@ -89,6 +89,7 @@ export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { s
 				"1. 成员名单：每个成员的名字、角色与各自 effort；",
 				"2. 通信拓扑（star/pipeline/mesh/ring/custom）及选择理由；",
 				"3. 任务拆解：每个任务从 1 起独立编号；每个任务分配给谁、先后依赖（用任务板 blockedBy 表达）。",
+				"4. 方案必须与所声明拓扑自洽：star 下成员间没有任何直连消息——汇总/协调角色只能经队长中转收集（依赖用任务板 blockedBy 表达）；只有 pipeline/mesh/ring/custom 才存在成员间直连。",
 				"控制在 10 行以内，直接给出方案。",
 			].join("\n"),
 		};
@@ -102,6 +103,7 @@ export function teamPlanPrompt(request: string, tier: TeamTier, lang: Lang): { s
 			"1. Roster: each member's name, role, and effort;",
 			"2. Communication topology (star/pipeline/mesh/ring/custom) and why;",
 			"3. Task breakdown: number each task from 1; who does what, and the order dependencies (expressed as task-board blockedBy edges).",
+			"4. The plan must be consistent with its declared topology: under star there is no member-to-member messaging at all — a consolidator/coordinator can only collect through the leader (dependencies via task-board blockedBy); only pipeline/mesh/ring/custom create direct member links.",
 			"Keep it within 10 lines; give the plan directly.",
 		].join("\n"),
 	};

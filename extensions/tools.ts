@@ -132,14 +132,15 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			];
 			if (note) lines.push(note);
 			if (!created) {
-				// Resume is idempotent: the existing record wins, so say which
-				// passed params were dropped instead of implying a reconfiguration.
+				// Resume is idempotent: the existing record wins. Say so
+				// unconditionally (even when nothing conflicted) and name the
+				// dropped params instead of implying a reconfiguration happened.
 				const ignored = resumeIgnoredParams(params, member);
-				if (ignored.length > 0) {
-					lines.push(
-						`Note: "${member.name}" already existed and was resumed; the passed ${ignored.join(", ")} ${ignored.length > 1 ? "were" : "was"} ignored (existing configuration kept). Disband the member and recreate it to change its configuration.`,
-					);
-				}
+				lines.push(
+					ignored.length > 0
+						? `Note: "${member.name}" already existed and was resumed; the passed ${ignored.join(", ")} ${ignored.length > 1 ? "were" : "was"} ignored (existing configuration kept). Disband the member and recreate it to change its configuration.`
+						: `Note: "${member.name}" already existed and was resumed with its existing configuration. Disband the member and recreate it to change its configuration.`,
+				);
 			}
 			return {
 				content: [

@@ -7,7 +7,7 @@
 > **参考说明：** 本项目**参考了 DeepSeek Harness 的智能体团队（agent teams）功能**——队长/成员模型、带依赖的任务板、成员间消息均沿袭其设计。本插件是面向 Step Code 的独立实现，与 DeepSeek 无隶属关系。
 
 > **⚠️ 消耗警告：** 每个团队成员都是独立的完整 agent 进程，拥有自己的上下文窗口，
-> 默认使用对话当前模型（各角色预设 effort：`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`）。N 个成员并行干活的成本约为单轮对话的 N 倍，
+> 默认使用对话当前模型（各角色预设 effort：`scout`=low、`planner`/`worker`=medium、`reviewer`=high；无预设时 `high`——`models.autonomousEffort` 开启时由队长逐成员选择，预设 effort 一律不生效，详见下方角色表）。N 个成员并行干活的成本约为单轮对话的 N 倍，
 > 长任务累积很快。插件会统计团队累计花费，并在 `cost.warnThreshold`
 > （默认 $1，0 禁用）时告警——请留意 `team_status`，完工后及时 `team_disband`
 > 回收空闲成员。

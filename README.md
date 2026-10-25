@@ -9,7 +9,9 @@ Agent team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`ste
 > **⚠️ Cost warning:** every team member is a full agent process with its own
 > context window, running on the conversation's current model (effort per
 > role preset: `scout`=low, `planner`/`worker`=medium, `reviewer`=high; `high`
-> when no preset applies). N members working in parallel cost roughly N× a
+> when no preset applies — with `models.autonomousEffort` on, the leader picks
+> the effort per member and all preset efforts are inert; see the role table
+> below). N members working in parallel cost roughly N× a
 > single conversation
 > turn, and long member runs accumulate quickly. The plugin tracks cumulative
 > team spend and warns at `cost.warnThreshold` (default $1, 0 disables) — watch

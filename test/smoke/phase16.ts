@@ -65,6 +65,7 @@ export default function (pi: ExtensionAPI) {
 			check("msg: host placeholder → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "No result provided")), "");
 			check("msg: undefined reply → delivery ack", /^Delivered to r3\./.test(formatTeammateReply("r3", undefined)), "");
 			check("msg: whitespace-only reply → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "   \n  ")), "");
+			check("msg: ack forbids a resend", ack.includes("do not resend"), ack.slice(0, 120));
 			check(
 				"msg: ack points at the final report + leader collection",
 				ack.includes("final report") && ack.includes("team_send") && ack.includes("team_task"),
