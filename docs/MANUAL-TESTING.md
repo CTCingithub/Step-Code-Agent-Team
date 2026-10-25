@@ -16,7 +16,7 @@
 > (live-package-install: a settings `packages` entry pointing at the repo loads the
 > extension and activates it), and the **tool-availability self-heal** (phase22:
 > `ensureToolsAvailable` restores the team tools after a host-side reset, and
-> `session_start` re-activates a session whose team registry already exists), and the **tool JSON-schema contract** (phase23) asserts every team tool and every top-level parameter carries a non-empty description — the guard that would have caught the typebox two-argument Optional description drop).
+> `session_start` re-activates a session whose team registry already exists), and the **tool JSON-schema contract** (phase23) asserts every team tool and every top-level parameter carries a non-empty description — the guard that would have caught the typebox two-argument Optional description drop), and the **confirmation-path merge contract** (phase24: a fake ExtensionAPI plus a scripted context drives the real factory — Accept forwards the request verbatim with the plan injected, a custom input's note merges verbatim, an empty submission accepts as shown, Cancel injects the activation-only instruction — 6 assertions), the **activation-guard sentence anchoring** (phase6: a how-to request with a body activates, a pure question about the plugin itself stays suppressed), **preset loading and the project-tier trust gate** (phase3), and the **deprecated-keyword stripping semantics** (phase6/phase9).
 >
 > What remains is only the **irreducible** manual items. Start with the **Round
 > runbook** below for the full one-round sequence; each section after it is the
@@ -30,16 +30,16 @@
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Interactive TUI look and feel | ✅ Verified 2026-10-22 (full walkthrough, no rendering issues) |
-| 2 | Real install (`step install` from a clean export) | ➖ Mechanics covered by `live-package-install` / `live-clean-export`; the interactive residue ⬜ yours |
-| 3 | Trust prompt interactive UX | ➖ Rejection path covered by `live-untrusted-config`; the popup itself ⬜ yours |
-| 4 | LLM behavior adherence (ring) | ✅ 2026-10-22 (two hops succeeded + third hop rejected verbatim — the previously unobserved part is now confirmed) |
-| 5 | Sandbox demo scripts (three acts) | ✅ Verified 2026-10-22 (rerun) |
+| 1 | Interactive TUI look and feel | ✅ Verified 2026-10-22 (full walkthrough, no rendering issues) + 2026-10-25 rerun passed (no rendering issues; see the archive `sandbox/archive/20261025-194159-20261025-manual-round/`) |
+| 2 | M1 real install / uninstall (`step install` from a clean export) | ➖ **Must-run manual item** — it writes your real settings, so **you run it yourself**; the mechanics are covered by `live-package-install` / `live-clean-export`, the interactive residue ⬜ yours (§2) |
+| 3 | M2 trust prompt interactive UX | ➖ **Must-run manual item**; the rejection path is covered by `live-untrusted-config`, the popup itself ⬜ yours (§3) |
+| 4 | LLM behavior adherence (ring) | ✅ 2026-10-22 + 2026-10-25 two rounds confirmed (two hops succeeded + the third hop rejected verbatim — the previously unobserved part is now confirmed) |
+| 5 | Sandbox demo scripts (three acts) | ✅ 2026-10-22 + 2026-10-25 two reruns passed (the fix round 11/12→12/12; both parallel-review rounds changed nothing) |
 | 6 | Performance subjective items (8 full members) | ➖ Optional, subjective |
-| 7 | Actual-plan confirmation + generation spinner (new UI) | ➖ Type/smoke-verified only; the first real-TUI look ⬜ yours (scenario 5) |
-| 8 | Activation guard L1 (rewritten 2026-10-23) | ➖ 8 phase6 cases green; one interactive confirmation ⬜ yours (scenario 7) |
-| 9 | Custom roles (agent-dir + trusted project tier) | ➖ phase3 covers preset loading and the trust gate; the LLM-level application ⬜ yours (scenario 8) |
-| 10 | Keyword migration notice | ➖ phase6/phase9 cover the stripping semantics; the one-time notice ⬜ yours (scenario 9) |
+| 7 | Actual-plan three-option confirmation (Accept / 自定义输入… / Cancel) + generation spinner (new UI) | ➖ 2026-10-25: the three-tier Accept path measured end-to-end; **the custom-input path and the pinned tier were live-verified 2026-10-25 by RPC-driver probes** (`node sandbox/probe-remaining-manual.mjs 5a` / `5b`: the user's text rides along verbatim; a pinned tier suppresses the picker); only TUI key feel remains ⬜ (M3: no countdown / Esc / empty submit) |
+| 8 | Activation guard L1 (rewritten 2026-10-23) | ✅ 8 phase6 cases green + **live-verified 2026-10-25 by an RPC-driver probe** (`probe-remaining-manual.mjs 7`: zero team actions for the meta question; a how-to with a body activates and `team_create_member` really works) |
+| 9 | Custom roles (agent-dir + trusted project tier) | ➖ phase3 covers loading and the trust gate + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 8`: the frontmatter's tools/effort/prompt land on a real spawn and the member self-reports the allowlist incl. topo_team_msg); the project tier still needs the M2 trust flow ⬜ |
+| 10 | Keyword migration notice | ✅ phase6/phase9 cover the stripping semantics + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 9`: the notice appears exactly once per session) |
 | — | English translation review | ⬜ Recommended |
 
 ## Round runbook (one complete test round)
@@ -76,11 +76,16 @@ npm run smoke   # 20 phases + manifest + 7 live checks (+ orphan-check); stop an
 | 2 | Members + pipeline + task board | §1 steps 3–8 | §1 | — |
 | 3 | `topo_team_msg` E2E | paste: `Have scout1 send worker1 a one-line intro through topo_team_msg and report the tool's exact return text` | §1, §4 | The reply is best-effort: a delivery acknowledgment ("Delivered to …") is not the teammate's answer — collect outputs through the leader |
 | 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list. **Ring closure**: with the default `maxLoopCount=2`, a 3-member ring's closing hop (r3→r1) is always rejected — the loop must close through the leader; raise `maxLoopCount` only if you truly need in-ring closure |
-| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo <请求>` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching; the confirmation offers **Accept / 自定义输入… / Cancel** with no countdown and waits for your decision — a custom input's text is sent to the model verbatim, appended to the forwarded request (Esc cancels) |
+| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo <请求>` | §8 (TEST-PLAN K2/K3) | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching; the confirmation offers **Accept / 自定义输入… / Cancel** with no countdown and waits for your decision — a custom input's text is sent to the model verbatim, appended to the forwarded request (Esc cancels) |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
-| 7 | Activation guard (L1) | paste: `如何用智能体小队并行审查这个仓库？` | — | Rewritten 2026-10-23: a how-to request with a body activates the plugin (the team forms); a pure question about the plugin itself (`什么是智能体小队？`) stays suppressed — no team forms |
-| 8 | Custom roles (K6) | write `sandbox/agent/agents/quickfix.md` (frontmatter: `name` / `description` / `tools` / `effort`), restart, paste: `Create a member with the quickfix role, named fixer1, and have it list its tool allowlist in one sentence` | §1 | The frontmatter's prompt/tools/effort apply (the tool list shows the allowlist); project-level roles under `sandbox/project/.stepcode/agents/` load only in trusted projects (delete `sandbox/agent/trust.json` to re-trigger the popup) |
-| 9 | Keyword migration notice (K7) | add `"智能体团队"` (deprecated) next to a plugin-specific term in `keywords` in `sandbox/config.toml`, restart, paste: `我想用智能体小队熟悉一下这个项目` | — | Activation still works via the plugin-specific term; the stripped deprecated terms are reported once on activation (and never again that session) |
+| 7 | Activation guard (L1) | paste: `如何用智能体小队并行审查这个仓库？` | §9 | Rewritten 2026-10-23: a how-to request with a body activates the plugin (the team forms); a pure question about the plugin itself (`什么是智能体小队？`) stays suppressed — no team forms |
+| 8 | Custom roles (K6) | write `sandbox/agent/agents/quickfix.md` (frontmatter: `name` / `description` / `tools` / `effort`), restart, paste: `创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §10 | The frontmatter's prompt/tools/effort apply (the tool list shows the allowlist); project-level roles under `sandbox/project/.stepcode/agents/` load only in trusted projects (delete `sandbox/agent/trust.json` to re-trigger the popup) |
+| 9 | Keyword migration notice (K7) | add `"智能体团队"` (deprecated) next to a plugin-specific term in `keywords` in `sandbox/config.toml`, restart, paste: `我想用智能体小队熟悉一下这个项目` | §11 | Activation still works via the plugin-specific term; the stripped deprecated terms are reported once on activation (and never again that session) |
+
+**Must-run manual items (M1/M2)**: the real install/uninstall (§2 — it writes your real
+settings, so **you run it yourself**) and the project-config trust popup (§3) are
+**required** manual items, not optional; §2/§3 keep their current content and are called
+out here so a round is not considered complete without them.
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
 a tier is picked, the plugin first asks the model (one-off, plan-only call with a
@@ -162,7 +167,7 @@ members from an earlier round — if any show up, disband them before creating n
 
 | # | Copy-paste | Expected render | Result |
 |---|---|---|---|
-| 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | Activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
+| 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | First the L2 confirm ("检测到团队请求关键词，是否启用智能体团队？" — `confirmBeforeActivate` is on by default; see CONFIGURATION.md) → yes → activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
 | 2 | `/topo` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/effort) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
 | 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … effort=high` | ☐ |
 | 4 | `Create another member with the worker role, named worker1` | Same as step 3: `+worker1 (worker)` / `✓ worker1 (worker) [idle]` (provides the second member for step 7's pipeline topology) | ☐ |
@@ -381,6 +386,164 @@ tool's returned text verbatim, never paraphrase from memory; (5) net result
 — baseline vs. after, changed-file list, what was left undone; (6) how to
 restore the initial state.
 ```
+
+## 8. Scenario 5 — plan picker: custom input (5a) and pinned tier (5b)
+
+Both sub-scenarios share the same precondition chain: `[stepcodeAgentTeam.plan] enabled = true` in `sandbox/config.toml` (already on in the seeded sandbox), **restart the session** (`plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching), and an **interactive TUI** (`./sandbox/run.sh`). The planning call is interactive-only — headless/RPC `/topo <request>` skips it and confirms the tier's standard shape directly, so a dialog-less round proves nothing about 5a.
+
+### 5a · Custom input path (highest priority)
+
+**What it tests**: the full dialog chain — `/topo <请求>` → tier select (four tiers + 自定义需求…) → the "正在生成智能体拓扑协作方案" spinner (the one-off, plan-only model call) → the three-option confirmation (Accept / 自定义输入… / Cancel) — and specifically the 「自定义输入…」 branch: your free-form text must reach the model **verbatim** — trimmed, then appended to the forwarded request after a blank line, with no interpretation or restructuring.
+
+**Preconditions**: `plan.enabled = true` in `sandbox/config.toml`; session restarted after the edit; interactive TUI; a fresh session (disband any leftover live team first — `Report the team's current status`).
+
+**Action** (paste one line, then walk the dialogs):
+
+```text
+/topo 修复这个项目里失败的测试
+```
+
+1. In the tier select pick any tier (e.g. 均衡/balanced).
+2. Wait for the spinner to finish — the drafted plan shows in the notify above the confirmation.
+3. In the three-option confirmation choose **自定义输入… / Custom input…** (no countdown — it waits for your decision).
+4. In the free-text input type one sentence, e.g.:
+
+```text
+优先保持改动最小：只修 src/tasks.js，不要动其他文件。
+```
+
+**Expected**: the plugin forwards your original request **plus your sentence, verbatim**, as one user message, and the model acts on both. Verify in the session JSONL: the text appears exactly as typed (outer whitespace trimmed only), appended after a blank line — the leader session under `sandbox/agent/sessions/*.jsonl` carries the forwarded user message; once members are dispatched, `sandbox/agent/teams/<teamId>/sessions/*.jsonl` carries the derived dispatch prompts. Then confirm the two sibling branches once each: an **empty submission** accepts the plan as shown (nothing appended), and **Esc** (on the select or the input) cancels — the request still forwards, but only the activation instruction is injected and no team forms.
+
+**Automated coverage**: phase24 drives the whole confirmation chain with a fake ExtensionAPI plus a scripted context and asserts the merge contract (6 assertions: Accept forwards the request verbatim with the plan injected / a custom input's note merges verbatim / an empty submission accepts as shown / Cancel injects the activation-only instruction).
+
+**Live verification (2026-10-25, RPC-driver probe)**: `node sandbox/probe-remaining-manual.mjs 5a` walks the whole chain with a scripted RPC client — answers the tier picker (balanced) → the spinner and the model-drafted plan → picks 自定义输入… in the three-option confirmation → types `只要 1 个只读成员，不要修改任何文件`. The forwarded user message in the session JSONL is "the original request + a blank line + that text" (character-for-character, only outer whitespace trimmed), after which the model calls `team_create_member` normally. "The text reaches the model verbatim" now holds on a **real host dialog plus a real LLM round-trip**; what the probe cannot cover is TUI pixel and key feel (Esc / empty submit / no countdown — M3).
+
+**Why manual**: the dialog is host-rendered TUI (phase24 only scripts it), and "the text reaches the model unchanged and is acted on" is observable only end-to-end with a real model turn.
+
+**Restore**: `bash sandbox/restore-project.sh` (+ optional full reset, see §0).
+
+### 5b · Pinned tier (K3)
+
+**What it tests**: with `plan.tier` pinned, the tier picker never appears — the pinned tier applies on **both** activation paths (the `/topo` command and a keyword prompt).
+
+**Preconditions**: set `[stepcodeAgentTeam.plan] tier = "fast"` (keep `enabled = true`) in `sandbox/config.toml`, **restart the session**, interactive TUI.
+
+**Action** (two separate prompts — one path each, never mixed):
+
+```text
+/topo 统计这个项目的源文件数量
+```
+
+then, for the keyword path, a fresh activation (new session, or after the first settles):
+
+```text
+用智能体小队统计一下这个项目的源文件数量
+```
+
+**Expected**: neither path shows the tier select — each goes straight to the fast tier. With a request attached the spinner and the three-option confirmation still appear (showing the fast tier's plan); Accept. No "always ask" picker at any point.
+
+**Automated coverage**: phase21 asserts the tier table itself (four tiers, five modes, bilingual labels, unknown-id fallback); phase24 drives the confirmation with `plan.enabled` toggled through the resetConfigCache hook.
+
+**Live verification (2026-10-25)**: `probe-remaining-manual.mjs 5b` pins `plan.tier` to `"fast"` and runs `/topo <request>` — the tier picker does **not** appear (negative assertion passes) while the three-option confirmation still does and accepts. The command path is verified; the keyword path reads the same config, so one manual spot-check suffices.
+
+**Why manual**: "no picker appears" is a negative UI observation only a real session can make, and the two activation paths share the config but not the code path — each must be exercised once.
+
+**Restore**: set `tier = "always ask"` back in `sandbox/config.toml`, then `bash sandbox/restore-project.sh`.
+
+## 9. Scenario 7 — activation guard (L1)
+
+**What it tests**: the sentence-anchored false-positive guard — a keyword hit that is a real usage request activates the plugin and forms a team; a pure question about the plugin itself stays suppressed.
+
+**Preconditions**: a brand-new session in the un-activated state (restart the sandbox session; do not reuse one where the team tools are already live). Keyword path only — never mix `/topo` into these prompts.
+
+**Action** (paste, one at a time, in a fresh session):
+
+```text
+如何用智能体小队并行审查这个仓库？
+```
+
+```text
+什么是智能体小队？
+```
+
+**Expected**: the first prompt activates — first the L2 confirm (yes) → the activation notify appears, the team tools become available, and the leader forms a team and dispatches the parallel review. The second prompt stays suppressed — no confirm, no activation notify, no team tools, no team forms; the model just answers the question about the plugin itself.
+
+**Live verification (2026-10-25)**: `probe-remaining-manual.mjs 7` runs two isolated sessions — 「什么是智能体小队？」 produces no activation notify and **zero** team tool calls (PASS); 「如何用智能体小队并行审查这个仓库？」 activates after the confirm is answered, and the follow-up "create a scout member" produces a real `team_create_member` call (PASS).
+
+**Automated coverage**: phase6 anchors eight sentence-level cases (a how-to request with a body activates; a pure how-to question is suppressed; negation and doc/code references are suppressed; clause-separated negation still activates). Missing: the real-model end — whether an activated how-to request actually produces a team, and whether a suppressed meta-question produces no team activity at all.
+
+**Why manual**: the guard only decides *whether* to activate; the observable outcome (notify + team tools + team formation, or none of them) exists only in a real session.
+
+**Restore**: `bash sandbox/restore-project.sh` (+ optional full reset, see §0).
+
+## 10. Scenario 8 — custom roles (K6)
+
+**What it tests**: a user-tier preset under `<agentDir>/agents/` — its frontmatter (`name` / `description` / `tools` / `effort`) applies when a member is created with that role — and that the project tier loads only in a trusted project.
+
+**Preconditions**: interactive TUI; a session restart after writing the preset file (presets are loaded at startup).
+
+**Action**:
+
+```bash
+mkdir -p sandbox/agent/agents
+cat > sandbox/agent/agents/quickfix.md <<'EOF'
+---
+name: quickfix
+description: Fast minimal fixes — read-only diagnosis plus one targeted edit
+tools: ["read", "edit", "grep"]
+effort: low
+---
+You are the quickfix role: diagnose the smallest possible fix, apply exactly one
+targeted edit, and report the change in one sentence. Never refactor beyond the fix.
+EOF
+# restart the sandbox session, then paste:
+```
+
+```text
+创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单
+```
+
+**Expected**: `team_create_member(role="quickfix")` applies the preset — the create result and the member's own one-sentence answer show the allowlist from the frontmatter (`read`/`edit`/`grep`) **plus the infrastructure `topo_team_msg`** (added on top of every member's tool list; no bash needed).
+
+**Pitfall (by design)**: the sandbox's `sandbox/config.toml` sets `models.autonomousEffort = true`, under which **every** frontmatter/preset effort is inert — the leader picks the effort per member, so `effort: low` is ignored and the create result shows `effort=high`. To verify the frontmatter effort actually lands, set `autonomousEffort = false`, restart the session, and rerun — then `effort=low` shows up. This is documented behavior (see [CONFIGURATION.md](CONFIGURATION.md) `models.autonomousEffort`), not a bug.
+
+**Project-level roles**: a preset under `sandbox/project/.stepcode/agents/` loads only while the project is trusted — delete `sandbox/agent/trust.json` and restart to re-trigger the §3 trust popup; until trust is granted, the project tier is skipped entirely.
+
+**Automated coverage**: phase3 asserts preset loading across the three tiers (bundled `< agentDir>/agents/` < trusted project) and the trust gate (an untrusted project's presets never load).
+
+**Live verification (2026-10-25)**: `probe-remaining-manual.mjs 8` writes quickfix.md (`tools: read, grep, edit, bash`, `effort: low`, with `models.autonomousEffort` set to `false`) in an isolated agentDir and creates the member via `/topo` — the create result reads `Created member "fixer1" (role: quickfix) … effort: low; tools: read, grep, edit, bash`, and the member self-reports "read, grep, edit, bash, topo_team_msg", exactly the frontmatter allowlist plus the infrastructure tool.
+
+**Why manual**: preset application happens inside a spawned member process on a real model turn; the allowlist and the effort only become visible in the member's actual behavior.
+
+**Restore**: remove `sandbox/agent/agents/quickfix.md` (and any project-tier preset), then `bash sandbox/restore-project.sh`.
+
+## 11. Scenario 9 — keyword migration notice (K7)
+
+**What it tests**: a deprecated keyword sitting in `activation.keywords` is stripped on load, activation still works through the plugin-specific terms, and the stripping is reported **once** per session.
+
+**Preconditions**: interactive TUI; a session restart after editing the config (keywords are read once per session).
+
+**Action**:
+
+```bash
+# in sandbox/config.toml, add the deprecated term next to a plugin-specific one:
+#   keywords = [ "智能体团队", "智能体小队", "多智能体小队", "topo team", ... ]
+# then restart the session and paste:
+```
+
+```text
+我想用智能体小队熟悉一下这个项目
+```
+
+**Expected**: the migration notice appears once — "Migrated activation config: removed deprecated keywords (智能体团队). Use current keywords like 智能体小队 / topo team." (delivered on session start, so you see it right after the restart, before any prompt). The prompt then activates normally through the plugin-specific term `智能体小队`, and the team forms. Paste the same prompt a second time: the notice does not repeat (it is consumed once per session) and activation proceeds as usual.
+
+**Automated coverage**: phase6/phase9 assert the stripping semantics (a partially-deprecated list keeps the rest; an all-deprecated list disables keyword activation — migration narrows, never widens, the activation surface). Missing: the one-time, user-visible notify in a real session.
+
+**Live verification (2026-10-25)**: `probe-remaining-manual.mjs 9` sends the same prompt twice — the migration notice appears exactly once and not again (PASS). "Exactly once" is now verified on a real restart-plus-reprompt cycle.
+
+**Why manual**: the notice is a host `ctx.ui.notify`; its pixel form and dwell time remain look-and-feel items (M3/M4).
+
+**Restore**: remove `"智能体团队"` from `keywords` in `sandbox/config.toml`, then `bash sandbox/restore-project.sh`.
 
 ## Known limitations (review-confirmed, not fixing for now)
 

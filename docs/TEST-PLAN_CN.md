@@ -144,12 +144,12 @@
 | # | 检查项 | 探针 | 缺口 |
 |---|---|---|---|
 | K1 | `/topo <请求>` 端到端 | RPC prompt 带命令 | 逐字请求落入会话日志；队长组建团队（不独自完成） |
-| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo <请求>` | 选单显示 4 档 + 自定义；带请求时三选项确认框（Accept / 自定义输入… / Cancel）展示模型生成的实际方案（一次性规划调用）；Accept 以高优先级注入该方案，自定义输入的文本随请求原样同行，Cancel 只注入激活指令 |
-| K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档 |
+| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo <请求>` | 选单显示 4 档 + 自定义；带请求时三选项确认框（Accept / 自定义输入… / Cancel）展示模型生成的实际方案（一次性规划调用）；Accept 以高优先级注入该方案，自定义输入的文本随请求原样同行，Cancel 只注入激活指令。**Accept 路径 2026-10-25 人工实测；自定义输入由 `probe-remaining-manual.mjs 5a` live 验证；TUI 按键观感留 M3** |
+| K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档。**命令路径已由 `probe-remaining-manual.mjs 5b` live 验证（选单不出现、确认框仍出现）；关键词路径留一轮人工抽查** |
 | K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
 | K5 | topo_team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
-| K6 | 自定义角色 | `<agentDir>/agents/quickfix.md`；受信任项目中的项目级 | `team_create_member(role="quickfix")` 应用提示词/工具/effort |
-| K7 | 关键词迁移提示 | 配置含旧关键词 | 激活时剥离并提示一次 |
+| K6 | 自定义角色 | `<agentDir>/agents/quickfix.md`；受信任项目中的项目级 | `team_create_member(role="quickfix")` 应用提示词/工具/effort。**agentDir 层已由 `probe-remaining-manual.mjs 8` live 验证（effort:low + frontmatter 白名单 + topo_team_msg 叠加）；项目级层需 M2 信任流** |
+| K7 | 关键词迁移提示 | 配置含旧关键词 | 激活时剥离并提示一次。**已由 `probe-remaining-manual.mjs 9` live 验证（每会话恰好一次）** |
 | K8 | phase4/10/11/12 LLM 探针 | `sandbox/smoke-phase4/10/11/12.ts` | 新 spawn 参数（allowlist 含 topo_team_msg）下的全路径回归 |
 
 ### 必须人工（真实 TUI / 安装 / UX）
@@ -186,6 +186,7 @@
 | R9 | ✅ 自动化轮（2026-10-25）：性能档轮（派发故障后由队长执行） | A3 自由输入落地（三选项；用户文本随请求原样同行）；A4 usage 守卫 settle 重试（dispatchWithSettleGuard——仅当该次尝试证明什么都没做才重发）；新 phase24 确认路径端到端探针（6 断言）；P2-8c/8a 测试加固；3 项遗留文档建议 + A3/A4 文档调整；全量套件绿（20 phase）、tsc 零错误 |
 | R10 | ✅ 验证轮（2026-10-25）：A3/A4 代码上的 LLM 探针复跑 | 探针 22/22（phase4 4/4、phase10 A 支 3/3 + B 支 2/2 无死锁、phase11 4/4、phase12 9/9）——运行在含自由输入与 usage 守卫 settle 重试的代码上，派发路径被实际走过；每条探针均在隔离 agentDir 下执行（避开本地配置遮蔽）；冒烟门仍全绿（20 phase） |
 | R11 | ✅ 沙箱实测驱动轮（2026-10-25）：来自用户手动轮日志的修复 | B：describeTopology 只渲染边参与者（已解散的 dead 记录不再列为「no direct peers」行）；C：送达回执补「勿重发」（占位符守卫本身经取证为设计行为）；D：规划提示词要求方案与拓扑自洽（star ⇒ 汇总只能经队长中转）；E：激活协议要求接力链任务书写明终稿回传路径；A：README 补 autonomousEffort 说明；F：create 结果无条件说明恢复事实；phase14/16/21 断言；全量套件绿（20 phase）、tsc 零错误 |
+| R12 | ✅ 手动场景收口轮（2026-10-25）：性能档方案执行 | T1 场景清单（7 项必测 + 降级依据）→ T2A 主笔修订 MANUAL-TESTING(_CN)（新增 §8–§11：场景 5a/5b/7/8/9 明细节，场景表明细列改指新节）→ T4 执行未完成测试：`sandbox/probe-remaining-manual.mjs` 五个子命令全部 PASS（5a 自定义输入原样进入转发请求 / 5b 钉档选单不出现 / 7 抑制+激活+team_create_member / 8 frontmatter tools+effort 落地 / 9 迁移提示恰好一次）；同步 TESTING(_CN) 探针表、sandbox/README(_CN)、K2/K3/K6/K7 行；全量冒烟门仍绿 |
 
 **轮次记录规约**：每轮改动代码、测试或测试流程（零 token 轮次也包括）都应追加 R 行——日期、跑了什么、结果、异常；人工沙箱轮另产 §7 会话日志。
 

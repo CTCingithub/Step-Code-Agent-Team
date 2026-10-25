@@ -121,6 +121,11 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | 并发上限 live / 嵌套消息死锁 |
 | phase11 | cfg-deep2 | 递归深度 2 真实链 |
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
+| probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框自定义输入路径：脚本化 RPC 客户端应答档位选单→确认框选「自定义输入…」→input，断言用户文本原样进入转发的 user 消息 |
+| probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单不出现、三选项确认框仍出现 |
+| probe-remaining-manual `7` | 隔离 agentDir ×2 | L1 护栏：元问题零团队动作；how-to 带主体激活且 team_create_member 真实可用 |
+| probe-remaining-manual `8` | 隔离 agentDir（agents/quickfix.md + autonomousEffort=false） | 自定义角色：frontmatter tools/effort 落到真实 spawn、成员自报白名单含 topo_team_msg |
+| probe-remaining-manual `9` | 隔离 agentDir（keywords 含废弃词） | 迁移提示每会话恰好出现一次 |
 
 phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的 export 指向对应 fixture
 （phase11 用 `STEP_CODING_AGENT_DIR="$PWD/sandbox/cfg-deep2"`）。用默认目录跑 phase11

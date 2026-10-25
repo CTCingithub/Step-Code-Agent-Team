@@ -9,7 +9,14 @@
 > **成本护栏与输出截断逻辑**（phase16）、**孤儿进程**（orphan-check：成员不得比队长
 > 长寿）、**干净导出物可加载性**（live-clean-export：git archive 出的包能激活）、
 > **包安装路径**（live-package-install：settings 的 `packages` 条目指向仓库即可加载
-> 扩展并激活）。
+> 扩展并激活）、**工具可用性自愈**（phase22：`ensureToolsAvailable` 在宿主侧重置后恢复团队工具，
+> `session_start` 重激活团队注册表已存在的会话）、**工具 JSON-schema 契约**（phase23：
+> 每个团队工具与每个顶层参数都带非空 description——本可抓住 typebox 双参 Optional
+> description 丢失的守卫）、**确认路径合并契约**（phase24：假 ExtensionAPI + 脚本化
+> ctx 驱动真实扩展工厂——Accept 原样转发请求并注入方案指令、自定义输入 note 原样合并、
+> 空提交按原样接受、Cancel 仅注入激活指令，共 6 断言）、**激活护栏的句子锚定**
+> （phase6：带请求主体的 how-to 请求激活、对插件本身的纯提问仍抑制）、**预设加载与
+> 项目层信任门控**（phase3）与**废弃关键词剥离语义**（phase6/phase9）。
 >
 > 以下仅剩**不可约**的人工项。先看下方**单轮测试 runbook** 获取一轮完整顺序；其余各节是
 > 分场景明细，均含**可直接复制粘贴的命令 / prompt**。TUI 渲染清单（只剩观感；内容层已被
@@ -22,15 +29,15 @@
 | # | 项目 | 状态 |
 |---|---|---|
 | 1 | 交互 TUI 观感 | ✅ 2026-10-22 完整走查 + 2026-10-25 复测通过（渲染无问题；见归档 `sandbox/archive/20261025-194159-20261025-manual-round/`） |
-| 2 | 真实安装（干净导出物 `step install`） | ➖ 机制部分已由 `live-package-install` / `live-clean-export` 覆盖；交互残留 ⬜ 待用户执行 |
-| 3 | 信任弹窗交互 UX | ➖ 拒绝路径已由 `live-untrusted-config` 覆盖；弹窗本身 ⬜ 待用户执行 |
+| 2 | M1 真实安装/卸载（干净导出物 `step install`） | ➖ **必做人工项**——写的是你的真实 settings，必须由你本人执行；机制部分已由 `live-package-install` / `live-clean-export` 覆盖；交互残留 ⬜ 待用户执行（§2） |
+| 3 | M2 信任弹窗交互 UX | ➖ **必做人工项**；拒绝路径已由 `live-untrusted-config` 覆盖；弹窗本身 ⬜ 待用户执行（§3） |
 | 4 | LLM 行为遵循度（ring） | ✅ 2026-10-22 + 2026-10-25 两轮确认（两跳成功 + 第三跳被 maxLoopCount 拦下并原文引用） |
 | 5 | 沙箱演示剧本（三幕） | ✅ 2026-10-22 + 2026-10-25 两轮复测通过（修复轮 11/12→12/12、两轮并行审查零改动） |
 | 6 | 性能主观项（8 成员满编） | ➖ 可选，主观无判定标准 |
-| 7 | 实际方案三选项确认框（Accept / 自定义输入… / Cancel）+ 生成进度动画（新 UI） | ➖ 2026-10-25 轮次已实测走通（经济/均衡/R1–R4 三档方案选单与确认均成功注入）；**自定义输入路径仍未实测** ⬜（场景 5） |
-| 8 | 激活护栏 L1（2026-10-23 重写） | ➖ phase6 八条用例全绿；一次交互确认 ⬜ 待用户执行（场景 7） |
-| 9 | 自定义角色（agentDir 层 + 信任项目层） | ➖ phase3 覆盖预设加载与信任门控；LLM 层应用 ⬜ 待用户执行（场景 8） |
-| 10 | 旧关键词迁移提示 | ➖ phase6/phase9 覆盖剥离语义；一次性提示 ⬜ 待用户执行（场景 9） |
+| 7 | 实际方案三选项确认框（Accept / 自定义输入… / Cancel）+ 生成进度动画（新 UI） | ➖ 2026-10-25 轮次已实测走通（三档 Accept 路径）；**自定义输入路径与固定档已于 2026-10-25 由 RPC 驱动探针 live 验证**（`node sandbox/probe-remaining-manual.mjs 5a` / `5b`：用户文本原样进入转发请求、钉档后选单不出现）；剩余仅 TUI 按键观感 ⬜（M3：无倒计时/Esc/空提交） |
+| 8 | 激活护栏 L1（2026-10-23 重写） | ✅ phase6 八条用例全绿 + **2026-10-25 RPC 驱动 live 验证通过**（`probe-remaining-manual.mjs 7`：元问题零团队动作、how-to 带主体激活且 team_create_member 真实可用） |
+| 9 | 自定义角色（agentDir 层 + 信任项目层） | ➖ phase3 覆盖加载与信任门控 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 8`：frontmatter tools/effort/prompt 落到真实 spawn、成员自报白名单含 topo_team_msg）；项目级层仍需 M2 信任流 ⬜ |
+| 10 | 旧关键词迁移提示 | ✅ phase6/phase9 覆盖剥离语义 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 9`：迁移提示每会话恰好出现一次） |
 | — | 英文版文档译文审阅 | ⬜ 建议过目 |
 
 ## 单轮测试 runbook（一轮完整测试）
@@ -65,11 +72,15 @@ npm run smoke   # 20 phase + manifest + 7 个 live 检查（+ orphan-check）；
 | 2 | 建成员 + pipeline + 任务板 | §1 第 3–8 步 | §1 | — |
 | 3 | `topo_team_msg` E2E | 粘贴：`让 scout1 通过 topo_team_msg 给 worker1 发一条一句话自我介绍，并原样报告工具的返回文本` | §1、§4 | 回复为尽力语义：投递回执（"Delivered to …"）不是队友的答复——产出经队长收集 |
 | 4 | ring 快巡（小步快跑） | §4 的 ring prompt | §4 | 每一跳保持小工作量（一个文件一个问题），使每跳都能在 600s 默认 `dispatch.timeoutMs`（覆盖成员整回合，含嵌套中继）内 settle——且超时不再触发盲目重试：任务会带着收割指引失败。只跑一圈；最终清单由队长收集。**环内闭环**：默认 `maxLoopCount=2` 下，3 成员环的闭环跳（r3→r1）必被拦下——闭环须由队长中转；确需环内闭环再调高 `maxLoopCount` |
-| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo <请求>` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；确认框提供 **Accept / 自定义输入… / Cancel** 三选项、无倒计时、等待你决定——自定义输入的文本原样发送给模型并追加到转发的请求后（Esc 取消） |
+| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo <请求>` | §8（TEST-PLAN K2/K3） | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；确认框提供 **Accept / 自定义输入… / Cancel** 三选项、无倒计时、等待你决定——自定义输入的文本原样发送给模型并追加到转发的请求后（Esc 取消） |
 | 6 | 并行评审 | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
-| 7 | 激活护栏（L1） | 粘贴：`如何用智能体小队并行审查这个仓库？` | — | 2026-10-23 重写：带请求主体的 how-to 请求会激活插件（正常组队）；对插件本身的纯提问（`什么是智能体小队？`）仍被抑制——不组队 |
-| 8 | 自定义角色（K6） | 写 `sandbox/agent/agents/quickfix.md`（frontmatter：`name`/`description`/`tools`/`effort`），重启，粘贴：`创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §1 | frontmatter 的 prompt/tools/effort 生效（工具列表即白名单）；项目级角色 `sandbox/project/.stepcode/agents/` 仅在信任的项目加载（删 `sandbox/agent/trust.json` 可重触发弹窗） |
-| 9 | 旧关键词迁移提示（K7） | 在 `sandbox/config.toml` 的 `keywords` 中于插件专属词旁加 `"智能体团队"`（已废弃），重启，粘贴：`我想用智能体小队熟悉一下这个项目` | — | 经插件专属词照常激活；被剥离的废弃词会在激活时报告一次（本次会话内不再重复） |
+| 7 | 激活护栏（L1） | 粘贴：`如何用智能体小队并行审查这个仓库？` | §9 | 2026-10-23 重写：带请求主体的 how-to 请求会激活插件（正常组队）；对插件本身的纯提问（`什么是智能体小队？`）仍被抑制——不组队 |
+| 8 | 自定义角色（K6） | 写 `sandbox/agent/agents/quickfix.md`（frontmatter：`name`/`description`/`tools`/`effort`），重启，粘贴：`创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §10 | frontmatter 的 prompt/tools/effort 生效（工具列表即白名单）；项目级角色 `sandbox/project/.stepcode/agents/` 仅在信任的项目加载（删 `sandbox/agent/trust.json` 可重触发弹窗） |
+| 9 | 旧关键词迁移提示（K7） | 在 `sandbox/config.toml` 的 `keywords` 中于插件专属词旁加 `"智能体团队"`（已废弃），重启，粘贴：`我想用智能体小队熟悉一下这个项目` | §11 | 经插件专属词照常激活；被剥离的废弃词会在激活时报告一次（本次会话内不再重复） |
+
+**必做人工项（M1/M2）**：真实安装/卸载（§2——写的是你的真实 settings，必须由你本人
+执行）与项目配置信任弹窗（§3）为**必做**人工项而非可选项；§2/§3 内容维持不变，
+此处标注其必做属性——缺项不计一轮完整。
 
 **档位方案选择框内容（实际方案改造）**：`/topo` 带请求文本并选定档位后，插件先让模型
 做一次性规划调用（只出方案不执行，带“正在生成智能体拓扑协作方案”进度动画），为该请求起草实际组队方案；三选项选择框（Accept / 自定义输入… / Cancel）随后展示
@@ -141,7 +152,7 @@ bash sandbox/restore-project.sh
 
 | # | 复制粘贴 | 预期渲染 | 结果 |
 |---|---|---|---|
-| 1 | `我想用智能体小队功能熟悉一下这个沙箱项目` | 激活 notify：「Agent team plugin activated (explicit plugin mention). Team tools are now available.」；团队工具从此对模型可见 | ☐ |
+| 1 | `我想用智能体小队功能熟悉一下这个沙箱项目` | 先弹 L2 确认框「检测到团队请求关键词，是否启用智能体团队？」（`confirmBeforeActivate` 默认开，见 CONFIGURATION_CN）→ 选是 → 激活 notify：「Agent team plugin activated (explicit plugin mention). Team tools are now available.」；团队工具从此对模型可见 | ☐ |
 | 2 | `/topo` | 团队板 notify：`Team "<id>"` + 成员行（○/●/✗ 图标 + role + status + model/effort）+ 任务行（含 blockedBy）+ `spend: $x.xxxx`；空队时提示用 team_create_member | ☐ |
 | 3 | `创建一个 scout 角色的成员，名字叫 scout1` | renderCall：`team +scout1 (scout)`；renderResult：`✓ scout1 (scout) [idle] … effort=high` | ☐ |
 | 4 | `再创建一个 worker 角色的成员，名字叫 worker1` | 同第 3 步的 `+worker1 (worker)` / `✓ worker1 (worker) [idle]`（为第 7 步的 pipeline 拓扑提供第二个成员） | ☐ |
@@ -321,6 +332,163 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 （如 topo_team_msg 被拒）必须引用工具返回的原文，不得凭记忆转述；
 （5）净结果——基线对比、改动文件清单、未做的事；（6）还原方式。
 ```
+
+## 8. 场景 5 — 方案选单：自定义输入（5a）与固定档（5b）
+
+两个子场景共用同一条前置链：`sandbox/config.toml` 的 `[stepcodeAgentTeam.plan] enabled = true`（种子沙箱默认已开）、**重启会话**（`plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置）、**交互式 TUI**（`./sandbox/run.sh`）。规划调用仅交互式生效——headless/RPC 的 `/topo <请求>` 会跳过它、直接按档位标准形态确认，因此无对话框的一轮证明不了 5a 的任何东西。
+
+### 5a · 自定义输入路径（最高优先）
+
+**测什么**：完整对话框链——`/topo <请求>` → 档位选单（四档 + 自定义需求…）→「正在生成智能体拓扑协作方案」进度动画（一次性、只出方案的模型调用）→ 三选项确认框（Accept / 自定义输入… / Cancel）——重点是「自定义输入…」分支：你的自由文本必须**原样**到达模型——trim 后以空行追加到转发的请求后，不作解释、不结构化。
+
+**前置条件**：`sandbox/config.toml` 的 `plan.enabled = true`；改完配置重启会话；交互式 TUI；全新会话（先解散遗留 live 成员——`汇报一下团队当前状态`）。
+
+**操作**（先粘贴一行，再走对话框）：
+
+```text
+/topo 修复这个项目里失败的测试
+```
+
+1. 档位选单里任选一档（如 均衡/balanced）。
+2. 等进度动画结束——起草的方案展示在确认框上方的 notify 里。
+3. 三选项确认框里选 **自定义输入… / Custom input…**（无倒计时——等你决定）。
+4. 自由文本输入框里输入一句话，例如：
+
+```text
+优先保持改动最小：只修 src/tasks.js，不要动其他文件。
+```
+
+**预期**：插件把原始请求**连同你那句话原样**作为一条 user 消息转发，模型两者都会顾及。核对会话 JSONL：文本与你输入的完全一致（仅去除首尾空白）、以空行追加——队长会话 `sandbox/agent/sessions/*.jsonl` 里有转发的 user 消息；成员派活后，`sandbox/agent/teams/<teamId>/sessions/*.jsonl` 里是由其派生的派发 prompt。另各验证一次两个姊妹分支：**空提交**=按所示方案接受（不追加任何内容）；**Esc**（在选单或输入框上）=取消——请求仍转发，但只注入激活指令、不组队。
+
+**自动化覆盖**：phase24 用假 ExtensionAPI + 脚本化 ctx 驱动完整确认链，断言合并契约（6 断言：Accept 原样转发请求并注入方案 / 自定义输入 note 原样合并 / 空提交按原样接受 / Cancel 仅注入激活指令）。
+
+**live 验证（2026-10-25，RPC 驱动探针）**：`node sandbox/probe-remaining-manual.mjs 5a` 以脚本化 RPC 客户端走完整链路——应答档位选单（均衡）→ 进度动画与模型起草的方案 → 三选项确认框选「自定义输入…」→ 输入 `只要 1 个只读成员，不要修改任何文件`。会话 JSONL 里转发的 user 消息为「原始请求 + 空行 + 该文本」（逐字一致，仅去首尾空白），随后模型正常调用 `team_create_member`。「文本原样到达模型」已在**真实宿主对话框 + 真实 LLM 往返**上成立；探针覆盖不到的只剩 TUI 像素与按键观感（Esc/空提交/无倒计时，归 M3）。
+
+**为何必须人工**：对话框是宿主渲染的 TUI（phase24 只是脚本化），且「文本原样到达模型并被采纳」只有真实模型回合才能端到端观察。
+
+**还原**：`bash sandbox/restore-project.sh`（+ 可选彻底清场，见 §0）。
+
+### 5b · 固定档（K3）
+
+**测什么**：`plan.tier` 钉档后档位选单不再出现——钉住的档位在**两条**激活路径（`/topo` 命令与提示词触发）上都生效。
+
+**前置条件**：`sandbox/config.toml` 设 `[stepcodeAgentTeam.plan] tier = "fast"`（保留 `enabled = true`），**重启会话**，交互式 TUI。
+
+**操作**（两条独立 prompt——一条路径一次，勿混用）：
+
+```text
+/topo 统计这个项目的源文件数量
+```
+
+然后走关键词路径，重新激活（新开会话，或等上一轮 settle 后）：
+
+```text
+用智能体小队统计一下这个项目的源文件数量
+```
+
+**预期**：两条路径都不弹档位选单——各自直接进入 fast 档。带请求时进度动画与三选项确认框仍会出现（展示 fast 档方案）；Accept 即可。任何时刻都不应出现 "always ask" 选单。
+
+**自动化覆盖**：phase21 断言档位表本身（四档、五种模式、双语标签、未知 id 回退）；phase24 经 resetConfigCache 钩子切换 `plan.enabled` 驱动确认路径。
+
+**live 验证（2026-10-25）**：`probe-remaining-manual.mjs 5b` 把 `plan.tier` 钉为 `"fast"` 后走 `/topo <请求>`——档位选单**不出现**（负向断言通过）、三选项确认框仍出现并可 Accept。命令路径已验证；关键词路径的选单抑制沿用同一配置读取，留作一轮人工抽查即可。
+
+**为何必须人工**：「选单不出现」是负向 UI 观察，只有真实会话能判定；且两条激活路径共用配置但不同代码路径——须各跑一次。
+
+**还原**：把 `sandbox/config.toml` 的 `tier` 改回 `"always ask"`，再 `bash sandbox/restore-project.sh`。
+
+## 9. 场景 7 — 激活护栏（L1）
+
+**测什么**：句子锚定的误报护栏——命中关键词但属真实用法请求的，激活插件并组队；对插件本身的纯提问则被抑制。
+
+**前置条件**：全新会话、未激活态（重启沙箱会话；勿复用团队工具已启用的会话）。只走关键词路径——这些 prompt 里切勿混入 `/topo`。
+
+**操作**（全新会话内逐条粘贴）：
+
+```text
+如何用智能体小队并行审查这个仓库？
+```
+
+```text
+什么是智能体小队？
+```
+
+**预期**：第一条激活——先弹 L2 确认框（选是）→ 出现激活 notify、团队工具可用、队长组队并派发并行审查。第二条被抑制——无确认框、无激活 notify、无团队工具、不组队；模型只回答这个关于插件本身的问题。
+
+**live 验证（2026-10-25）**：`probe-remaining-manual.mjs 7` 跑两条隔离会话——「什么是智能体小队？」无激活 notify 且**零**团队工具调用（PASS）；「如何用智能体小队并行审查这个仓库？」应答确认框后激活，随后的「创建一个 scout 角色的成员」产出真实 `team_create_member` 调用（PASS）。
+
+**自动化覆盖**：phase6 锚定八条句子级用例（带请求主体的 how-to 激活；纯 how-to 提问抑制；否定与文档/代码引用抑制；子句分隔的否定仍激活）。缺口：真实模型那一端——激活的 how-to 请求是否真的产出团队，被抑制的元问题是否真的毫无团队动作。
+
+**为何必须人工**：护栏只决定*是否*激活；可观察结果（notify + 团队工具 + 组队，或全无）只存在于真实会话。
+
+**还原**：`bash sandbox/restore-project.sh`（+ 可选彻底清场，见 §0）。
+
+## 10. 场景 8 — 自定义角色（K6）
+
+**测什么**：`<agentDir>/agents/` 下的用户层预设——以该角色建成员时其 frontmatter（`name`/`description`/`tools`/`effort`）生效；以及项目层预设仅在信任的项目加载。
+
+**前置条件**：交互式 TUI；写完预设文件后重启会话（预设在启动时加载）。
+
+**操作**：
+
+```bash
+mkdir -p sandbox/agent/agents
+cat > sandbox/agent/agents/quickfix.md <<'EOF'
+---
+name: quickfix
+description: 快速最小修复——只读诊断加一处定点修改
+tools: ["read", "edit", "grep"]
+effort: low
+---
+你是 quickfix 角色：诊断尽可能小的修法，只做一处定点修改，并用一句话汇报改动。不得为修复之外的目的重构。
+EOF
+# 重启沙箱会话，然后粘贴：
+```
+
+```text
+创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单
+```
+
+**预期**：`team_create_member(role="quickfix")` 应用该预设——create 结果与成员的一句话回答显示 frontmatter 里的白名单（`read`/`edit`/`grep`）**外加基础设施 `topo_team_msg`**（它叠加在每个成员的工具列表之上，无需 bash）。
+
+**坑位（设计行为）**：沙箱 `sandbox/config.toml` 设了 `models.autonomousEffort = true`，此时**所有** frontmatter/预设 effort 一律失效——effort 由队长逐成员选择，`effort: low` 被忽略，create 结果显示 `effort=high`。要验证 frontmatter effort 真的生效，把 `autonomousEffort` 改 `false`、重启会话再跑——那时会显示 `effort=low`。这是成文行为（见 [CONFIGURATION_CN.md](CONFIGURATION_CN.md) `models.autonomousEffort`），不是缺陷。
+
+**项目级角色**：`sandbox/project/.stepcode/agents/` 下的预设仅在项目受信任时加载——删 `sandbox/agent/trust.json` 并重启可重触发 §3 信任弹窗；信任授予前项目层整体跳过。
+
+**自动化覆盖**：phase3 断言三层预设加载（包内 `agents/` < `<agentDir>/agents/` < 信任项目层）与信任门控（不可信项目的预设绝不加载）。
+
+**live 验证（2026-10-25）**：`probe-remaining-manual.mjs 8` 在隔离 agentDir 写 quickfix.md（`tools: read, grep, edit, bash`、`effort: low`，并把 `models.autonomousEffort` 置 `false`）后经 `/topo` 建成员——create 结果为 `Created member "fixer1" (role: quickfix) … effort: low; tools: read, grep, edit, bash`，成员自报「read、grep、edit、bash、topo_team_msg」，与「frontmatter 白名单 + 基础设施叠加」规则完全一致。
+
+**为何必须人工**：预设应用发生在派生成员进程内的真实模型回合上；白名单与 effort 只在成员的实际行为里可见。
+
+**还原**：删除 `sandbox/agent/agents/quickfix.md`（及任何项目层预设），再 `bash sandbox/restore-project.sh`。
+
+## 11. 场景 9 — 旧关键词迁移提示（K7）
+
+**测什么**：`activation.keywords` 里的废弃词在加载时被剥离，激活经插件专属词照常进行，且剥离行为**每会话报告一次**。
+
+**前置条件**：交互式 TUI；改完配置重启会话（keywords 每会话只读一次）。
+
+**操作**：
+
+```bash
+# 在 sandbox/config.toml 中于插件专属词旁加上废弃词：
+#   keywords = [ "智能体团队", "智能体小队", "多智能体小队", "topo team", ... ]
+# 然后重启会话并粘贴：
+```
+
+```text
+我想用智能体小队熟悉一下这个项目
+```
+
+**预期**：迁移提示出现一次——「Migrated activation config: removed deprecated keywords (智能体团队). Use current keywords like 智能体小队 / topo team.」（session_start 时交付，重启后、粘 prompt 前即可看到）。该 prompt 随后经插件专属词 `智能体小队` 照常激活并组队。同一条再发一次：提示不再重复（每会话只消费一次），激活照常。
+
+**自动化覆盖**：phase6/phase9 断言剥离语义（部分废弃的列表保留其余；全废弃的列表禁用关键词激活——迁移只收窄、不扩大激活面）。缺口：真实会话里一次性、用户可见的 notify。
+
+**live 验证（2026-10-25）**：`probe-remaining-manual.mjs 9` 连发两条相同 prompt——迁移提示恰好出现一次、第二次不再出现（PASS）。「恰好一次」已在真实重启+重发循环上验证。
+
+**为何必须人工**：该提示是宿主 `ctx.ui.notify`；其像素形态与停留时间仍属观感项（M3/M4）。
+
+**还原**：从 `sandbox/config.toml` 的 `keywords` 删去 `"智能体团队"`，再 `bash sandbox/restore-project.sh`。
 
 ## 已知限制（审查确认，暂不修）
 

@@ -698,6 +698,19 @@
 
 **遗留**：演示项目两轮并行审查的 18/20 条 findings 与演示 README 陈旧（load() fail-loud 描述过期）按既定决议只记录不修（restore 每轮复位、保留修复会摧毁种子 bug 演示前提）；用户轮次遗留的 4 个 idle 成员由用户下轮收尾时解散；**自定义输入路径仍未人工实测**（本轮三档均走 Accept 确认）。
 
+### 65. 手动场景收口轮：五场景 live 驱动验证与文档补齐（plan-103）
+
+**用户 prompt**：（团队激活 + 性能档方案确认）「请修改手动测试的相关文档，把场景789等必须手动测试的内容也加入进去，然后检查更新所有文档、做还没做完的测试」。
+
+**思路**：按批准的 5 成员性能档方案执行（场景分析师/文档专家A/文档专家B 竞速/质量审查员/测试工程师，custom 拓扑 2 边表达"双路竞速→审查接续"）。派发机制仍不稳定（并行 3 路全超时、test-engineer 三次零用量），T1/T2A 派发成功、其余由队长接管；**竞速改择优审查**（A 稿已落盘，B 再改同文件会互相覆盖）。
+
+**工作**：① **T1（scenario-analyst）**：产出必测清单——7 项必做（5a 自定义输入、5b 固定档、7 L1、8 K6、9 K7、M1、M2）+ 条件/可选项 + 10 项降级依据（K1/K4/K5/K8、Accept 路径、ring、三幕、TUI 走查均已被自动化或上轮实测覆盖）。② **T2A（doc-writer-a）**：MANUAL-TESTING(_CN) 新增 §8–§11（场景 5a/5b/7/8/9 明细节，六要素：测什么/前置/可复制粘贴/预期/自动化覆盖/为何人工），场景表明细列改指新节，状态总览标注 M1/M2 必做。③ **T4（队长接管）——五个 live 探针全部 PASS**：新 `sandbox/probe-remaining-manual.mjs`（脚本化 RPC 客户端应答宿主对话框 select/input/confirm——rpc-mode.ts:137-151 的对话框承诺可应答是本轮关键发现）——**5a**：档位选单→spinner+模型起草方案→确认框选「自定义输入…」→input，用户文本**原样**（空行追加）进入转发的 user 消息且模型随即 team_create_member；**5b**：`plan.tier="fast"` 钉档后选单不出现（负向断言）、确认框仍出现；**7**：元问题零团队动作、how-to 带主体激活且 team_create_member 真实可用；**8**：frontmatter `tools/effort`（autonomousEffort=false）落到真实 spawn、成员自报白名单含 topo_team_msg；**9**：迁移提示每会话恰好一次。④ **文档同步**：TESTING(_CN) 探针表登记 5 行、sandbox/README(_CN) 探针清单、TEST-PLAN(_CN) K2/K3/K6/K7 行标注 live 结论；MANUAL-TESTING 双语补 live 验证段；**补文档缺口**：关键词激活路径默认先弹 L2 确认框（`confirmBeforeActivate`）——runbook §1 步骤 1 与场景 7 此前未提及。
+
+**验证**：五个探针子命令实跑全 PASS；全量冒烟门 exit 0（20 phase）。**自查纠错**：门禁曾在 phase6/9 失败 7–9 项——根因是队长早前取证脚本把 config.toml 写到了 `/tmp/config.toml`，而 runner 的 mktemp agentDir 的全局配置正是 `dirname(agentDir)/config.toml`= `/tmp/config.toml`，遮蔽了所有 fixture；清理后全绿（探针文件头已补该陷阱警示）。
+
+**遗留**：M1（真实 install/remove，写用户 settings 须本人执行）、M2（信任弹窗）、M5（英文译文审阅）为纯人工项；5b 关键词路径、K6 项目级角色层各留一轮人工抽查；TUI 像素/按键观感（M3/M4）仍属人工。**原 7 项必测中 5 项的语义已验证，剩余全部是不可自动化的交互/UX 项。**
+
+
 
 
 

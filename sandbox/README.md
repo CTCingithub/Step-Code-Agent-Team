@@ -29,6 +29,7 @@ agent team.
 | `project/` | Demo project: zero-dependency Node.js task manager (`npm test`: 12 tests, 11 pass with the seeded bug in place) |
 | `project-pristine/` | Initial snapshot of the demo project (the source for restore; do not modify) |
 | `smoke-phase4/10/11/12.ts` | LLM-layer regression probes (need a key; see docs/TESTING.md for how to run) |
+| `probe-remaining-manual.mjs` | RPC-driver live probes for the formerly-manual scenarios (needs the key): `node sandbox/probe-remaining-manual.mjs <5a\|5b\|7\|8\|9>` — answers the host dialogs (select/input/confirm) to drive the plan confirmation, the L1 guard, custom roles and the migration notice; each subcommand uses an isolated temp agentDir and must run from the leader's own process |
 | `cfg-*/settings.json` | Probe config fixtures (staged through the legacy settings.json tier, still honored). Live: `cfg-conc` (phase10 Branch A), `cfg-deadlock` (phase10 Branch B), `cfg-deep2` (phase11); the rest are legacy with no live consumer (phase9 builds its own mktemp fixture). A local `sandbox/config.toml` shadows these — isolate the probe's agentDir (see docs/TESTING.md Layer C) |
 | `TEST-KEY.md` | Test API key (gitignored — one `STEP_API_KEY=<key>` line; read by run-smoke.sh and with-test-key.sh) |
 | `with-test-key.sh` | Runs a command with the key from TEST-KEY.md exported (used for the Layer C LLM probes) |

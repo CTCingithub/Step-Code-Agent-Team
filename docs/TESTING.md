@@ -143,6 +143,11 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | Concurrency cap live / nested messaging deadlock |
 | phase11 | cfg-deep2 | Real chain at recursion depth 2 |
 | phase12 | default | oneshot / task chains / Unicode / crash recovery / streaming progress |
+| probe-remaining-manual `5a` | isolated agentDir (plan.enabled) | the confirmation's custom-input path: a scripted RPC client answers the tier picker → picks 自定义输入… → the input dialog, asserting the user's text rides along verbatim in the forwarded user message |
+| probe-remaining-manual `5b` | isolated agentDir (plan.tier pinned) | negative assertion: with a pinned tier the picker does not appear while the three-option confirmation still does |
+| probe-remaining-manual `7` | isolated agentDir ×2 | the L1 guard: zero team actions for a meta question; a how-to with a body activates and `team_create_member` really works |
+| probe-remaining-manual `8` | isolated agentDir (agents/quickfix.md + autonomousEffort=false) | custom roles: the frontmatter's tools/effort land on a real spawn and the member self-reports the allowlist incl. topo_team_msg |
+| probe-remaining-manual `9` | isolated agentDir (keywords with a deprecated term) | the migration notice appears exactly once per session |
 
 phase10/phase11 read their behavior from the agent dir's config, so repoint the
 export at the fixture (`STEP_CODING_AGENT_DIR="$PWD/sandbox/cfg-deep2"` for
