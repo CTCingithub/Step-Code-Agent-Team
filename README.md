@@ -78,6 +78,7 @@ From git — no packaging step needed, it is a standard step package:
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.2.0)
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.3.0-preview   # preview line (newest; latest never moves for it)
 ```
 
 **Troubleshooting — "Tool … conflicts with …" at startup**: step loads every
@@ -468,7 +469,7 @@ is absent, so the core team functionality always runs.
 
 ## Status
 
-0.2.0 feature set (shipped as v0.2.0 — `@latest` tracks the release):
+0.3.0-preview feature set (tagged `v0.3.0-preview` — `@latest` stays on the stable v0.2.0 line until 0.3.0 goes final):
 
 - **Command & activation**: `/topo` with plan tiers, `/topo review [target]`,
   and `/topo off`; plugin-specific activation keywords with forced migration
@@ -476,9 +477,17 @@ is absent, so the core team functionality always runs.
 - **Team plans** (default off): economic / fast / balanced / performance
   strategy prompts plus a guided custom flow; `plan.tier` pins one strategy
   (default `"always ask"` — a pin applies directly on both activation paths,
-  with no picker and no confirmation).
+  with no picker and no confirmation). With a request attached the model
+  drafts the actual plan and a three-option selection (Accept / 自定义输入… /
+  Cancel) shows it — a custom input's own text rides along with the request
+  verbatim.
 - **Messaging**: members reach teammates through the built-in `topo_team_msg`
   tool — no bash required, so topology edges are usable for every role.
+- **Dispatch resilience**: a settle timeout retries once only when the member's
+  usage proves the failed attempt did nothing (no duplicate billing); spawn and
+  handshake failures retry in bounded loops; failed board tasks can be
+  re-dispatched with the member's context resumed and a `detail` note carried
+  along.
 - **Protocol layer** (zero-token smoke probes, `test/smoke/phase*.ts`):
   spawn, handshake, registry persistence, task graph, socket round-trip,
   preset and custom-role loading, and the topo_team_msg socket protocol.

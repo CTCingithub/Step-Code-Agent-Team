@@ -70,6 +70,7 @@ skill 或提示词模板资源；编排协议在激活时经请求本地注入�
 
 ```bash
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # 稳定发布版（推荐；当前为 v0.2.0）
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.3.0-preview   # 预览线（最新；latest 绝不因预览版移动）
 ```
 
 **排障——启动时报 "Tool … conflicts with …"**：step 会加载 `packages` 里的每一项，而本插件在同一份配置里只能安装一份。本地路径安装（`step install /path/to/checkout`）与 git 安装（`git:github.com/…`）并存会加载两份 `extensions/index.ts`，六个团队工具名全部冲突、扩展加载失败，step 可能无法启动。修复：只保留一项——对另一项执行 `step remove`（用当初安装时相同的路径或 git 规格）。
@@ -383,10 +384,11 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 
 ## 状态与验证
 
-0.2.0 功能集（已作为 v0.2.0 发布——`@latest` 已跟随正式版）：
+0.3.0-preview 功能集（已打 tag `v0.3.0-preview`——`@latest` 保持在稳定版 v0.2.0 线上，直至 0.3.0 正式发布）：
 
 - **命令与激活**：`/topo`（含方案档位、`/topo review [目标]`、`/topo off`）；插件专属激活关键词 + 旧词强制迁移；三层防误触护栏。
 - **团队方案**（默认关）：经济 / 快速 / 均衡 / 性能四档策略提示词 + 自定义引导流程；带请求时 Accept / 自定义输入… / Cancel 三选项选择框展示模型生成的实际方案；`plan.tier` 可固定档位（默认 `"always ask"`——钉档后选单与确认框均不弹，直接应用该档）。
+- **派发韧性**：settle 超时仅在成员 usage 证明该次尝试什么都没做时自动重试一次（绝不重复计费）；spawn/握手失败有界重试；failed 板任务可带上下文重派并随行 `detail` 提示。
 - **成员间消息**：成员经内置 `topo_team_msg` 工具直达通信——无需 bash，拓扑边对所有角色可用。
 - **协议层**（零 token 冒烟探针 `test/smoke/phase*.ts`）：spawn、握手、注册表持久化、任务图、socket 往返、预设与自定义角色加载、topo_team_msg 工具协议。
 - **涉模型路径**（沙箱内用测试 key 验证）：成员回复、同进程上下文记忆、按 session-id 重启恢复、成员间直达消息、队长工具调用端到端链路。
