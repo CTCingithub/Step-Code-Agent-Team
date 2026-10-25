@@ -130,7 +130,9 @@ phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的
 通过标准（摘要）：并行调度均成功；任务链状态流转 pending→ready→running→done；
 oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记得上文；
 `STEPCODE_TEAM_COST_WARN=0.0001` 触发告警、设为 0 禁用；abort 后无孤儿进程；
-onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。
+onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。另：cfg-deadlock 分支
+（phase10，`maxConcurrent=1`）须在探针窗口内（实测约 6s）无死锁完成；phase11 必须配
+`cfg-deep2` 实跑四条检查（4/4）——干净 SKIP 算失败。
 
 每轮人工沙箱演练结束后，让 agent 把过程记录到 `sandbox/logs/session-log-<日期>.md`——可粘贴的
 prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。

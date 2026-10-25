@@ -93,6 +93,15 @@ npm run smoke            # 零 token 全量冒烟（无需 key）
 bash test/run-smoke.sh 5 # phase5 需 key（来自环境变量或 sandbox/TEST-KEY.md）
 ```
 
+**门禁内容**：19 个 phase——清单由 `test/smoke/phase*.ts` 磁盘派生；phase 15/16/23/24
+独立运行（不加载扩展，避免与已安装包副本的工具名冲突）；phase5 需 key；phase 之后：
+manifest 检查、7 个 live 检查（**必须由队长自身的干净进程跑**——在成员进程受限环境中会
+整体假阴性）、15s 孤儿进程轮询。失败 phase 以新 session id 重试一次（首发失败行前缀
+`attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；`OPT_OUT_PHASES` 可跳过指定 phase。
+完整参考：[../docs/TESTING.md](../docs/TESTING_CN.md)。任何还原前先跑
+`bash sandbox/archive-round.sh <标签>`——它保留 `restore-project.sh` 不碰的
+session JSONL 与团队注册表。
+
 LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_CN.md)；
 配置方式见 [../docs/CONFIGURATION.md](../docs/CONFIGURATION_CN.md)
 （`sandbox/config.toml` 的 `[stepcodeAgentTeam]` 表）。

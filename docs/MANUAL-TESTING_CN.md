@@ -65,7 +65,7 @@ npm run smoke   # 19 phase + manifest + 7 个 live 检查（+ orphan-check）；
 | 2 | 建成员 + pipeline + 任务板 | §1 第 3–8 步 | §1 | — |
 | 3 | `topo_team_msg` E2E | 粘贴：`让 scout1 通过 topo_team_msg 给 worker1 发一条一句话自我介绍，并原样报告工具的返回文本` | §1、§4 | 回复为尽力语义：投递回执（"Delivered to …"）不是队友的答复——产出经队长收集 |
 | 4 | ring 快巡（小步快跑） | §4 的 ring prompt | §4 | 每一跳保持小工作量（一个文件一个问题），使每跳都能在 600s 默认 `dispatch.timeoutMs`（覆盖成员整回合，含嵌套中继）内 settle——且超时不再触发盲目重试：任务会带着收割指引失败。只跑一圈；最终清单由队长收集。**环内闭环**：默认 `maxLoopCount=2` 下，3 成员环的闭环跳（r3→r1）必被拦下——闭环须由队长中转；确需环内闭环再调高 `maxLoopCount` |
-| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；方案确认框无倒计时，等待你决定（Esc 取消） |
+| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo <请求>` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；确认框提供 **Accept / 自定义输入… / Cancel** 三选项、无倒计时、等待你决定——自定义输入的文本原样发送给模型并追加到转发的请求后（Esc 取消） |
 | 6 | 并行评审 | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 | 7 | 激活护栏（L1） | 粘贴：`如何用智能体小队并行审查这个仓库？` | — | 2026-10-23 重写：带请求主体的 how-to 请求会激活插件（正常组队）；对插件本身的纯提问（`什么是智能体小队？`）仍被抑制——不组队 |
 | 8 | 自定义角色（K6） | 写 `sandbox/agent/agents/quickfix.md`（frontmatter：`name`/`description`/`tools`/`effort`），重启，粘贴：`创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §1 | frontmatter 的 prompt/tools/effort 生效（工具列表即白名单）；项目级角色 `sandbox/project/.stepcode/agents/` 仅在信任的项目加载（删 `sandbox/agent/trust.json` 可重触发弹窗） |
@@ -76,10 +76,12 @@ npm run smoke   # 19 phase + manifest + 7 个 live 检查（+ orphan-check）；
 该方案，批准后以高于档位一般性指导的优先级注入。裸 `/topo`（无请求）或规划调用失败时
 回退为该档位的标准方案形态——此时没有可展示的请求相关内容。
 规划调用仅交互式会话生效——headless/RPC 的 `/topo <请求>` 会跳过它，直接按档位标准形态确认。
+确认框提供三个选项：**Accept**（按所示方案组队）、**自定义输入… / Custom input…**（你自己的文本原样发送给模型——不作解释——追加到转发的请求后；空提交=按原样接受）、
+**Cancel**（请求仍会转发，但只注入激活指令——不组队）。
 
 **派发异常与恢复（来自 2026-10-24 沙箱轮）**：
 
-- **settle 超时**：派发可能报 `timeout waiting for member to settle`——成员被 fail-fast 杀死，但其工作通常在服务端继续（或下次派发时带上下文恢复）。恢复：查 `team_status` 后重派（发一条"收尾并报告"的短消息即可），成果不丢。
+- **settle 超时**：派发可能报 `timeout waiting for member to settle`——成员被 fail-fast 杀死，但其工作通常在服务端继续（或下次派发时带上下文恢复）。settle 超时现在会自动重试一次，但仅当成员 usage 证明该次尝试什么都没做（turns 为 0——usage 服务端持久化）时才重试，绝不重复计费；有真实工作的超时仍会报错，恢复为手动：查 `team_status` 后重派（发一条"收尾并报告"的短消息即可），成果不丢。
 - **spawn/handshake 类失败会自动重试一次**：成员握手失败（或 `aborted before start`）在 `createMember` 与任务派发内会自动重试——上面"不盲目重试"的规则只针对 settle 超时，不针对 spawn 路径失败。
 - **failed 板任务可重派**：成员中途被杀的任务保持 `failed`；对其 `team_task start` 会重派且成员带上下文恢复——无需重建 `blockedBy` 链（此前轮次正是被此死锁逼出"建等价任务"的变通）。start 时传入的 `detail` 会追加进派发 prompt，收割提示可直接随行。
 - **`topo_team_msg` 的成员自报不可靠**：成员对实际已投递的消息既报过"投递成功"也报过"工具不可用"。信任任何一侧之前，先在 `sandbox/agent/teams/<teamId>/sessions/*.jsonl` 里核实是否存在该工具调用。

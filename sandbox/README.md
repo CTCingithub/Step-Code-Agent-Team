@@ -110,6 +110,18 @@ npm run smoke            # full zero-token smoke (no key needed)
 bash test/run-smoke.sh 5 # phase5 needs a key (from the environment or sandbox/TEST-KEY.md)
 ```
 
+**What the gate runs**: 19 phases — the list is derived on disk from
+`test/smoke/phase*.ts`; phases 15/16/23/24 run standalone (no extension loaded,
+avoiding the tool-name conflict with an installed package copy); phase 5 needs a
+key; after the phases: a manifest check, 7 live checks (which must run from the
+leader's own clean process — inside a member process they fail wholesale, a
+known false negative), and a 15s orphan-process poll. A failed phase is retried
+once on a fresh session id (the first-failure line is prefixed `attempt1`, so a
+passing retry leaves no bare `FAILED` line for CI to misread); `OPT_OUT_PHASES`
+skips listed phases. Full reference: [../docs/TESTING.md](../docs/TESTING.md).
+Before any restore, run `bash sandbox/archive-round.sh <label>` — it keeps the
+session JSONL and team registry that `restore-project.sh` does not touch.
+
 How to run the LLM-layer probes: [../docs/TESTING.md](../docs/TESTING.md);
 how to configure them: [../docs/CONFIGURATION.md](../docs/CONFIGURATION.md)
 (the `[stepcodeAgentTeam]` table of `sandbox/config.toml`).

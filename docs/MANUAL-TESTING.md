@@ -76,7 +76,7 @@ npm run smoke   # 19 phases + manifest + 7 live checks (+ orphan-check); stop an
 | 2 | Members + pipeline + task board | §1 steps 3–8 | §1 | — |
 | 3 | `topo_team_msg` E2E | paste: `Have scout1 send worker1 a one-line intro through topo_team_msg and report the tool's exact return text` | §1, §4 | The reply is best-effort: a delivery acknowledgment ("Delivered to …") is not the teammate's answer — collect outputs through the leader |
 | 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list. **Ring closure**: with the default `maxLoopCount=2`, a 3-member ring's closing hop (r3→r1) is always rejected — the loop must close through the leader; raise `maxLoopCount` only if you truly need in-ring closure |
-| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching; the plan confirmation shows no countdown and waits for your decision (Esc cancels) |
+| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo <请求>` | TEST-PLAN K2/K3 | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching; the confirmation offers **Accept / 自定义输入… / Cancel** with no countdown and waits for your decision — a custom input's text is sent to the model verbatim, appended to the forwarded request (Esc cancels) |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 | 7 | Activation guard (L1) | paste: `如何用智能体小队并行审查这个仓库？` | — | Rewritten 2026-10-23: a how-to request with a body activates the plugin (the team forms); a pure question about the plugin itself (`什么是智能体小队？`) stays suppressed — no team forms |
 | 8 | Custom roles (K6) | write `sandbox/agent/agents/quickfix.md` (frontmatter: `name` / `description` / `tools` / `effort`), restart, paste: `Create a member with the quickfix role, named fixer1, and have it list its tool allowlist in one sentence` | §1 | The frontmatter's prompt/tools/effort apply (the tool list shows the allowlist); project-level roles under `sandbox/project/.stepcode/agents/` load only in trusted projects (delete `sandbox/agent/trust.json` to re-trigger the popup) |
@@ -89,11 +89,15 @@ and on approval it is injected with precedence over the tier's general guidance.
 `/topo` (no request) or a failed planning call falls back to the tier's standard
 shape — there is nothing request-specific to show yet.
 The planning call is interactive-only — headless/RPC `/topo <request>` skips it and
-confirms the tier's standard shape directly.
+confirms the tier's standard shape directly. The confirmation offers three options:
+**Accept** (form the team with the plan as shown), **自定义输入… / Custom input…**
+(your own text is sent to the model verbatim — no interpretation — appended to the
+forwarded request; an empty submission accepts as shown), and **Cancel** (the request
+still forwards, but only the activation instruction is injected — no team forms).
 
 **Dispatch anomalies and recovery (from the 2026-10-24 sandbox round)**:
 
-- **Settle timeouts**: a dispatch can fail with `timeout waiting for member to settle` — the member is killed fail-fast, but its work usually continues server-side (or resumes with context on the next dispatch). Recovery: check `team_status`, then re-dispatch (a short "finish and report" message works). Nothing is lost.
+- **Settle timeouts**: a dispatch can fail with `timeout waiting for member to settle` — the member is killed fail-fast, but its work usually continues server-side (or resumes with context on the next dispatch). A settle timeout is now retried once automatically, but only when the member's usage proves the failed attempt did nothing (zero turns — usage is persisted server-side), so a retry can never duplicate work or billing; after real work the error still surfaces and recovery is manual: check `team_status`, then re-dispatch (a short "finish and report" message works). Nothing is lost.
 - **Spawn/handshake failures retry automatically**: a failed member handshake (or `aborted before start`) is retried once inside `createMember` and task dispatch — the "no blind retry" rule above applies to settle timeouts, not to spawn-path failures.
 - **Failed board tasks are re-dispatchable**: a task whose member was killed mid-run stays `failed`; `team_task start` on it re-dispatches and the member resumes — no need to rebuild the `blockedBy` chain (that deadlock is what forced the equivalent-task workaround in earlier rounds). A `detail` passed at start time is appended to the dispatch prompt, so harvest guidance can ride along.
 - **`topo_team_msg` self-reports are unreliable**: members have reported both "delivered" and "tool unavailable" for messages that were in fact delivered. Verify actual delivery in `sandbox/agent/teams/<teamId>/sessions/*.jsonl` (look for the tool call) before trusting a member's claim in either direction.

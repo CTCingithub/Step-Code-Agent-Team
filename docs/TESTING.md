@@ -160,7 +160,10 @@ pending→ready→running→done; oneshot gets a reply and leaves no resident pr
 after `kill -9` the next send succeeds and remembers the earlier context;
 `STEPCODE_TEAM_COST_WARN=0.0001` triggers a warning and 0 disables it; no orphan
 processes after abort; onUpdate is called at least once; >50KB output is
-truncated and `details.fullText` holds the full text.
+truncated and `details.fullText` holds the full text. Additionally: the cfg-deadlock branch
+(phase10, `maxConcurrent=1`) must complete without deadlocking well inside the probe
+window (observed ~6s); phase11 must actually run its four checks (4/4) with
+`cfg-deep2` — a clean SKIP counts as a failure.
 
 After a manual sandbox round, have the agent record the session into
 `sandbox/logs/session-log-<date>.md` — the pasteable prompt is in the sandbox README's

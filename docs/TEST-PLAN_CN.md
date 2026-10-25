@@ -144,7 +144,7 @@
 | # | 检查项 | 探针 | 缺口 |
 |---|---|---|---|
 | K1 | `/topo <请求>` 端到端 | RPC prompt 带命令 | 逐字请求落入会话日志；队长组建团队（不独自完成） |
-| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo` | 选单显示 4 档 + 自定义；带请求时 Accept/取消 选择框展示模型生成的实际方案（一次性规划调用），批准后该方案以高于档位一般性指导的优先级抵达模型 |
+| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo <请求>` | 选单显示 4 档 + 自定义；带请求时三选项确认框（Accept / 自定义输入… / Cancel）展示模型生成的实际方案（一次性规划调用）；Accept 以高优先级注入该方案，自定义输入的文本随请求原样同行，Cancel 只注入激活指令 |
 | K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 不弹选单；每次激活（命令与关键词路径）直接应用该档 |
 | K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
 | K5 | topo_team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
@@ -158,7 +158,7 @@
 |---|---|---|
 | M1 | 真实安装：干净导出物 `step install`、激活、`step remove` | `step install` 命令 UX + 卸载；live-package-install 只覆盖 config packages 加载路径 |
 | M2 | 信任弹窗 UX | 项目级配置信任弹窗是交互式的 |
-| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept/取消 选项（无倒计时——方案确认框等待用户决定）、档位选单的 30s 回退 `balanced` |
+| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept / 自定义输入… / Cancel 三选项（无倒计时——方案确认框等待用户决定）、自定义输入对话框、档位选单的 30s 回退 `balanced` |
 | M4 | TUI 渲染观感（render.ts） | phase15 只断言内容字符串，不覆盖像素 |
 | M5 | 英文译文审阅 | 文档双语准确性 |
 | M6 | 8 成员性能（主观，可选） | 定性 |
@@ -183,6 +183,8 @@
 | R6 | ✅ 自动化轮（2026-10-25）：全面修改与优化（均衡档团队轮） | createMember spawn 重试（ensureLiveWithRetry，与 startTaskLocked 同构）+ isRetryableSpawnError 词边界修复（堵住增强错误里 respawn 的误放行）；phase1 零 token 回归块（10 条断言+3 个打桩场景）；CONFIGURATION(_CN) storage.dir 绝对路径说明；TEST-PLAN(_CN) 弃用 cfg-misc 标签；演示项目修复决议不做（设计上易失）；全量套件绿、tsc 零错误 |
 | R7 | ✅ 验证轮（2026-10-25）：剩余项确认+LLM 探针全量重跑 | A3/A4/B2/B3 复核仍为 deferred-by-design（无阻塞无回归）；冒烟门全绿；探针 22/22 断言全过（phase4 4/4、phase10 A 3/3+B 2/2 无死锁、phase11 4/4 深度 2 链、phase12 9/9）；发现并记载本地配置遮蔽 fixture 的假绿陷阱 |
 | R8 | ✅ 文档轮（2026-10-25）：测试流程文档审阅 | 两名只读审查员（流程线+人工线）+ 队长机械一致性核查；16 处双语更新——TESTING(_CN) C 层命令块对齐 + runner 行为/通过标准段 + phase3/16/21 覆盖行；TEST-PLAN(_CN) A1 17→19 + §I 指向 + K8 尾句；MANUAL-TESTING(_CN) Step 1 19 phase + restore 自动归档表述 + 2026-10-25 基线 + phase23 头部 + 运维块补注；sandbox/README(_CN) cfg-* 活跃/遗留标注；README_CN 陈旧路径。无代码改动 |
+
+**轮次记录规约**：每轮改动代码、测试或测试流程（零 token 轮次也包括）都应追加 R 行——日期、跑了什么、结果、异常；人工沙箱轮另产 §7 会话日志。
 
 剩余交互项：K2/K3（方案选单 + Accept/取消 确认框）、K6（自定义角色）、K7（迁移提示）——见 MANUAL-TESTING 场景 5/8/9；K1/K4/K5/K8 已被自动化覆盖（K8 于 2026-10-25 重跑：22/22 断言，phase10 双分支）。人工项：M1–M6（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
