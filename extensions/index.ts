@@ -397,7 +397,7 @@ export default function (pi: ExtensionAPI) {
 		choice: PlanChoice,
 		lang: Lang,
 		planText?: string | null,
-	): Promise<boolean> => {
+	): Promise<{ confirmed: boolean; note?: string }> => {
 		const lines =
 			choice.kind === "tier"
 				? [
@@ -428,26 +428,44 @@ export default function (pi: ExtensionAPI) {
 							: "Actual members, roles, topology, and effort are decided by the model from the task.",
 					].filter(Boolean);
 		ctx.ui.notify(lines.join("\n"), "info");
-		if (!isInteractive(ctx)) return true;
+		if (!isInteractive(ctx)) return { confirmed: true };
 		try {
-			// Exactly two options, no extra text (the suffixes read as noise next to
-			// the plan already shown by the notify above).
+			// Three options, no extra text (the suffixes read as noise next to the
+			// plan already shown by the notify above): accept the plan as shown,
+			// type free-form text that rides along with the request verbatim, or
+			// cancel.
 			const acceptLabel = "Accept";
+			const customLabel = lang === "zh" ? "自定义输入…" : "Custom input…";
 			const cancelLabel = "Cancel";
 			// The host's select countdown is a TUI-only component that ignores
 			// keypresses — it runs to expiry and can dismiss the dialog while the
 			// user is still reading the plan, and the plugin cannot hook the
 			// dialog's keys. In the TUI we therefore pass no timeout at all: no
 			// countdown is shown and the dialog waits for the decision (Esc
-			// still cancels). RPC keeps the deadline as a no-answer guard.
+			// still cancels). RPC keeps the deadline as a no-answer guard. The
+			// same rule applies to the free-text input (typing takes time).
+			const dialogOpts = planConfirmDialogOpts(ctx.mode, INTERACTIVE_TIMEOUT_MS);
 			const picked = await ctx.ui.select(
 				"智能体团队",
-				[acceptLabel, cancelLabel],
-				planConfirmDialogOpts(ctx.mode, INTERACTIVE_TIMEOUT_MS),
+				[acceptLabel, customLabel, cancelLabel],
+				dialogOpts,
 			);
-			return picked === acceptLabel;
+			if (picked === customLabel) {
+				// The user's own words, sent as-is: no interpretation, no
+				// restructuring — the note joins the forwarded request verbatim.
+				const note = await ctx.ui.input(
+					lang === "zh" ? "输入你的需求" : "Type your request",
+					lang === "zh" ? "原样发送给模型，不作解释或结构化" : "Sent to the model verbatim — not interpreted or restructured",
+					dialogOpts,
+				);
+				// Dismissed (Esc/timeout) cancels the whole confirmation; an empty
+				// submission accepts the plan as shown with nothing to add.
+				if (note === undefined) return { confirmed: false };
+				return { confirmed: true, note: note.trim() || undefined };
+			}
+			return { confirmed: picked === acceptLabel };
 		} catch {
-			return false;
+			return { confirmed: false };
 		}
 	};
 
@@ -501,7 +519,7 @@ export default function (pi: ExtensionAPI) {
 		} else if (planEnabled) {
 			({ choice, request: extraRequest } = await pickChoice(ctx, request.length > 0, lang));
 		}
-		const effectiveRequest = request || extraRequest;
+		let effectiveRequest = request || extraRequest;
 		let approvedPlan: string | null = null;
 		if (choice) {
 			// The review protocol is deterministic — no summary confirm needed.
@@ -520,11 +538,17 @@ export default function (pi: ExtensionAPI) {
 					stopPlanProgress();
 				}
 			}
-			const confirmed = choice.kind === "review" ? true : await confirmChoice(ctx, choice, lang, planText);
-			if (!confirmed) choice = null;
+			// The review protocol is deterministic — no dialog, no free-text note.
+			const decision: { confirmed: boolean; note?: string } =
+				choice.kind === "review" ? { confirmed: true } : await confirmChoice(ctx, choice, lang, planText);
+			if (!decision.confirmed) choice = null;
 			else {
 				approvedPlan = planText;
-				if (!request && !extraRequest) activeChoice = choice; // applies to the next message
+				// A free-text note from the confirmation dialog is the user's own
+				// request: it rides along with the forwarded text verbatim.
+				const note = decision.note?.trim() ?? "";
+				if (note) effectiveRequest = effectiveRequest ? `${effectiveRequest}\n\n${note}` : note;
+				if (!effectiveRequest) activeChoice = choice; // applies to the next message
 			}
 		}
 
