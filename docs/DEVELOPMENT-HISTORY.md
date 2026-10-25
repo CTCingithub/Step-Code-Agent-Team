@@ -724,6 +724,15 @@
 
 **边界（diagnostician 枚举，未改）**：`/topo custom` 优先级高于钉档（customArg 分支在前）——显式走自定义流程时钉档被绕过，属合理；headless 下 `/topo custom` 回退 balanced 而非钉档——既有边界，留档。
 
+### 67. v0.3.0-preview 发布：latest 保持稳定线（plan-105）
+
+**用户 prompt**：「请发布为v0.3.0-preview，latest指向版本暂时先不要改。请更新HANDOFF和DEVELOPMENT HISTORY等文档」。
+
+**工作**：① README(_CN) Status 段更新为 0.3.0-preview 功能集（`@latest` 保持在 v0.2.0 稳定线的说明、三选项确认框与派发韧性 bullets、preview tag 安装行）并先提交 develop（d799758）；② develop → main `--no-ff` 合并（590d2ae，v0.2.0 之后 17 轮成果）；③ `scripts/release.sh 0.3.0-preview`：冒烟门全绿（20 phase + manifest + 7 live + orphan-check）→ bump 0.2.0→0.3.0-preview → `chore: release v0.3.0-preview`（03d267e）→ 附注 tag `v0.3.0-preview`（73fdb81）→ push main + tag → **preview 模式 latest 未动**（仍 06bc06c，v0.2.0 稳定线）；④ hermetic 验证：脚本内安装在推送后立即执行遇瞬时竞态失败（tag 已推送、不影响发布），手动重跑完整成立——`step install git:…@v0.3.0-preview` 成功（HEAD 03d267e）+ RPC 激活探针返回 "Agent team plugin activated"。
+
+**遗留**：0.3.0 正式版（需合并定版决策与最终发版）；演示项目修复按约定还原为种子态（易失、每轮 restore 复位）。
+
+
 
 
 
