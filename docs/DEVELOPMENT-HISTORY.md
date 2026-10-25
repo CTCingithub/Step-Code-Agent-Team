@@ -710,6 +710,21 @@
 
 **遗留**：M1（真实 install/remove，写用户 settings 须本人执行）、M2（信任弹窗）、M5（英文译文审阅）为纯人工项；5b 关键词路径、K6 项目级角色层各留一轮人工抽查；TUI 像素/按键观感（M3/M4）仍属人工。**原 7 项必测中 5 项的语义已验证，剩余全部是不可自动化的交互/UX 项。**
 
+### 66. 钉档一致性修复：命令路径与关键词路径统一「别再问」（plan-104）
+
+**用户 prompt**：（性能档方案确认 + 团队激活）「我做了sandbox测试，日志记录是 sandbox/logs/session-log-2026-10-25.md 和 -parallel-review.md 和 -2301.md。请阅读分析日志后开始修改优化，此外：修改沙箱环境config.toml后，斜杠命令方式依旧会询问方案，prompt方式直接进入fast档位」。
+
+**思路**：按批准的 4 成员性能档方案执行（裁剪为 2 名只读成员——LogAnalyst-B 的日志已由队长亲读、CodeOptimizer 由队长单写，偏离已记录）。派发仍不稳定（log-analyst-a 两次零用量被杀），日志分析由队长完成；rootcause-diagnostician 一次成功，交付完整根因+边界枚举+修复方案。
+
+**日志分析结论**：两份新日志均**无插件缺陷**——parallel-review 轮是干净的 star 三轮并行审查（三次派发一次成功、零异常、12/12），findings 全属演示项目代码（save 非原子写、CLI parseInt 宽松解析、load 归一化、测试缺口、README 过期、缺 engines、sk- 前缀误报）；2301 轮走宿主 subagent（未用插件团队工具），quickfix frontmatter（tools/effort）被正确应用。唯一注意项：parallel-review 轮队长曾 `cat secret-sample.txt`（刻意入库的护栏夹具、非真实凭证）——用户操作注意项，非插件缺陷。
+
+**修复（钉档语义不一致）**：根因——命令路径 `runTeamCommand`（index.ts）的钉档分支只跳过 `pickChoice` 选单，其后的规划调用（`generateTeamPlan`）与三选项确认（`confirmChoice`）对一切 tier 类选择无条件执行；而关键词路径 `applyStandingTier` 直接注入 tierInstruction、不过问。**README/CONFIGURATION 早已文档化「applies it without asking」——是代码没跟上文档**。修复：新增 `pinnedTier` 来源标志（仅钉档分支置真），同时跳过规划调用与确认框；显式 `/topo <档位>` 与选单路径**保留**确认（实际方案预览 + 自由输入通道在该场景价值最高）。**本次反转了 plan-103 的刻意决策**（当时 probe 5b 注释写明"命令路径钉档仍留确认框"）——已在向用户的报告中点明该语义变更。
+
+**验证**：phase24 新增钉档零 token 场景（2 断言：无任何对话框——脚本化 ctx 遇对话框即抛 unexpected select；fast 档指令注入）全过；probe 5b 断言翻转（从"确认框必须出现"改为双负向：选单与确认框均不出现）后 live 复跑 PASS；tsc 零错误；全量冒烟门 exit 0（20 phase）。
+
+**边界（diagnostician 枚举，未改）**：`/topo custom` 优先级高于钉档（customArg 分支在前）——显式走自定义流程时钉档被绕过，属合理；headless 下 `/topo custom` 回退 balanced 而非钉档——既有边界，留档。
+
+
 
 
 

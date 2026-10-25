@@ -475,7 +475,8 @@ is absent, so the core team functionality always runs.
   of the retired terms; a three-layer false-trigger guard.
 - **Team plans** (default off): economic / fast / balanced / performance
   strategy prompts plus a guided custom flow; `plan.tier` pins one strategy
-  (default `"always ask"`).
+  (default `"always ask"` — a pin applies directly on both activation paths,
+  with no picker and no confirmation).
 - **Messaging**: members reach teammates through the built-in `topo_team_msg`
   tool — no bash required, so topology edges are usable for every role.
 - **Protocol layer** (zero-token smoke probes, `test/smoke/phase*.ts`):

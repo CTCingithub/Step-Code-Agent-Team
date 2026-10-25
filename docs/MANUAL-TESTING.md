@@ -440,11 +440,11 @@ then, for the keyword path, a fresh activation (new session, or after the first 
 用智能体小队统计一下这个项目的源文件数量
 ```
 
-**Expected**: neither path shows the tier select — each goes straight to the fast tier. With a request attached the spinner and the three-option confirmation still appear (showing the fast tier's plan); Accept. No "always ask" picker at any point.
+**Expected**: neither path shows the tier select — each goes straight to the fast tier. **A pin means "stop asking": neither the picker, the spinner, nor the three-option confirmation appears on either path** (fixed 2026-10-25: the command path used to still pop the confirmation box while the keyword path applied the pin directly); the request is forwarded verbatim with the fast tier's instruction injected. No "always ask" picker at any point.
 
 **Automated coverage**: phase21 asserts the tier table itself (four tiers, five modes, bilingual labels, unknown-id fallback); phase24 drives the confirmation with `plan.enabled` toggled through the resetConfigCache hook.
 
-**Live verification (2026-10-25)**: `probe-remaining-manual.mjs 5b` pins `plan.tier` to `"fast"` and runs `/topo <request>` — the tier picker does **not** appear (negative assertion passes) while the three-option confirmation still does and accepts. The command path is verified; the keyword path reads the same config, so one manual spot-check suffices.
+**Live verification (2026-10-25, re-run after the fix)**: `probe-remaining-manual.mjs 5b` pins `plan.tier` to `"fast"` and runs `/topo <request>` — the tier picker does **not** appear and neither does the three-option confirmation (both negative assertions pass; the request is forwarded verbatim). The command path is live-verified; the keyword path reads the same config, so one manual spot-check suffices.
 
 **Why manual**: "no picker appears" is a negative UI observation only a real session can make, and the two activation paths share the config but not the code path — each must be exercised once.
 
