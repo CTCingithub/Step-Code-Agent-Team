@@ -114,8 +114,10 @@ if (scenario === "5a") {
 	console.log(`[5a] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else if (scenario === "5b") {
-	// Pinned tier: the picker must NOT appear on the command path; the
-	// three-option confirmation still does (negative UI assertion).
+	// Pinned tier: a standing preference means "stop asking" — neither the
+	// picker nor the three-option confirmation may appear on the command path
+	// (the keyword path has always applied the pin directly). Negative
+	// assertions on both dialogs.
 	const a = makeAgent("probe5b", PLAN_CFG.replace("[stepcodeAgentTeam.plan]\nenabled = true", '[stepcodeAgentTeam.plan]\nenabled = true\ntier = "fast"'));
 	const seen = [];
 	const r = await runSession("probe5b", a.agentDir, [{ message: "/topo 统计这个项目的源文件数量并汇报", waitMs: 90000 }], (msg) => {
@@ -127,9 +129,9 @@ if (scenario === "5a") {
 	});
 	const pickerSeen = seen.includes("选择团队方案");
 	const confirmSeen = seen.includes("智能体团队");
-	pass = !pickerSeen && confirmSeen;
+	pass = !pickerSeen && !confirmSeen;
 	console.log(`[5b] picker dialog appeared: ${pickerSeen} (must be false)`);
-	console.log(`[5b] confirmation dialog appeared: ${confirmSeen} (must be true)`);
+	console.log(`[5b] confirmation dialog appeared: ${confirmSeen} (must be false — a pinned tier asks nothing)`);
 	console.log(`[5b] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else if (scenario === "7") {

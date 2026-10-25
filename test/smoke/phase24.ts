@@ -152,6 +152,34 @@ export default function (pi: ExtensionAPI) {
 					injectionTexts[3] !== injectionTexts[0] && injectionTexts[3].length > 0,
 					injectionTexts[3].slice(0, 80),
 				);
+			// 5. Pinned plan.tier: a standing preference means "stop asking" —
+			// no picker, no plan draft, no confirmation, on the command path
+			// just like the keyword path (observed 2026-10-25: a pinned fast
+			// tier still popped the three-option box on /topo). Any dialog
+			// here would throw "unexpected select" from the scripted ctx.
+			fs.writeFileSync(cfgFile, '[stepcodeAgentTeam.plan]\nenabled = true\ntier = "fast"\n');
+			resetConfigCache();
+			selectScript.length = 0;
+			inputScript.length = 0;
+			sent.length = 0;
+			await command!.handler(REQUEST, ctx);
+			check(
+				"pinned tier: no dialogs at all (picker, plan draft and confirmation skipped)",
+				sent.length === 1 && sent[0] === REQUEST,
+				`sent=${JSON.stringify(sent)}`,
+			);
+			{
+				const event = { messages: [{ role: "user", content: [{ type: "text", text: sent[0] ?? "" }] }] };
+				const out = contextHandler ? contextHandler(event) : undefined;
+				const texts = ((out as { messages?: Array<{ content?: Array<{ text?: string }> }> } | undefined)?.messages ?? [])
+					.flatMap((m) => (m.content ?? []).map((c) => c.text ?? ""));
+				const injected = texts.join("\n");
+				check(
+					"pinned tier: the pinned tier's instruction is injected (no plan text)",
+					injected.includes("团队方案 · 快速") && injected.includes("以最短耗时"),
+					injected.slice(0, 80),
+				);
+			}
 			} finally {
 				if (hadCfg) fs.writeFileSync(cfgFile, prev);
 				else fs.rmSync(cfgFile, { force: true });

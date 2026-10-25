@@ -508,6 +508,13 @@ export default function (pi: ExtensionAPI) {
 
 		let choice: PlanChoice | null = null;
 		let extraRequest = "";
+		// A tier that comes from the pinned plan.tier (not from an explicit
+		// argument or the picker) is a standing "stop asking" preference: the
+		// keyword path applies it with no dialogs at all, so the command path
+		// must not draft a plan and ask for confirmation either (observed
+		// 2026-10-25: a pinned fast tier still popped the three-option box on
+		// /topo while the keyword path went straight to the tier).
+		let pinnedTier = false;
 		if (reviewArg) {
 			choice = { kind: "review", focus: request };
 		} else if (tierArg) {
@@ -516,6 +523,7 @@ export default function (pi: ExtensionAPI) {
 			({ choice, request: extraRequest } = await resolveCustomChoice(ctx, request.length > 0, lang));
 		} else if (planEnabled && standingTier !== "always ask") {
 			choice = { kind: "tier", tier: getTier(standingTier) };
+			pinnedTier = true;
 		} else if (planEnabled) {
 			({ choice, request: extraRequest } = await pickChoice(ctx, request.length > 0, lang));
 		}
@@ -527,7 +535,7 @@ export default function (pi: ExtensionAPI) {
 			// (one-off, plan only) so the confirmation shows what will really be
 			// built — not the tier's preset shape.
 			let planText: string | null = null;
-			if (choice.kind === "tier" && effectiveRequest && isInteractive(ctx)) {
+			if (choice.kind === "tier" && !pinnedTier && effectiveRequest && isInteractive(ctx)) {
 				const stopPlanProgress = startPlanProgress(
 					ctx,
 					lang === "zh" ? "正在生成智能体拓扑协作方案" : "Generating the agent topology collaboration plan",
@@ -540,7 +548,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			// The review protocol is deterministic — no dialog, no free-text note.
 			const decision: { confirmed: boolean; note?: string } =
-				choice.kind === "review" ? { confirmed: true } : await confirmChoice(ctx, choice, lang, planText);
+				choice.kind === "review" || pinnedTier ? { confirmed: true } : await confirmChoice(ctx, choice, lang, planText);
 			if (!decision.confirmed) choice = null;
 			else {
 				approvedPlan = planText;
