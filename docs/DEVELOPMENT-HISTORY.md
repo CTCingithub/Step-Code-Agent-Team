@@ -620,6 +620,19 @@
 
 **遗留**：A3/A4（待用户设计决策）、B2/B3（测试加固排期）；**至此自动化可测内容全部验证通过，剩余全部为用户手动测试项**（场景 5/7/8/9、M1、M2）与 develop→main 合并拍板。
 
+### 59. 测试流程文档审阅与更新（plan-97）
+
+**用户 prompt**：「请审阅所有文档，检查测试流程是否需要更新」。
+
+**思路**：两名只读审查员并行（自动化流程线 / 人工测试线）+ 队长机械一致性核查（phase 计数、fixture 名、命令块跨文档比对），合并发现后统一实施。
+
+**工作**：① **审阅发现**：流程线 7 项必须更新（TESTING_CN 的 Layer C 命令块缺 `mkdir -p` 与 `--approval-mode auto`、TEST-PLAN A1 仍写 17 phase、runner 已实现行为（attempt1 重试/240s rc=124/orphan 轮询/manifest）无文档、覆盖表 phase3/16/21 三行滞后、§I 基线表只列 phase1–8、K8 尾句轮次过时、sandbox README 的 cfg-* 表述失准）；人工线 4 项（MANUAL-TESTING Step 1 写 18 phase、Step 0 与 §0 表"restore 删 logs"表述与自动归档现状不符、README_CN 陈旧 `src/app.ts` 路径、K8 尾句同）。② **实施 16 处双语更新**：TESTING(_CN)——Layer C 命令块对齐英文版、§2 新增"runner 行为与通过标准"段（磁盘派生清单、attempt1 单次重试、rc=124 hang 判定、manifest+7 live+15s orphan 轮询、**live 检查须队长自身进程跑**的假阴性警示）、覆盖表三行补 details.to / dispatchPrompt+assertDispatchable / planConfirmDialogOpts；TEST-PLAN(_CN)——A1 改 19 phase 并注明磁盘派生、§I 表后补全清单指向、K8 尾句改为 2026-10-25 重跑 22/22；MANUAL-TESTING(_CN)——Step 1 改 19 phase、Step 0 与 §0 表修正 restore 自动归档表述（archive-round 仍应跑——保留 session JSONL 与团队注册表）、状态总览补 2026-10-25 自动化基线行、头部补 phase23 schema 守卫、运维块补"spawn/handshake 类失败自动重试"与"failed 重派时 detail 追加"两条；sandbox/README(_CN)——cfg-* 表标注活跃三名（cfg-conc/cfg-deadlock/cfg-deep2）与本地配置遮蔽陷阱；README_CN——app.ts→tasks.js。③ **机械核查确认**：DEVELOPMENT-HISTORY 中的"17 phase"均为历史记录（禁改）；README/TESTING 冒烟命令块已同步 19 phase；cfg-misc 残留仅存于有意保留的历史行。
+
+**验证**：纯文档改动（零代码变更，无需冒烟门）；关键行抽查全部落盘、双语成对。
+
+**遗留（低优先建议项）**：sandbox README 增加测试小节（19 phase/派生/OPT_OUT/manifest/live/orphan + archive 先于 restore）；Layer C 通过标准补 phase10 B 支 60s 无死锁与 phase11 须实跑 4/4 两项；零 token 自动化轮次的 R 行记录规约。
+
+
 
 
 
