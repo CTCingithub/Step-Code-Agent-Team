@@ -17,6 +17,8 @@
 
 ## 状态总览（2026-10-23）
 
+> 自动化基线 2026-10-25 复核：冒烟 19 phase + manifest + 7 live + orphan-check 全绿；LLM 探针 22/22（K8）。
+
 | # | 项目 | 状态 |
 |---|---|---|
 | 1 | 交互 TUI 观感 | ✅ 2026-10-22 完整走查实测通过（渲染无问题） |
@@ -38,7 +40,7 @@
 ### 第 0 步 — 预检（启动会话前）
 
 ```bash
-# 先归档上一轮的证据——restore 会删除 logs/（§7 日志的所在地）
+# 先归档上一轮的证据——restore 会清空 logs/（删前已自动归档，但 archive-round.sh 还会保存 restore 不碰的 session JSONL 与团队注册表，且标签可读）
 bash sandbox/archive-round.sh <上一轮标签>
 # 还原沙箱：种子 bug 复位，data/ 与 logs/ 清空
 bash sandbox/restore-project.sh
@@ -50,7 +52,7 @@ bash sandbox/restore-project.sh
 ### 第 1 步 — 自动化门（任何人工操作前必须全绿）
 
 ```bash
-npm run smoke   # 18 phase + manifest + 7 个 live 检查；任何失败先停下修复
+npm run smoke   # 19 phase + manifest + 7 个 live 检查（+ orphan-check）；任何失败先停下修复
 ```
 
 ### 第 2 步 — 交互场景（按顺序，一次粘贴一条）
@@ -76,7 +78,8 @@ npm run smoke   # 18 phase + manifest + 7 个 live 检查；任何失败先停�
 **派发异常与恢复（来自 2026-10-24 沙箱轮）**：
 
 - **settle 超时**：派发可能报 `timeout waiting for member to settle`——成员被 fail-fast 杀死，但其工作通常在服务端继续（或下次派发时带上下文恢复）。恢复：查 `team_status` 后重派（发一条"收尾并报告"的短消息即可），成果不丢。
-- **failed 板任务可重派**：成员中途被杀的任务保持 `failed`；对其 `team_task start` 会重派且成员带上下文恢复——无需重建 `blockedBy` 链（此前轮次正是被此死锁逼出"建等价任务"的变通）。
+- **spawn/handshake 类失败会自动重试一次**：成员握手失败（或 `aborted before start`）在 `createMember` 与任务派发内会自动重试——上面"不盲目重试"的规则只针对 settle 超时，不针对 spawn 路径失败。
+- **failed 板任务可重派**：成员中途被杀的任务保持 `failed`；对其 `team_task start` 会重派且成员带上下文恢复——无需重建 `blockedBy` 链（此前轮次正是被此死锁逼出"建等价任务"的变通）。start 时传入的 `detail` 会追加进派发 prompt，收割提示可直接随行。
 - **`topo_team_msg` 的成员自报不可靠**：成员对实际已投递的消息既报过"投递成功"也报过"工具不可用"。信任任何一侧之前，先在 `sandbox/agent/teams/<teamId>/sessions/*.jsonl` 里核实是否存在该工具调用。
 - **板 id 以 `create` 的返回为准**，不按你方案里的编号——`blockedBy` 未知 id 会被拒绝并列出 offending id。
 - **预设随包发布**（`agents/<role>.md`：scout/planner/worker/reviewer），沙箱内同样可用——传 `role:` 即可继承预设的只读工具与 effort，无需手搓 systemPrompt；显式传入但无匹配预设时，create 结果会给出提示。
@@ -98,7 +101,7 @@ npm run smoke   # 18 phase + manifest + 7 个 live 检查；任何失败先停�
 |---|---|---|
 | 演示项目 | `sandbox/project/`（含种子 bug 的演示态） | `bash sandbox/restore-project.sh` |
 | 运行时数据 | `sandbox/agent/{sessions,teams,plans,live-context}`、`sandbox/project/data/`（全部 gitignored） | 可选彻底清场，见下 |
-| 会话日志 | `sandbox/logs/session-log-*.md`（按需生成，prompt 见 [sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)） | `restore-project.sh` 自动删除——先跑 `archive-round.sh` 可保留 |
+| 会话日志 | `sandbox/logs/session-log-*.md`（按需生成，prompt 见 [sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)） | `restore-project.sh` 会清空（删前已自动归档）；先跑 `archive-round.sh` 可另行保留 session JSONL 与团队注册表 |
 | 项目信任 | `sandbox/agent/trust.json`（gitignored） | 快速还原**不会**重置——删掉它可让 §3 信任弹窗重新触发 |
 
 **快速还原（每轮测试后必做）**：

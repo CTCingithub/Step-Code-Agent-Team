@@ -398,7 +398,7 @@ Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自�
 ./sandbox/run.sh
 
 # 2. 在会话中依次让 LLM 执行：
-#    a. "创建一个 reviewer 成员审查 sandbox/project/src/app.ts"
+#    a. "创建一个 reviewer 成员审查 sandbox/project/src/tasks.js"
 #       → 验证 team_create_member + team_send（真实 LLM 回复）
 #    b. "用一句话向它总结你发现的问题"
 #       → 验证成员上下文记忆（同一进程内多轮）

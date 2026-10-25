@@ -99,7 +99,7 @@ either set, phase5 is part of the regression run.
 |---|---|---|
 | phase1 | Member lifecycle with assertions (spawn / handshake / registry persistence / disband reset / idempotent resume — kill-path instance-identity regression) | zero token |
 | phase2 | Task board state machine (DAG / cycles / ready set / persistence) | zero token |
-| phase3 | Messaging service + shim status round-trip + preset loading | zero token |
+| phase3 | Messaging service + shim status round-trip + preset loading + `topo_team_msg` result `details.to` echo | zero token |
 | phase5 | Concurrent creation races / fail-fast kill / state machine / socket 0600 / abort / shutdown | 1 token (SKIP without a key) |
 | phase6 | Default-off activation + config pure functions + model/effort resolution + forced keyword migration (strip / report / all-deprecated disables) + L1 negation guard matrix | zero token |
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero token |
@@ -108,14 +108,16 @@ either set, phase5 is part of the regression run.
 | phase13 | Project-level config (trust gate / deep merge / precedence / env / MAXDEPTH) | zero token |
 | phase14 | Ring loop cap (config surface / immediate throw at the manager layer / rejection at the server layer via the shim / topology precedence / boundary allowed through) | zero token |
 | phase15 | TUI render assertions (render.ts, the six tools' call/result, including collapse/expand / usage rows / status icons) | zero token (standalone run) |
-| phase16 | Cost guardrail and output truncation unit tests (costWarning / truncateOutput) | zero token (standalone run) |
+| phase16 | Cost guardrail and output truncation unit tests (costWarning / truncateOutput) + `dispatchPrompt` merge contract + the `assertDispatchable` gate (a failed task stays re-dispatchable) | zero token (standalone run) |
 | phase17 | Orphan processes (a member must not outlive the leader) | zero token |
 | phase18 | Slot counting (disband frees a slot) + resume argument ignored notice + dispatch failure context (the timeout/abort notice relays in-flight messages and the member roster) | zero token |
 | phase19 | Unified config tiers (global/project config.toml, trust gating, precedence, invalid-TOML tolerance, env still wins) | zero token |
 | phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
-| phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) | zero token |
+| phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) + `planConfirmDialogOpts` (no countdown in the TUI) | zero token |
 | phase22 | Tool-availability self-heal: `ensureToolsAvailable` restores tools after a host reset, no-ops while inactive, and `session_start` re-activates a session whose team registry already exists | zero token |
 | phase23 | Team-tool JSON-schema contract: every tool and every top-level parameter carries a non-empty description (guards the typebox two-argument Optional class of regression, which once dropped `reason`'s description) | zero token |
+
+**Runner behavior and pass criteria**: the phase list is derived on disk from `test/smoke/phase*.ts` (run-smoke.sh:37); a failed phase is retried once on a fresh session id (the first-failure line is prefixed `attempt1`, so a passing retry leaves no bare `FAILED` line for CI to misread); a phase that logs no `DONE` within 240s is reported as a hang (rc=124), distinct from assertion failures; a verdict requires a DONE marker and zero FAIL lines. After the phases: a manifest check, the 7 live checks, and a 15s orphan-process poll (a skipped phase17 makes it report `SKIPPED` rather than silently passing). **The live checks must run from the leader's own clean process** — inside a member process's restricted environment they fail wholesale (a false negative observed 2026-10-25; the leader's run was green).
 
 The LLM-path probes (phase4/10/11/12) need a test key and live in `sandbox/` —
 the probes themselves are tracked; only sandbox runtime state is gitignored (see

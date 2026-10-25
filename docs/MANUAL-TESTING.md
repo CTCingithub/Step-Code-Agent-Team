@@ -16,7 +16,7 @@
 > (live-package-install: a settings `packages` entry pointing at the repo loads the
 > extension and activates it), and the **tool-availability self-heal** (phase22:
 > `ensureToolsAvailable` restores the team tools after a host-side reset, and
-> `session_start` re-activates a session whose team registry already exists).
+> `session_start` re-activates a session whose team registry already exists), and the **tool JSON-schema contract** (phase23) asserts every team tool and every top-level parameter carries a non-empty description — the guard that would have caught the typebox two-argument Optional description drop).
 >
 > What remains is only the **irreducible** manual items. Start with the **Round
 > runbook** below for the full one-round sequence; each section after it is the
@@ -25,6 +25,8 @@
 > is §1.
 
 ## Status overview (2026-10-23)
+
+> Automation baseline re-verified 2026-10-25: smoke 19 phases + manifest + 7 live + orphan-check all green; LLM probes 22/22 (K8).
 
 | # | Item | Status |
 |---|---|---|
@@ -48,7 +50,7 @@ for a step here. All commands and prompts are directly copy-pasteable.
 ### Step 0 — preflight (before launching the session)
 
 ```bash
-# Archive the PREVIOUS round's evidence first — restore deletes logs/ (where the §7 log lives)
+# Archive the PREVIOUS round's evidence first — restore clears logs/ (it auto-archives them, but archive-round.sh also keeps the session JSONL and team registry that restore does not touch, under a readable label)
 bash sandbox/archive-round.sh <label-of-last-round>
 # Reset the sandbox: seeded bug back in place, data/ and logs/ cleared
 bash sandbox/restore-project.sh
@@ -61,7 +63,7 @@ required; without one those steps fail.
 ### Step 1 — automated gate (must be green before any manual work)
 
 ```bash
-npm run smoke   # 18 phases + manifest + 7 live checks; stop and fix on any failure
+npm run smoke   # 19 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
 ```
 
 ### Step 2 — interactive scenarios (in order, one prompt at a time)
@@ -90,7 +92,8 @@ confirms the tier's standard shape directly.
 **Dispatch anomalies and recovery (from the 2026-10-24 sandbox round)**:
 
 - **Settle timeouts**: a dispatch can fail with `timeout waiting for member to settle` — the member is killed fail-fast, but its work usually continues server-side (or resumes with context on the next dispatch). Recovery: check `team_status`, then re-dispatch (a short "finish and report" message works). Nothing is lost.
-- **Failed board tasks are re-dispatchable**: a task whose member was killed mid-run stays `failed`; `team_task start` on it re-dispatches and the member resumes — no need to rebuild the `blockedBy` chain (that deadlock is what forced the equivalent-task workaround in earlier rounds).
+- **Spawn/handshake failures retry automatically**: a failed member handshake (or `aborted before start`) is retried once inside `createMember` and task dispatch — the "no blind retry" rule above applies to settle timeouts, not to spawn-path failures.
+- **Failed board tasks are re-dispatchable**: a task whose member was killed mid-run stays `failed`; `team_task start` on it re-dispatches and the member resumes — no need to rebuild the `blockedBy` chain (that deadlock is what forced the equivalent-task workaround in earlier rounds). A `detail` passed at start time is appended to the dispatch prompt, so harvest guidance can ride along.
 - **`topo_team_msg` self-reports are unreliable**: members have reported both "delivered" and "tool unavailable" for messages that were in fact delivered. Verify actual delivery in `sandbox/agent/teams/<teamId>/sessions/*.jsonl` (look for the tool call) before trusting a member's claim in either direction.
 - **Board ids come from `create`'s return**, not from your plan's numbering — `blockedBy` an unknown id and the create is rejected with the offending ids.
 - **Presets ship with the package** (`agents/<role>.md`: scout/planner/worker/reviewer) and work in the sandbox too — pass `role:` to inherit a preset's read-only tools and effort instead of hand-building system prompts; an explicit role that matches no preset is called out in the create result.
@@ -112,7 +115,7 @@ All manual items run inside the sandbox (`./sandbox/run.sh`, isolated from the r
 |---|---|---|
 | Demo project | `sandbox/project/` (demo state with the seeded bug) | `bash sandbox/restore-project.sh` |
 | Runtime data | `sandbox/agent/{sessions,teams,plans,live-context}`, `sandbox/project/data/` (all gitignored) | Optional full reset, see below |
-| Session logs | `sandbox/logs/session-log-*.md` (generated on demand; the prompt is in [sandbox/README.md](../sandbox/README.md#session-log)) | `restore-project.sh` deletes them automatically — run `archive-round.sh` first to keep them |
+| Session logs | `sandbox/logs/session-log-*.md` (generated on demand; the prompt is in [sandbox/README.md](../sandbox/README.md#session-log)) | `restore-project.sh` clears them (auto-archived first); run `archive-round.sh` to also keep the session JSONL and team registry |
 | Project trust | `sandbox/agent/trust.json` (gitignored) | NOT reset by the quick restore — delete it to re-trigger the §3 trust popup |
 
 **Quick restore (required after every test round)**:

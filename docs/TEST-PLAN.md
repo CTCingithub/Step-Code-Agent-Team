@@ -21,6 +21,7 @@
 | phase7 | Topology truth table + out-of-bounds rejection + requireDeclaration gate | zero-token |
 | phase8 | Recursion depth /proc real check + sub-team self-bootstrap + concurrency defaults | zero-token |
 
+> The full current phase list (19 phases, derived on disk from `test/smoke/phase*.ts`) with per-phase coverage is in [docs/TESTING.md](TESTING.md) §2; the table above is the historical baseline snapshot.
 ## II. Coverage gaps targeted this round
 
 1. **Concurrency cap live**: the queue-before-start semantics of `maxConcurrent` have never been verified with real dispatches (phase5 only tests spawn mutual exclusion)
@@ -131,7 +132,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 
 | # | Check | Command / probe | Expected |
 |---|---|---|---|
-| A1 | Full zero-token regression | `npm run smoke` | all phases passed (17 phases + manifest + 7 live checks + orphan-check) |
+| A1 | Full zero-token regression | `npm run smoke` | all phases passed (19 phases — the list is derived on disk from `test/smoke/phase*.ts` — + manifest + 7 live checks + orphan-check) |
 | A2 | Protocol probe | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | Sandbox restore round-trip | `bash sandbox/restore-project.sh` | `project/` back to the seeded state (seeded bug present); runtime data and session logs cleared |
 | A4 | Clean-export load | covered by A1 (live-clean-export) | the extension from `git archive HEAD` activates |
@@ -180,7 +181,7 @@ New surface to verify: the `/topo` command (tiers / picker / review / off), plug
 | R6 | ✅ automation round (2026-10-25): comprehensive optimization (balanced team round) | createMember spawn retry (ensureLiveWithRetry, isomorphic with startTaskLocked) + isRetryableSpawnError word-boundary fix closing the augmented-respawn false positive; phase1 zero-token regression block (10 assertions + 3 stubbed scenarios); CONFIGURATION(_CN) storage.dir absolute-path notes; TEST-PLAN(_CN) retired cfg-misc label; demo-project fixes declined (ephemeral by design); full suite green, tsc zero |
 | R7 | ✅ verification round (2026-10-25): remaining-items confirmation + full LLM-probe re-run | A3/A4/B2/B3 re-confirmed as deferred-by-design (no blockers, no regressions); smoke gate green; probes 22/22 assertions pass (phase4 4/4, phase10 Branch A 3/3 + Branch B 2/2 no-deadlock, phase11 4/4 depth-2 chain, phase12 9/9); found and documented the local-config fixture-shadowing false green |
 
-Remaining interactive: K2/K3 (plan picker + the Accept/Cancel confirmation), K6 (custom roles) and K7 (migration notice) — MANUAL-TESTING scenarios 5/8/9; K1/K4/K5/K8 are already covered (K8 by the 2026-10-22 four-probe round). Manual: M1–M6 (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
+Remaining interactive: K2/K3 (plan picker + the Accept/Cancel confirmation), K6 (custom roles) and K7 (migration notice) — MANUAL-TESTING scenarios 5/8/9; K1/K4/K5/K8 are already covered (K8 re-run 2026-10-25: 22/22 probe assertions, phase10 both branches). Manual: M1–M6 (see the tables above). After each manual round, record the session with the prompt from the sandbox README's [Session log](../sandbox/README.md#session-log) section.
 
 ### Findings from the 2026-10-20 sandbox session
 

@@ -26,7 +26,7 @@
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`：12 条测试，种子 bug 在位时 11 条通过） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
-| `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效） |
+| `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效）。活跃：`cfg-conc`（phase10 A 支）、`cfg-deadlock`（phase10 B 支）、`cfg-deep2`（phase11）；其余为遗留、无 live 消费方（phase9 自建 mktemp fixture）。本地 `sandbox/config.toml` 会遮蔽它们——探针须隔离 agentDir（见 docs/TESTING.md C 层） |
 | `TEST-KEY.md` | 测试 API 密钥（gitignored——首行写 `STEP_API_KEY=<key>`；由 run-smoke.sh 与 with-test-key.sh 读取） |
 | `with-test-key.sh` | 以 TEST-KEY.md 中的密钥 export 后运行给定命令（用于 C 层 LLM 探针） |
 | `step/` | Step Code 源码 submodule（钉住本沙箱跟踪的版本） |

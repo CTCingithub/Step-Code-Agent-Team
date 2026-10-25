@@ -29,7 +29,7 @@ agent team.
 | `project/` | Demo project: zero-dependency Node.js task manager (`npm test`: 12 tests, 11 pass with the seeded bug in place) |
 | `project-pristine/` | Initial snapshot of the demo project (the source for restore; do not modify) |
 | `smoke-phase4/10/11/12.ts` | LLM-layer regression probes (need a key; see docs/TESTING.md for how to run) |
-| `cfg-*/settings.json` | Probe config fixtures (staged through the legacy settings.json tier, still honored) |
+| `cfg-*/settings.json` | Probe config fixtures (staged through the legacy settings.json tier, still honored). Live: `cfg-conc` (phase10 Branch A), `cfg-deadlock` (phase10 Branch B), `cfg-deep2` (phase11); the rest are legacy with no live consumer (phase9 builds its own mktemp fixture). A local `sandbox/config.toml` shadows these — isolate the probe's agentDir (see docs/TESTING.md Layer C) |
 | `TEST-KEY.md` | Test API key (gitignored — one `STEP_API_KEY=<key>` line; read by run-smoke.sh and with-test-key.sh) |
 | `with-test-key.sh` | Runs a command with the key from TEST-KEY.md exported (used for the Layer C LLM probes) |
 | `step/` | Step Code source submodule (pins the version this sandbox tracks) |
