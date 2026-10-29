@@ -85,7 +85,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 + 强制关键词迁移（剥离/上报/全旧词禁用）+ L1 否定护栏矩阵 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
-| phase9 | 配置边界（storage.dir/项目级/非法回退）+ [tasks] 节校验 | 零 token |
+| phase9 | 配置边界（storage.dir——按配置绝对值、相对值解析到 agentDir 下 / 项目级 / 非法回退）+ [tasks] 节校验 | 零 token |
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
 | phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
@@ -99,7 +99,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
 | phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言选项顺序恰为 `Accept / Cancel / Other`、Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、空提交按原样接受、**输入被关闭**（Esc/超时→undefined）与 Cancel 完全同果、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
 
-**runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。
+**runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**类型门**：`sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`（paths 把四个 `@step-harness` 包映射到 `dist/*.d.ts` + typebox）对 `extensions/` 与 `test/smoke/` 必须**零错误**——自 R16（2026-10-29）补全 phase15 的 Theme 桩与 phase24 的 contextHandler 守卫后已归零。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。仓库的类型检查同样算门禁的一部分：tsc 全导入图零错误（R16 轮前为 17——phase15 的 Theme 桩与 phase24 的 context hook 读取；复现命令 `sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`）。
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——探针本身已跟踪入库，仅沙箱运行时状态在 .gitignore 内（见 C 层）。
 
@@ -123,8 +123,10 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
 | probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框 Other 路径：脚本化 RPC 客户端应答档位选单→确认框选「Other」→input，断言用户文本原样进入转发的 user 消息。对话框按**标题**（`Topology Agent Team`）、选项按**精确标签**（`Other`）匹配——无位置兜底，选项改名或换序会让探针失败而非 silently 答成 Cancel。每个场景等待会话的 **`agent_settled`** 事件（prompt 命令自己的 response 只是 preflight 应答——rpc-mode.ts 在 `preflightResult` 里就发出了），`waitMs` 仅作安全上限，另等会话文件大小稳定后再读取 |
 | probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单与三选项确认框**均不出现**（plan-104 的 `pinnedTier` 标志同时跳过两者；显式 `/topo <档位>` 仍保留确认） |
+| probe-remaining-manual `5c` | 隔离 agentDir（plan.tier 钉档，关键词 prompt） | 钉档走**关键词**路径（命令路径是 5b）：`applyStandingTier` 与 `runTeamCommand` 的钉档分支是两条代码路径，且「对话框不出现」是负向观察——故断言两个对话框均不出现**外加**一条激活正向断言防假绿（首跑即靠该断言抓到真假绿：未应答 L2 confirm 导致插件根本没激活，仅负向断言会因错误的理由通过） |
 | probe-remaining-manual `7` | 隔离 agentDir ×2 | L1 护栏：元问题零团队动作；how-to 带主体激活且 team_create_member 真实可用 |
 | probe-remaining-manual `8` | 隔离 agentDir（agents/quickfix.md + autonomousEffort=false） | 自定义角色：frontmatter tools/effort 落到真实 spawn（create 结果含 role/effort:low/tools），成员自报白名单含 topo_team_msg——注意自报那半是**LLM 行为断言**：2026-10-29 抖动过一次（失败、重跑通过），而机械的 create 结果断言两次均过，因此单次失败本身不构成产品缺陷 |
+| probe-remaining-manual `5c` | 隔离 agentDir（plan.enabled + 钉档） | 关键词路径上的钉档：档位选单与三选项确认框均不出现——外加一条「插件确实已激活」的正向断言，使「没弹框」永不会因为「什么都没发生」而通过 |
 | probe-remaining-manual `9` | 隔离 agentDir（keywords 含废弃词） | 迁移提示每会话恰好出现一次 |
 
 phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的 export 指向对应 fixture

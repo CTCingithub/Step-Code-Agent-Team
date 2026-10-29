@@ -764,3 +764,16 @@
 **验证**：最终全量零 token 门（20 phase + manifest + 7 live + orphan-check）全绿；phase21/24 绿（含新断言）；tsc 对 extensions/ 与 test/smoke/phase2x 零错误；live 探针 5a/5b/8/9 PASS、7 加固后 PASS；`all` 模式机械正确（逐场景判定 + 汇总，曾因上述窗口问题报 3/5，加固后应全绿）。
 
 **遗留**：① 剩余必须手动项不变——M1（真实 install/remove）、M2（信任弹窗 + K6 项目级角色层）、M3/M4（TUI 像素与按键；「Esc 取消」的数据面已由 phase24 覆盖，只剩观感）、M5（英文审阅）、M6（可选）、钉档关键词路径抽查；② probe 5a 的「确认后模型调用 team 工具」与 probe 8 的自述断言同属 LLM 行为断言，仍有抖动可能（现已可诊断）；③ README 的产品自述 prose（「智能体团队插件」）、sandbox/project README 的「供智能体团队干活」等**非询问界面**表述未改，留待用户决定是否统一为 Topology Agent Team。
+### 70. 遗留收口轮：storage.dir 语义修正、probe 5c 自动化、tsc 归零（plan-108）
+
+**用户 prompt**：确认性能档实际方案（队长 Leader(effort=high) / 核心开发A DevA / 核心开发B DevB / 测试工程 QA / 文档工程 Doc，star 拓扑，T1 环境准备→T2 方案A→T3 方案B→T4 测试验证→T5 文档→T6 集成交付→T7 用户手动测试）后「请创建合理的计划，完成所有的其他事项，然后再让我做手动测试」。
+
+**思路**：把上一轮盘点出的工程侧遗留项全部收口，使用户侧只剩不可自动化的交互项。按方案建 5 成员星型团队；派发机制本轮 4 次 settle 超时（T2/T3/T5 及 Doc 的清单派发），队长按既定模式接管实施——**偏离说明**：原计划 DevA/DevB 对同一范围竞速，因两人文件域若不重叠则竞速无意义、若重叠则互相覆盖（plan-103 已踩过），改为**按文件域分工的并行实现**（DevA 测试侧 / DevB 产品侧），由队长统一集成与验证。
+
+**工作**：① **storage.dir footgun（产品侧）**：`teamsRoot()` 原对配置的相对 `dir` 直接 `path.resolve()`，锚点是 `process.cwd()`——队长 cwd 任意且成员会继承，于是一条相对路径把同一团队的注册表撒布到各项目目录，看着配了的条目从未落到文档所说位置（低危：默认 null 与绝对路径不受影响，plan-95 已用「须填绝对路径」文档化缓解；本轮直接拔掉 footgun 而非绕着文档写）。修复：相对 `dir` 按 `agentDir()` 解析；phase9 新增 **2b 自包含断言块**（runner 的 mktemp agentDir 不设 storage.dir，原分支在门里处于休眠，必须自备 fixture 才能真正回归），断言「解析到 agentDir 下」与「绝不按 cwd」两半，先红后绿。② **probe 5c（测试侧）**：钉档的**关键词路径**——断言档位选单与三选项确认框均不出现，**并断言插件确实已激活**。该正向断言首跑即抓到假绿：未应答 L2 确认框时插件根本没激活，「没弹框」会因「什么都没发生」而通过。已入 `all` 模式。③ **tsc 归零（17→0）**：phase15 的 Theme 桩原只有 `{fg, bold}` 两字段，而 Theme 是 class（私有 fgColors/bgColors/mode + fg/bg/bold/italic/underline/inverse/strikethrough/getFgAnsi/getBgAnsi/getColorMode/getThinkingBorderColor/getBashModeBorderColor），补全为完整公开面桩；phase24 的 `contextHandler` 在同一函数体内 await 之后被 TS 的 CFA narrow 成 `never`（误报 TS2349），经 `readContext()` getter 读取绕过。④ **settle 超时自动 harvest 评估后不做**：成员在超时后可能仍在推进，自动收割会造成重复工作与重复计费；维持手动恢复 + 既有收获指引，结论写入文档。
+
+**验证**：最终零 token 门全绿（20 phase + manifest + 7 live + orphan-check）；tsc 全导入图 **0 错误**；phase9 新断言实跑输出 `PASS storage.dir: relative resolves under the agent dir — agentDir=/tmp/p9-*/agent got=/tmp/p9-*/agent/teams-relocated`；探针 `all` 模式 6 场景 5 项 PASS，5a 首跑因「确认后 team 工具调用为空」失败、单跑复测 PASS（转发逐字两次均正确——LLM 行为断言，既往同型抖动）。
+
+**文档**：TEST-PLAN(_CN) 新增 R16 行 + 缺陷清单第 7 条；TESTING(_CN) 探针表加 5c、phase9 行补语义、通过标准补「tsc 零错误」；MANUAL-TESTING(_CN) 状态总览追加 R16 段、**把「钉档关键词路径抽查」从必须手动集移除**（5b 节的 Why manual 改写为指向 probe 5c）；CONFIGURATION(_CN) storage.dir 语义改写；sandbox/README(_CN) 探针清单加 5c；HANDOFF §1/§4 销账两项遗留。
+
+**遗留**：剩余必须手动项收敛为六项纯交互——M1（真实 install/remove）、M2（信任弹窗 + K6 项目级角色层）、M3（TUI 像素与按键；「Esc 取消」数据面已由 phase24 覆盖）、M4（render.ts 观感）、M5（英文审阅）、M6（可选 8 成员性能）。另：P2-8e/9 测试加固仍未排期；宿主 select 倒计时不响应按键为上游缺口。

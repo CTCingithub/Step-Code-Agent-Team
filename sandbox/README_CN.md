@@ -26,7 +26,7 @@
 | `project/` | 演示项目：零依赖 Node.js 任务管理器（`npm test`：12 条测试，种子 bug 在位时 11 条通过） |
 | `project-pristine/` | 演示项目的初始快照（restore 的来源，勿改动） |
 | `smoke-phase4/10/11/12.ts` | LLM 层回归探针（需 key，跑法见 docs/TESTING.md） |
-| `probe-remaining-manual.mjs` | 原人工场景的 RPC 驱动 live 探针（需 key）：`node sandbox/probe-remaining-manual.mjs <5a\|5b\|7\|8\|9\|all>`——应答宿主对话框（select/input/confirm）驱动方案确认、L1 护栏、自定义角色与迁移提示；每条子命令用隔离临时 agentDir，须由队长自身进程运行，且须卸载六个 `STEPCODE_TEAM_*` 变量——在成员进程内它们会遗传给探针自启的 `step` 子进程，该子进程的扩展读到 depth 1 ≥ `maxRecursionDepth` 1 而保持惰性，所有探针都会假失败。`all` 以各自独立的子进程（各自 mktemp agentDir）跑完所有场景，输出逐场景判定与汇总行 |
+| `probe-remaining-manual.mjs` | 原人工场景的 RPC 驱动 live 探针（需 key）：`node sandbox/probe-remaining-manual.mjs <5a\|5b\|5c\|7\|8\|9\|all>`——应答宿主对话框（select/input/confirm）驱动方案确认、L1 护栏、自定义角色与迁移提示；每条子命令用隔离临时 agentDir，须由队长自身进程运行，且须卸载六个 `STEPCODE_TEAM_*` 变量——在成员进程内它们会遗传给探针自启的 `step` 子进程，该子进程的扩展读到 depth 1 ≥ `maxRecursionDepth` 1 而保持惰性，所有探针都会假失败。`all` 以各自独立的子进程（各自 mktemp agentDir）跑完所有场景，输出逐场景判定与汇总行 |
 | `cfg-*/settings.json` | 各探针的配置 fixture（经旧版 settings.json 层级暂存，仍然有效）。活跃：`cfg-conc`（phase10 A 支）、`cfg-deadlock`（phase10 B 支）、`cfg-deep2`（phase11）；其余为遗留、无 live 消费方（phase9 自建 mktemp fixture）。本地 `sandbox/config.toml` 会遮蔽它们——探针须隔离 agentDir（见 docs/TESTING.md C 层） |
 | `TEST-KEY.md` | 测试 API 密钥（gitignored——首行写 `STEP_API_KEY=<key>`；由 run-smoke.sh 与 with-test-key.sh 读取） |
 | `with-test-key.sh` | 以 TEST-KEY.md 中的密钥 export 后运行给定命令（用于 C 层 LLM 探针） |

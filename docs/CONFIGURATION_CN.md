@@ -92,7 +92,7 @@ debug = false                        # 调试日志
 | `oneshot` | 无状态 `mode: "oneshot"` 派发超时 |
 | `cost` | 团队级累计花费告警；0 禁用 |
 | `idle` | 空闲成员被回收（session 保留可恢复）；运行中成员永不回收 |
-| `storage` | 团队数据根目录（注册表、sessions、prompts、socket）；null = `<agentDir>/teams`。须填绝对路径——相对 `dir` 按 `process.cwd()`（插件启动目录）解析，会随启动位置漂移 |
+| `storage` | 团队数据根目录（注册表、sessions、prompts、socket）；null = `<agentDir>/teams`。**相对** `dir` 按 **agentDir** 解析（不按启动目录——队长 cwd 任意且成员会继承，按 cwd 锚定会把同一团队的注册表撒布到不同项目目录）；绝对路径原样使用 |
 | `tasks` | `max` 决定任务板容量（id 为 T1..T<max>；超出后创建报错并给出配置上限）；`outputCapBytes` 截断模型可见的单任务输出——全文保留在 `details.fullText` |
 | `topology` | 成员间消息默认拒绝，除非声明的边允许。`requireDeclaration` 落实「先设计再开工」。`maxLoopCount` 约束链长（队长派发 = 0，每转发 +1）；超限跳被拒且发送方改为把结论写入最终报告——同时防止环形巡游死锁。成员经内置 `topo_team_msg` 工具直达通信（无需 bash，只读角色同样可用），边对所有角色可用；依赖请用任务板 `blockedBy` 表达 |
 | `plan` | 团队方案选单（默认关）：激活时队长给出经济/快速/均衡/性能四种*策略* + 自定义流程（规模 → 拓扑 → effort）。带请求文本时，模型先经一次性规划调用（带进度动画）为该请求起草实际组队方案，Accept/取消 选择框展示该方案——批准后以高于一般性策略的优先级注入；裸 `/topo`（无请求）或规划调用失败时回退为该档位的标准方案形态。`tier = "always ask"`（默认）每次弹选单；**固定档位在每次激活（命令与关键词路径）直接应用——钉档即「别再问」：选单与三选项确认框一律不弹**（规划调用与确认仅发生在选单或 `/topo <档位名>` 显式路径）；`/topo <档位名>` 可按次覆盖（仍走实际方案确认）。选单超时/headless 回退 `balanced`；选项按语言本地化；无成本倍率 |

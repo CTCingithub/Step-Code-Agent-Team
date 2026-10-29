@@ -34,7 +34,7 @@
 | 4 | LLM 行为遵循度（ring） | ✅ 2026-10-22 + 2026-10-25 两轮确认（两跳成功 + 第三跳被 maxLoopCount 拦下并原文引用） |
 | 5 | 沙箱演示剧本（三幕） | ✅ 2026-10-22 + 2026-10-25 两轮复测通过（修复轮 11/12→12/12、两轮并行审查零改动） |
 | 6 | 性能主观项（8 成员满编） | ➖ 可选，主观无判定标准 |
-| 7 | 实际方案三选项确认框（Accept / Cancel / Other）+ 生成进度动画（新 UI） | ➖ 2026-10-25 轮次已实测走通（三档 Accept 路径）；**Other 路径与固定档已于 2026-10-25 由 RPC 驱动探针 live 验证**（`node sandbox/probe-remaining-manual.mjs 5a` / `5b`：用户文本原样进入转发请求、钉档后选单不出现）；剩余仅 TUI 按键观感 ⬜（M3：无倒计时/Esc/空提交） |；**2026-10-29（R14）在最终产品代码上复验通过**——5a PASS（Other 输入原样进入转发请求，确认后 team_create_member/team_set_topology/team_send 真实发生）、5b PASS（选单与确认框均不出现） |
+| 7 | 实际方案三选项确认框（Accept / Cancel / Other）+ 生成进度动画（新 UI） | ➖ 2026-10-25 轮次已实测走通（三档 Accept 路径）；**Other 路径与固定档已于 2026-10-25 由 RPC 驱动探针 live 验证**（`node sandbox/probe-remaining-manual.mjs 5a` / `5b`：用户文本原样进入转发请求、钉档后选单不出现）；剩余仅 TUI 按键观感 ⬜（M3：无倒计时/Esc/空提交） |；**2026-10-29（R14）在最终产品代码上复验通过**——5a PASS（Other 输入原样进入转发请求，确认后 team_create_member/team_set_topology/team_send 真实发生）、5b PASS（选单与确认框均不出现）；**R16 新增 probe 5c**——关键词路径上的钉档已 live 验证（两对话框均不出现，且插件确已激活），最后一处人工抽查随之移除 |
 | 8 | 激活护栏 L1（2026-10-23 重写） | ✅ phase6 八条用例全绿 + **2026-10-25 RPC 驱动 live 验证通过**（`probe-remaining-manual.mjs 7`：元问题零团队动作、how-to 带主体激活且 team_create_member 真实可用） |；**2026-10-29（R14）复验通过**（两个子检查均 PASS） |
 | 9 | 自定义角色（agentDir 层 + 信任项目层） | ➖ phase3 覆盖加载与信任门控 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 8`：frontmatter tools/effort/prompt 落到真实 spawn、成员自报白名单含 topo_team_msg）；项目级层仍需 M2 信任流 ⬜ |；**2026-10-29（R14）复验**——create 结果那半两次均过，成员自述抖动一次、重跑通过（属 LLM 行为断言而非机械断言） |
 | 10 | 旧关键词迁移提示 | ✅ phase6/phase9 覆盖剥离语义 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 9`：迁移提示每会话恰好出现一次） |；**2026-10-29（R14）复验通过**（恰好一次） |
@@ -390,9 +390,11 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 
 **自动化覆盖**：phase21 断言档位表本身（四档、五种模式、双语标签、未知 id 回退）；phase24 经 resetConfigCache 钩子切换 `plan.enabled` 驱动确认路径。
 
-**live 验证（2026-10-25，修复后复跑）**：`probe-remaining-manual.mjs 5b` 把 `plan.tier` 钉为 `"fast"` 后走 `/topo <请求>`——档位选单**不出现**、三选项确认框**也不出现**（双负向断言通过，请求原样转发）。命令路径已 live 验证；关键词路径的钉档注入沿用同一配置读取，留作一轮人工抽查即可。
+**live 验证（2026-10-25，修复后复跑）**：`probe-remaining-manual.mjs 5b` 把 `plan.tier` 钉为 `"fast"` 后走 `/topo <请求>`——档位选单**不出现**、三选项确认框**也不出现**（双负向断言通过，请求原样转发）。命令路径已 live 验证。
 
-**为何必须人工**：「选单/确认框不出现」是负向 UI 观察，只有真实会话能判定；且两条激活路径共用配置但不同代码路径——须各跑一次。
+**live 验证（2026-10-29，R16 收口轮）**：新增 `probe-remaining-manual.mjs 5c` 覆盖**关键词路径**——钉档下发自然语言关键词 prompt，断言档位选单与三选项确认框均不出现，**并断言插件确实已激活**（否则「没弹框」可能只是因为什么都没发生——首跑正是靠这条抓到假绿：未应答 L2 确认框时插件并未激活）。两条激活路径现已全部 live 验证。
+
+**为何不再需要人工**：负向断言 + 激活正向断言已在真实宿主对话框与真实 LLM 往返上成立；剩下的只是 TUI 像素与按键观感（归 M3）。
 
 **还原**：把 `sandbox/config.toml` 的 `tier` 改回 `"always ask"`，再 `bash sandbox/restore-project.sh`。
 
