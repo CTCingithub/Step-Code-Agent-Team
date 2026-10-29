@@ -8,13 +8,32 @@
  * expanded), plus the tools.ts guardrail helpers.
  */
 
-import type { ExtensionAPI } from "@step-harness/coding-agent";
+import type { ExtensionAPI, Theme } from "@step-harness/coding-agent";
 import { renderTeamCall, renderTeamResult } from "../../extensions/render.ts";
 
+// Theme is a CLASS with private color maps (fgColors/bgColors/mode) plus a
+// dozen methods, so a two-field object literal does not satisfy the type — it
+// used to cost 16 tsc errors. Build a full stub of the public surface instead
+// of casting: render.ts only calls fg/bold/italic/underline/inverse/
+// strikethrough, and the rest exist to keep the stub honest against the type.
+const identity = (text: string) => text;
 const theme = {
+	name: "smoke-stub",
+	sourcePath: undefined,
+	sourceInfo: undefined,
 	fg: (_color: string, text: string) => text,
-	bold: (text: string) => text,
-};
+	bg: (_color: string, text: string) => text,
+	bold: identity,
+	italic: identity,
+	underline: identity,
+	inverse: identity,
+	strikethrough: identity,
+	getFgAnsi: (_color: string) => "",
+	getBgAnsi: (_color: string) => "",
+	getColorMode: () => "truecolor" as const,
+	getThinkingBorderColor: () => identity,
+	getBashModeBorderColor: () => identity,
+} as unknown as Theme;
 
 /** Best-effort text extraction from a pi-tui component (shape discovered live). */
 function textOf(component: unknown): string {

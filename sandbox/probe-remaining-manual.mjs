@@ -11,7 +11,7 @@
  * of these dialogs, the Esc key, the no-countdown behavior) — see
  * docs/MANUAL-TESTING(_CN).md §8–§11 and M3.
  *
- * Usage:  node sandbox/probe-remaining-manual.mjs <5a|5b|7|8|9|all>
+ * Usage:  node sandbox/probe-remaining-manual.mjs <5a|5b|5c|7|8|9|all>
  * Needs:  the API key from sandbox/TEST-KEY.md (sandbox/with-test-key.sh sets it).
  * Rules:  every scenario runs in an isolated temp agentDir and from THIS
  *         process (live checks false-negative inside member processes).
@@ -136,7 +136,7 @@ if (scenario === "all") {
 	// child process — and therefore its own mktemp agentDir — so one failure
 	// never hides the others' verdicts, and the per-scenario output stays
 	// attributable.
-	const SCENARIOS = ["5a", "5b", "7", "8", "9"];
+	const SCENARIOS = ["5a", "5b", "5c", "7", "8", "9"];
 	let failed = 0;
 	for (const tag of SCENARIOS) {
 		console.log(`[all] ---- ${tag} ----`);
@@ -192,6 +192,40 @@ if (scenario === "5a") {
 	console.log(`[5b] picker dialog appeared: ${pickerSeen} (must be false)`);
 	console.log(`[5b] confirmation dialog appeared: ${confirmSeen} (must be false — a pinned tier asks nothing)`);
 	console.log(`[5b] VERDICT: ${pass ? "PASS" : "FAIL"}`);
+	fs.rmSync(a.root, { recursive: true, force: true });
+} else if (scenario === "5c") {
+	// Pinned tier on the KEYWORD path (the command path is 5b). applyStandingTier
+	// is a different code path from runTeamCommand's pinned branch, and "no dialog
+	// appears" is a negative UI observation — so this used to be a manual
+	// spot-check. Negative assertions on BOTH dialogs, plus a positive assertion
+	// that the plugin really activated (otherwise "no dialog" would pass simply
+	// because nothing happened at all — a false green).
+	const a = makeAgent("probe5c", PLAN_CFG.replace('[stepcodeAgentTeam.plan]\nenabled = true', '[stepcodeAgentTeam.plan]\nenabled = true\ntier = "fast"'));
+	const seen = [];
+	const r = await runSession(
+		"probe5c",
+		a.agentDir,
+		[{ message: "我想用智能体小队统计这个项目的源文件数量并汇报", waitMs: 120000 }],
+		(msg) => {
+			if (msg.method === "select") {
+				seen.push(msg.title);
+				return { value: (msg.options ?? [])[0] };
+			}
+			// The keyword path opens the L2 confirm first (confirmBeforeActivate
+			// is on by default); answer it or the plugin never activates and the
+			// negative assertions below would pass for the wrong reason.
+			if (msg.method === "confirm") return { confirmed: true };
+			return null;
+		},
+	);
+	const activated = r.notifies.some((n) => n.includes("activated"));
+	const pickerSeen = seen.includes("选择团队方案");
+	const confirmSeen = seen.includes("Topology Agent Team");
+	pass = activated && !pickerSeen && !confirmSeen;
+	console.log(`[5c] activated (guard against a false green): ${activated}`);
+	console.log(`[5c] picker dialog appeared: ${pickerSeen} (must be false)`);
+	console.log(`[5c] confirmation dialog appeared: ${confirmSeen} (must be false — a pinned tier asks nothing)`);
+	console.log(`[5c] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else if (scenario === "7") {
 	// L1 guard: a pure meta question stays suppressed; a how-to with a body
@@ -276,7 +310,7 @@ if (scenario === "5a") {
 	console.log(`[9] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else {
-	console.error("usage: node sandbox/probe-remaining-manual.mjs <5a|5b|7|8|9|all>");
+	console.error("usage: node sandbox/probe-remaining-manual.mjs <5a|5b|5c|7|8|9|all>");
 	process.exit(2);
 }
 process.exit(pass ? 0 : 1);

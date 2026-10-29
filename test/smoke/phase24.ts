@@ -37,7 +37,12 @@ export default function (pi: ExtensionAPI) {
 			// ---- fake pi: capture the command, the forwarded text, the context hook ----
 			const sent: string[] = [];
 			let command: { handler: (args: string, ctx: unknown) => Promise<void> } | undefined;
-			let contextHandler: ((event: unknown) => { messages?: unknown[] } | void) | null = null;
+			type ContextHook = (event: unknown) => { messages?: unknown[] } | undefined;
+			let contextHandler: ContextHook | null = null;
+			// Read through a function: TypeScript's control-flow analysis narrows the
+			// outer `let` to `never` at the second call site (after an awaited handler
+			// call in the same body), which is a false TS2349 — a getter defeats it.
+			const readContext = (): ContextHook | null => contextHandler;
 			const fakePi = {
 				registerTool: () => {},
 				getActiveTools: () => [],
@@ -102,7 +107,8 @@ export default function (pi: ExtensionAPI) {
 				await command!.handler(REQUEST, ctx);
 				// The context hook runs on the next turn; invoke it to read the injection.
 				const event = { messages: [{ role: "user", content: [{ type: "text", text: sent[0] ?? "" }] }] };
-				const out = contextHandler ? contextHandler(event) : undefined;
+				const hook = readContext();
+				const out = hook ? hook(event) : undefined;
 				const texts = ((out as { messages?: Array<{ content?: Array<{ text?: string }> }> } | undefined)?.messages ?? [])
 					.flatMap((m) => (m.content ?? []).map((c) => c.text ?? ""));
 				injectionTexts.push(texts.join("\n"));
@@ -203,7 +209,8 @@ export default function (pi: ExtensionAPI) {
 			);
 			{
 				const event = { messages: [{ role: "user", content: [{ type: "text", text: sent[0] ?? "" }] }] };
-				const out = contextHandler ? contextHandler(event) : undefined;
+				const hook = readContext();
+				const out = hook ? hook(event) : undefined;
 				const texts = ((out as { messages?: Array<{ content?: Array<{ text?: string }> }> } | undefined)?.messages ?? [])
 					.flatMap((m) => (m.content ?? []).map((c) => c.text ?? ""));
 				const injected = texts.join("\n");
