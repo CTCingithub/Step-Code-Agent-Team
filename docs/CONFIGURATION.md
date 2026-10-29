@@ -14,6 +14,16 @@ All behavior is controlled by the `stepcodeAgentTeam` table in Step Code's unifi
 
 **Precedence: built-in defaults < global config.toml < project config.toml < environment overrides.** Config is read once at load; `/reload` re-reads it but also returns the plugin to its default-off state. Unknown keys are ignored; invalid values fall back to defaults with a debug-log warning. The plugin only reads its own table and never writes the file — except the commented seed block appended on first activation.
 
+### Editing config (read this before you debug a "my edit did nothing")
+
+**The global table lives at `dirname(STEP_CODING_AGENT_DIR)/config.toml`** — beside the agent dir, not inside it. In the sandbox that is `sandbox/config.toml` (the agent dir is `sandbox/agent`); on a normal install it is `~/.stepcode/config.toml`. There is no `sandbox/agent/config.toml`.
+
+**Config is read once, when the leader process loads the extension.** An edit made while a session is running never lands in that session — not because the file is wrong, but because nothing re-reads it. Restart the session (or `/reload`, which also returns the plugin to its default-off state).
+
+**To confirm which file was read and what the effective values are**, run with `STEPCODE_TEAM_DEBUG=1`: on activation the plugin traces `config: unified=<path> topology.maxLoopCount=… dispatch.timeoutMs=… members.max=… plan.enabled=… plan.tier=…`, and every read of that file is traced too. A successful read is traced as well as a failure, so you can tell "I read your file and it says 2" from "I never opened that path".
+
+Sandbox gotcha: `sandbox/config.toml` also **shadows the `cfg-*` probe fixtures** for anything that resolves its global config there (see [TESTING.md](TESTING.md) Layer C) — keep probe runs isolated when you rely on a fixture.
+
 ## Configuration
 
 Global (`<stepRoot>/config.toml`) or project (`<cwd>/.stepcode/config.toml`). TOML has no null: keys whose default is null (`members.defaultTools`, `storage.dir`) are omitted:
@@ -65,7 +75,7 @@ outputCapBytes = 51200              # per-task output truncation (bytes); the fu
 [stepcodeAgentTeam.topology]
 default = "star"                     # star/pipeline/mesh/ring/custom
 requireDeclaration = false           # true = no dispatch before the topology is declared
-maxLoopCount = 2                     # ring message-chain bound (0 = unlimited, 0–64)
+maxLoopCount = 2                     # ring message-chain bound (0 = unlimited, 0–64); counts the nesting depth of relays inside ONE leader dispatch
 
 [stepcodeAgentTeam.plan]
 enabled = false                      # team-plan picker: economic/fast/balanced/performance + custom on activation

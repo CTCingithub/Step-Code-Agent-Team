@@ -251,7 +251,7 @@ flowchart LR
     M3 --> M2
 ```
 
-**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited) — at the default, a 3-member ring's closing hop (r3→r1) is always rejected, so closure runs through the leader unless you raise the limit:
+**`ring`** — each member may message the next (wraps around); the message chain is bounded by `topology.maxLoopCount` (default 2, 0 = unlimited). The bound counts the **nesting depth of relays inside one leader dispatch**: the leader's own dispatch starts at 0 and each member→member forward adds one. So a 3-member ring toured as *nested relays inside a single dispatch* has its closing hop (r3→r1) rejected at the default — but if the leader **re-dispatches each hop separately**, every hop starts from 0 and all of them succeed. To observe the bound, let the relays nest; to close a ring regardless, route the last hop through the leader or raise the limit:
 
 ```mermaid
 flowchart LR

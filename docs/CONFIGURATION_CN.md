@@ -14,6 +14,16 @@
 
 **优先级：内置默认 < 全局 config.toml < 项目级 config.toml < 环境变量覆盖。** 配置在加载时只读一次；`/reload` 会重新读取，但插件也会随之回到默认关闭状态。未知键忽略；非法值回退默认并在 debug 日志警告。插件只读取自己的表，绝不写入文件——首次激活时追加的注释种子块除外。
 
+### 改配置前必读（排查「我改了却没生效」）
+
+**全局表在 `dirname(STEP_CODING_AGENT_DIR)/config.toml`**——在 agentDir **旁边**，不在里面。沙箱下即 `sandbox/config.toml`（agentDir 是 `sandbox/agent`）；正常安装是 `~/.stepcode/config.toml`。**不存在** `sandbox/agent/config.toml`。
+
+**配置只在队长进程加载扩展时读一次。** 会话运行中改动对该会话绝不生效——不是文件选错了，而是没有任何东西会重读它。请重启会话（或 `/reload`，但它同时把插件重置回默认关闭）。
+
+**想确认「到底读了哪个文件、生效值是多少」**，用 `STEPCODE_TEAM_DEBUG=1` 运行：激活时插件会打印 `config: unified=<路径> topology.maxLoopCount=… dispatch.timeoutMs=… members.max=… plan.enabled=… plan.tier=…`，且对该文件的每次读取（成功与失败）都有 trace。于是你能区分「我读了你的文件，里面写的是 2」与「我从没打开过那个路径」。
+
+沙箱注意：`sandbox/config.toml` 同时会**遮蔽 `cfg-*` 探针 fixture**（见 [TESTING_CN.md](TESTING_CN.md) C 层）——依赖 fixture 的探针运行时请做好隔离。
+
 ## 完整配置
 
 全局（`<stepRoot>/config.toml`）或项目级（`<cwd>/.stepcode/config.toml`）。TOML 没有 null：默认值为 null 的键（`members.defaultTools`、`storage.dir`）直接省略：
@@ -65,7 +75,7 @@ outputCapBytes = 51200              # 单任务输出截断（字节）；全文
 [stepcodeAgentTeam.topology]
 default = "star"                     # star/pipeline/mesh/ring/custom
 requireDeclaration = false           # true = 未显式声明拓扑前禁止派活
-maxLoopCount = 2                     # 环形消息链跳数上限（0 = 无上限，0–64）
+maxLoopCount = 2                     # 环形消息链跳数上限（0 = 无上限，0–64）；计的是单次队长派发内嵌套中继的深度
 
 [stepcodeAgentTeam.plan]
 enabled = false                      # 团队方案选单：激活时给出经济/快速/均衡/性能 + 自定义

@@ -126,3 +126,5 @@ session JSONL and team registry that `restore-project.sh` does not touch.
 How to run the LLM-layer probes: [../docs/TESTING.md](../docs/TESTING.md);
 how to configure them: [../docs/CONFIGURATION.md](../docs/CONFIGURATION.md)
 (the `[stepcodeAgentTeam]` table of `sandbox/config.toml`).
+
+**Editing that table**: `sandbox/config.toml` is the right file (it sits beside the agent dir, which is where the plugin resolves the global config — there is no `sandbox/agent/config.toml`). But config is read **once, when the leader process loads the extension**, so an edit made while a session is running never lands in that session — restart the session afterwards. To see which file was read and what the effective values are, run with `STEPCODE_TEAM_DEBUG=1` (activation traces `config: unified=<path> …`). Note the same file also shadows the `cfg-*` probe fixtures, so keep probe runs isolated.

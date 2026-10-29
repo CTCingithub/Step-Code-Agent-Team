@@ -106,3 +106,5 @@ session JSONL 与团队注册表。
 LLM 层探针跑法见 [../docs/TESTING.md](../docs/TESTING_CN.md)；
 配置方式见 [../docs/CONFIGURATION.md](../docs/CONFIGURATION_CN.md)
 （`sandbox/config.toml` 的 `[stepcodeAgentTeam]` 表）。
+
+**改这张表要注意**：`sandbox/config.toml` 就是正确的文件（它在 agentDir 旁边，插件正是从那里解析全局配置——**不存在** `sandbox/agent/config.toml`）。但配置**只在队长进程加载扩展时读一次**，会话运行中改动对该会话绝不生效——改完请重启会话。想确认读了哪个文件、生效值是多少，用 `STEPCODE_TEAM_DEBUG=1` 运行（激活时会打印 `config: unified=<路径> …`）。另注意同一文件也会遮蔽 `cfg-*` 探针 fixture，探针运行时请隔离。
