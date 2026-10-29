@@ -135,6 +135,8 @@ phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的
 
 **本地配置遮蔽**：全局 `config.toml` 位于 agentDir **旁边**（`dirname(agentDir)/config.toml`），优先级高于 fixture 的 `settings.json`。因此本地的 `sandbox/config.toml`（gitignored）会遮蔽 `sandbox/cfg-*`——其 `dispatch.maxConcurrent` 会静默取代 fixture 的值，phase10 将走 Branch A 而非 B（2026-10-25 实测假绿）。有该文件的机器上隔离探针：把 fixture 的 `settings.json` 拷进临时 agentDir 并把 `STEP_CODING_AGENT_DIR` 指过去。
 
+探针注意事项（2026-10-30 记录）：场景 7 与 8 各含一条**LLM 行为**断言——「模型调用了 `team_create_member`」与「成员自述点名 `topo_team_msg`」。两者都可能在没有任何产品缺陷的情况下抖动（模型可能先探索，或只列自己的预设工具）；两个探针现都会打印工具调用列表/成员实际回复，使失败可一次定性，7 的第二条 prompt 也因此改为指令式。此类失败请先复跑再判定为缺陷。
+
 通过标准（摘要）：并行调度均成功；任务链状态流转 pending→ready→running→done；
 oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记得上文；
 `STEPCODE_TEAM_COST_WARN=0.0001` 触发告警、设为 0 禁用；abort 后无孤儿进程；

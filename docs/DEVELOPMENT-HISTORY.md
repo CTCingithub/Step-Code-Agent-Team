@@ -777,3 +777,22 @@
 **文档**：TEST-PLAN(_CN) 新增 R16 行 + 缺陷清单第 7 条；TESTING(_CN) 探针表加 5c、phase9 行补语义、通过标准补「tsc 零错误」；MANUAL-TESTING(_CN) 状态总览追加 R16 段、**把「钉档关键词路径抽查」从必须手动集移除**（5b 节的 Why manual 改写为指向 probe 5c）；CONFIGURATION(_CN) storage.dir 语义改写；sandbox/README(_CN) 探针清单加 5c；HANDOFF §1/§4 销账两项遗留。
 
 **遗留**：剩余必须手动项收敛为六项纯交互——M1（真实 install/remove）、M2（信任弹窗 + K6 项目级角色层）、M3（TUI 像素与按键；「Esc 取消」数据面已由 phase24 覆盖）、M4（render.ts 观感）、M5（英文审阅）、M6（可选 8 成员性能）。另：P2-8e/9 测试加固仍未排期；宿主 select 倒计时不响应按键为上游缺口。
+### 71. 手动轮驱动轮：链长语义更正、配置可观测、回执框定与拒绝文案（plan-109）
+
+**用户 prompt**：确认性能档实际方案（队长 Alice 汇总择优 / Bob 与 Carol 并行日志分析 / Dave UI 交互优化 / Eve UI 视觉与可用性优化，star 拓扑，T1 功能缺陷→T2 体验阻塞→T3 优先级→T4 交互方案→T5 视觉方案→T6 整合，T7 用户手动测试）后「目前UI方面没有问题了，请分析手动测试的日志文件 sandbox/logs/session-log-2026-10-30.md，然后进行修改优化」。
+
+**思路**：用户已确认 UI 无问题，焦点转为日志暴露的插件侧缺陷。日志质量很高（15 成员 5 阶段 6 处异常实况，且明确区分了"工具返回原文"与"成员转述"），但其中**两处结论是错的**，若不更正会持续误导后续会话。派发机制本轮 2 次 settle 超时（Carol/Eve），队长接管其范围。
+
+**两处错误结论的更正（均有读码佐证）**：
+- 「插件读 `<agentDir>/config.toml`，真正的旋钮在 `sandbox/agent/config.toml`」——错。`config.ts:248` `unifiedConfigFilePath()` = `dirname(agentDir)/config.toml`，沙箱下即 `sandbox/config.toml`，该文件确实含 `[stepcodeAgentTeam.topology] maxLoopCount = 2`（队长改对了文件）。无效的真实原因是**配置每会话只读一次**（`getConfig()` 进程级缓存 + `index.ts` 激活时一次性取走，全仓无 fs.watch），会话中改动不生效。
+- 「默认配置下 3 成员环的闭合跳 r3→r1 必定被拒」——错。`members.ts` `runDispatch` 以 `chainLength ?? 0` 记账，队长派发恒为 0，只有成员间嵌套中继累加（`team-server.ts` `nextLength = currentChainLength(from) + 1`）。该轮队长逐跳重派发使三跳深度都是 1，闭合跳成功；其「生效上限≥3」的推断也随之错误。
+
+**产品改动**：① 激活时 debug 级来源 trace（`config: unified=<路径> topology.maxLoopCount=… …`）+ 每次成功读取配置也有 trace——成功时的静默正是「我改了却没生效」无法排查的根因；② 拓扑拒绝文案含拓扑形状并自述为护栏而非故障（此前有 reviewer 把 star 的 "(none)" 拒绝当异常上报）；③ 非空队友回复带出处框定（投递已确认，但文本是队友个人陈述、事实性断言未验证——此前有回复夹带编造的「ring 已达 maxLoopCount」断言，接收方仅凭警惕化解）；④ `team_create_member.name` schema 前置声明 ASCII-only + 须以字母开头；⑤ `team_send` 传 taskId 的**替换**语义写入描述与结果文案（经评估**不改行为**：替换是收割提示恢复路径的承重墙，若改为追加会让成员重跑任务）；⑥ effort 描述补「省略→high」。
+
+**测试**：phase7 断言拒绝文案含形状且自述为护栏；phase14 断言新（队长式）派发从链长 0 起算且首跳放行；phase16 的透传断言改为包含+框定断言；phase23 断言 schema 命名规则与 taskId 替换语义；探针 7 的第二条 prompt 改为指令式（原表述会让模型以"先给方案"代替执行，2026-10-30 连续两次如此）。
+
+**文档**：README(_CN)、MANUAL-TESTING(_CN)、TEST-PLAN(_CN) 三处「必定被拒」改为精确语义；TEST-PLAN 演示剧本行补链长注记；CONFIGURATION(_CN) 新增「改配置前必读」专节（文件位置 + 每会话只读一次 + debug 自证 + fixture 遮蔽）；sandbox/README(_CN) 补同义注记；PROTOCOL(_CN) 补 taskId 替换语义；MANUAL-TESTING(_CN) 补「数字类结论必须附佐证」（scout1 行数报错 139/76/132 vs 实际 124/77/146 的教训）；TESTING(_CN) 记录 7/8 的 LLM 行为断言抖动与复跑规程。
+
+**验证**：零 token 全量门全绿（20 phase + manifest + 7 live + orphan-check）；tsc 零错误；探针 5a/5b/5c/7/8/9 全部 PASS（7 与 8 各抖动一次、复跑通过；7 收紧 prompt 后稳定通过）。
+
+**遗留**：ring 巡游上限的**演示目标**仍需一次手动轮才能真正触发（须在同一次派发内连续嵌套中继，不能逐跳 team_send）——已写入 MANUAL-TESTING 场景 4 的注意列；`sandbox/project` 的 39 条审查项按既定决议只记录不修；派发机制间歇性退化仍未定位根因。

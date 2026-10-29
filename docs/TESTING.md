@@ -163,6 +163,8 @@ Branch A instead of B (a false green observed 2026-10-25). On machines with that
 file, isolate the probe: copy the fixture's `settings.json` into a temp agent dir
 and point `STEP_CODING_AGENT_DIR` there.
 
+Probe caveat (recorded 2026-10-30): scenarios 7 and 8 each carry one **LLM-behaviour** assertion — "the model called `team_create_member`" and "the member's self-report names `topo_team_msg`". Both can flake without any product defect (the model may explore first, or list only its preset tools); each probe now prints the tool calls / the member's actual reply so a failure is classifiable in one run, and 7's second prompt is directive for the same reason. Re-run before treating such a failure as a defect.
+
 Pass criteria (summary): all parallel dispatches succeed; task chains move
 pending→ready→running→done; oneshot gets a reply and leaves no resident process;
 after `kill -9` the next send succeeds and remembers the earlier context;
