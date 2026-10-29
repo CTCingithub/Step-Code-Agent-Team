@@ -63,7 +63,7 @@ function teamSpend(manager: TeamManager): number {
 function assertActive(): void {
 	if (!isActive()) {
 		throw new Error(
-			"Agent team plugin is not active. Activate it with /topo or mention a configured keyword (e.g. 智能体小队) in your message.",
+			"Topology Agent Team is not active. Activate it with /topo or mention a configured keyword (e.g. 智能体小队) in your message.",
 		);
 	}
 }

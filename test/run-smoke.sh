@@ -162,7 +162,7 @@ echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE1/.stepcod
 live_check "project-config" "$LIVE1" "disabled by configuration"
 
 LIVE2="$(mktemp -d)"
-live_check "command-activate" "$LIVE2" "Agent team plugin activated (/topo command)"
+live_check "command-activate" "$LIVE2" "Topology Agent Team activated (/topo command)"
 
 # Package install path: a `packages` entry in the step config (the unified
 # config.toml beside the agent dir — the form `step install <local path>`
@@ -174,7 +174,7 @@ printf 'packages = ["%s"]\n' "$ROOT" > "$PKGDIR/config.toml"
 pkg_out="$(cd "$PKGDIR" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
   | STEP_CODING_AGENT_DIR="$PKGDIR/agent" timeout 45 "$STEP_BIN" \
     --mode rpc --session-id live-pkg --session-dir "$PKGDIR/agent/sessions" -a 2>&1)" || true
-if echo "$pkg_out" | grep -q 'Agent team plugin activated (/topo command)'; then
+if echo "$pkg_out" | grep -q 'Topology Agent Team activated (/topo command)'; then
 	echo "live-package-install: OK"
 else
 	echo "live-package-install: FAILED (extension from the step config packages entry did not activate)"
@@ -197,7 +197,7 @@ mkdir -p "$LIVE3/sessions"
 fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo ping-forward-check"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE3/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-fwd --session-dir "$LIVE3/sessions" -a 2>&1)" || true
-if ! echo "$fwd_out" | grep -q 'Agent team plugin activated'; then
+if ! echo "$fwd_out" | grep -q 'Topology Agent Team activated'; then
   echo "live-args-forward: FAILED (command with args did not activate the plugin)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
@@ -221,7 +221,7 @@ mkdir -p "$LIVE5/sessions"
 rev_out="$(cd "$LIVE5" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo review ping-review-check"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE5/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-review --session-dir "$LIVE5/sessions" -a 2>&1)" || true
-if echo "$rev_out" | grep -q 'Agent team plugin activated' && echo "$rev_out" | grep -q '"text":"ping-review-check"'; then
+if echo "$rev_out" | grep -q 'Topology Agent Team activated' && echo "$rev_out" | grep -q '"text":"ping-review-check"'; then
   echo "live-review: OK"
 else
   echo "live-review: FAILED (the /topo review command did not activate and forward verbatim)"
@@ -238,7 +238,7 @@ echo '{"stepcodeAgentTeam":{"activation":{"enabled":false}}}' > "$LIVE4/.stepcod
 na_out="$(cd "$LIVE4" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE4/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-untrusted --session-dir "$LIVE4/sessions" -na 2>&1)" || true
-if echo "$na_out" | grep -q 'Agent team plugin activated (/topo command)'; then
+if echo "$na_out" | grep -q 'Topology Agent Team activated (/topo command)'; then
   echo "live-untrusted-config: OK"
 else
   echo "live-untrusted-config: FAILED (staged project config applied despite --no-approve)"
@@ -254,7 +254,7 @@ if git -C "$ROOT" archive HEAD 2>/dev/null | tar -x -C "$EXPORT_DIR" 2>/dev/null
   exp_out="$(cd "$NEUTRAL" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
     | STEP_CODING_AGENT_DIR="$EXPORT_DIR/agent" timeout 45 "$STEP_BIN" -e "$EXPORT_DIR/extensions/index.ts" \
       --mode rpc --session-id live-export --session-dir "$EXPORT_DIR/sessions" --approval-mode auto 2>&1)" || true
-  if echo "$exp_out" | grep -q 'Agent team plugin activated (/topo command)'; then
+  if echo "$exp_out" | grep -q 'Topology Agent Team activated (/topo command)'; then
     echo "live-clean-export: OK"
   else
     echo "live-clean-export: FAILED (extension from git archive did not activate)"

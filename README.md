@@ -2,7 +2,7 @@
 
 [简体中文说明 →](./README_CN.md)
 
-Agent team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly.
+Topology Agent Team plugin for [Step Code](https://github.com/stepfun-ai/Step-Code) (`step`): your current session becomes a **leader** that spawns resumable **member** agents, decomposes goals into a dependency-aware **task board**, dispatches work in parallel, and lets members message each other directly.
 
 > **Reference:** This project references the **agent teams feature of DeepSeek Harness** — the leader/member model, the dependency-aware task board, and member-to-member messaging follow its design. It is an independent implementation for Step Code and is not affiliated with DeepSeek.
 
@@ -182,7 +182,7 @@ tier = "always ask"   # always ask | economic | fast | balanced | performance
 A tier is a **strategy prompt, not a fixed roster**: the instruction states the
 strategy and offers a non-binding example (e.g. "1 scout + 1 worker, effort
 low/medium, star topology"), and the leader model decides the actual members,
-roles, topology, and effort from the task. When `/topo` carries a request, the model first drafts the **actual plan** for that request (a one-off, plan-only call with a spinner progress) and the three-option selection (Accept / Custom input… / Cancel) shows it — on approval the plan is injected with precedence over the general strategy; a custom input's text is forwarded with the request verbatim. The picker's fifth entry —
+roles, topology, and effort from the task. When `/topo` carries a request, the model first drafts the **actual plan** for that request (a one-off, plan-only call with a spinner progress) and the three-option selection (Accept / Cancel / Other) shows it — on approval the plan is injected with precedence over the general strategy; choosing Other lets you type free-form text, which is forwarded with the request verbatim. The picker's fifth entry —
 **custom requirements** — runs a short guided flow (team size → topology →
 effort) and carries your free-text requirements along with the request.
 
@@ -389,7 +389,7 @@ Zero-token smoke probes exercise the protocol layer without any model calls
 ```bash
 bash sandbox/probe.sh   # RPC handshake probe → expects "PROBE OK"
 
-npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21,22,23)
+npm run smoke           # full zero-token suite (test/smoke/phase1,2,3,5,6,7,8,9,13,14,15,16,17,18,19,20,21,22,23,24)
                         # hermetic: throwaway agent dir; phase 5 is skipped
                         # unless STEP_API_KEY is set (it makes one real call)
 ```
@@ -478,8 +478,8 @@ is absent, so the core team functionality always runs.
   strategy prompts plus a guided custom flow; `plan.tier` pins one strategy
   (default `"always ask"` — a pin applies directly on both activation paths,
   with no picker and no confirmation). With a request attached the model
-  drafts the actual plan and a three-option selection (Accept / 自定义输入… /
-  Cancel) shows it — a custom input's own text rides along with the request
+  drafts the actual plan and a three-option selection (Accept / Cancel /
+  Other) shows it — a custom input's own text rides along with the request
   verbatim.
 - **Messaging**: members reach teammates through the built-in `topo_team_msg`
   tool — no bash required, so topology edges are usable for every role.
