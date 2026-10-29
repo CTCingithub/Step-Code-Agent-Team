@@ -59,7 +59,19 @@ export default function (pi: ExtensionAPI) {
 			// turn ends without text (empty, or the host's "No result provided"
 			// placeholder) must yield an explicit delivery acknowledgment, never a
 			// silent empty result — otherwise ring pass-along flows break quietly.
-			check("msg: real reply passes through", formatTeammateReply("r2", "here are my findings") === "here are my findings");
+			// A non-empty reply keeps the teammate's text AND carries provenance
+			// framing: the server asserts delivery, but the text is the teammate's
+			// own statement and its factual claims are unverified. Unframed, a
+			// relayed reply reads as tool-verified fact (2026-10-30 round: a reply
+			// carried a fabricated "the ring already hit maxLoopCount" claim).
+			const framed = formatTeammateReply("r2", "here are my findings");
+			check("msg: real reply keeps the teammate text", framed.includes("here are my findings"), framed.slice(0, 160));
+			check(
+				"msg: real reply carries provenance framing",
+				/Reply from r2/.test(framed) && /delivered/i.test(framed) && /NOT verified/i.test(framed),
+				framed.slice(0, 240),
+			);
+			check("msg: framing points at verify-before-relay", /verify before relaying/i.test(framed), framed.slice(0, 240));
 			const ack = formatTeammateReply("r2", "");
 			check("msg: empty reply → delivery ack", /^Delivered to r2\./.test(ack), ack.slice(0, 60));
 			check("msg: host placeholder → delivery ack", /^Delivered to r2\./.test(formatTeammateReply("r2", "No result provided")), "");

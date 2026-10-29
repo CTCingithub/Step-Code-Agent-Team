@@ -171,6 +171,24 @@ export default function (pi: ExtensionAPI) {
 			check("server: rejection explains loop limit", /loop|chain/i.test(denied.stderr), denied.stderr.trim().slice(0, 160));
 			check("server: chain bookkeeping released", manager.currentChainLength("m2") === 0, `got ${manager.currentChainLength("m2")}`);
 
+			// A LEADER dispatch always starts the chain at 0 — the bound counts the
+			// nesting depth of relays inside ONE dispatch, so re-dispatching each
+			// hop resets it. This is the semantics the 2026-10-30 manual round
+			// misread: it toured a 3-member ring by re-dispatching every hop, saw
+			// all three hops succeed, and concluded the effective limit was >= 3
+			// (the docs then said the closing hop is "always rejected", which is
+			// only true for a fully nested tour). Lock both halves here.
+			check("server: a fresh (leader-style) dispatch starts at chain 0", manager.currentChainLength("m2") === 0);
+			const afterLeaderDispatch = await manager.withChainLength("m2", 0, async () => {
+				check("server: leader dispatch books chain 0", manager.currentChainLength("m2") === 0);
+				return runShim(shim, ["msg", "--to", "m1", "--message", "ping"], sockEnv);
+			});
+			check(
+				"server: first hop under a fresh dispatch is allowed (chain 1 of 2)",
+				afterLeaderDispatch.code === 0,
+				`code=${afterLeaderDispatch.code} err=${afterLeaderDispatch.stderr.trim().slice(0, 160)}`,
+			);
+
 			// Topology denial must still take precedence over the loop check.
 			manager.setTopology("star");
 			const starDenied = await manager.withChainLength("m2", 2, () =>

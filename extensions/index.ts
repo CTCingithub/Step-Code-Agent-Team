@@ -33,7 +33,7 @@ import { currentDepth, TeamManager, teamIdForSession } from "./members.ts";
 import { registryPath } from "./registry.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
-import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample, consumeKeywordMigration } from "./config.ts";
+import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample, consumeKeywordMigration, unifiedConfigFilePath } from "./config.ts";
 import {
 	activate,
 	deactivate,
@@ -175,6 +175,15 @@ export default function (pi: ExtensionAPI) {
 		seedGlobalConfigExample(agentDir());
 		const activated = activate(reason); // the initActivation callback runs startBackend
 		if (activated) {
+			// Debug-only provenance line: which config file was read and what the
+			// effective values are. Config is read once at load, so an edit made
+			// mid-session never lands — without this trace that silence reads as
+			// "my edit did nothing / I edited the wrong file".
+			if (config.debug) {
+				console.error(
+					`[stepcode-agent-team] config: unified=${unifiedConfigFilePath(agentDir())} topology.maxLoopCount=${config.topology.maxLoopCount} dispatch.timeoutMs=${config.dispatch.timeoutMs} members.max=${config.members.max} plan.enabled=${config.plan.enabled} plan.tier=${config.plan.tier}`,
+				);
+			}
 			// Forced keyword migration (0.2.0): report terms stripped on load so
 			// the user knows why an old keyword no longer activates the plugin.
 			const migrated = consumeKeywordMigration();

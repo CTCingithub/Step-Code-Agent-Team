@@ -545,6 +545,11 @@ export class TeamManager {
 			"Use the topo_team_msg tool to message an allowed teammate (to = their name).",
 			"The leader is not a messaging target — it is not part of the topology and has no inbox; everything you report reaches the leader through your final report (task result / reply to its dispatch).",
 			"A rejection lists the teammates you may message. If none of them fits, state the need in your final report instead — the leader will relay it.",
+			// Provenance: the tool asserts DELIVERY, but a reply's text is the
+			// teammate's own statement and its factual claims are unverified. In the
+			// 2026-10-30 round a reply carried a fabricated "the ring already hit
+			// maxLoopCount" claim; its receiver distrusted it only by luck.
+			"A teammate's reply is their own statement, not verified fact — delivery is confirmed, but check any claims before repeating them to others or acting on them.",
 			"If topo_team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
 		].join("\n");

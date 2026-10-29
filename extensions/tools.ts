@@ -84,7 +84,11 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Role presets (bundled, <agentDir>/agents/, trusted <project>/.stepcode/agents/) are this plugin's own system; the built-in subagent extension reads the same directories with the same frontmatter shape independently — one file can back both a team role and a subagent agent, but the two systems keep separate state and never share it.",
 		].join(" "),
 		parameters: Type.Object({
-			name: Type.String({ description: "Member name: lowercase letters/digits/-/_ , max 32 chars" }),
+			name: Type.String({
+				description:
+					"Member name: ASCII lowercase letters/digits/-/_ only, must start with a letter, max 32 chars. " +
+					"Non-ASCII names (e.g. Chinese) are rejected — use an ASCII name and put the role's language into systemPrompt.",
+			}),
 			role: Type.Optional(
 				Type.String({
 					description:
@@ -101,7 +105,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			effort: Type.Optional(
 				StringEnum(VALID_EFFORT, {
 					description: config.models.autonomousEffort
-						? `Effort level for the member — choose per task: ${VALID_EFFORT.join(", ")}`
+						? `Effort level for the member — choose per task: ${VALID_EFFORT.join(", ")} (omitted → high, and preset efforts are inert while autonomousEffort is on)`
 						: "Effort level for the member (default: presets.effort override → preset effort → high)",
 				}),
 			),
@@ -161,7 +165,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 			"Send a message to a team member and wait for its full reply.",
 			`Prompts to the same member are serialized; parallelism happens across members (max ${config.dispatch.maxConcurrent} in flight).`,
 			"If the member process died, it is respawned with the same session id and resumes its context.",
-			"Pass taskId to run the message as a task (marks it running, writes the reply back as the task result, one retry on failure).",
+			"Pass taskId to run the message as a task (marks it running, writes the reply back as the task result, one retry on failure). With taskId your message REPLACES the task's own prompt (title/detail) — the member receives only your message; to send the task plus extra context use team_task start with detail (it appends), or quote the task text into the message.",
 			"Pass mode: \"oneshot\" for stateless fire-and-forget work (fresh process, no session, no context continuity).",
 			"Members may only message each other along edges of the declared team topology (default: star — no direct member messaging).",
 			"Keep each message complete and self-contained — members do not see your conversation.",
@@ -169,7 +173,11 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		parameters: Type.Object({
 			member: Type.String({ description: "Target member name" }),
 			message: Type.String({ description: "Message / task for the member" }),
-			taskId: Type.Optional(Type.String({ description: "Task id to run this message as" })),
+			taskId: Type.Optional(
+					Type.String({
+						description: "Task id to run this message as — your message replaces the task's own prompt (title/detail)",
+					}),
+				),
 			mode: Type.Optional(
 				StringEnum(["persistent", "oneshot"] as const, {
 					description: 'Dispatch mode: "persistent" (default, resumable member process) or "oneshot" (stateless)',
@@ -204,7 +212,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 						{
 							type: "text",
 							text: [
-								`Task ${task.id} [${task.status}] via member "${params.member}":`,
+								`Task ${task.id} [${task.status}] "${task.title}" via member "${params.member}" (your message replaced the task's own prompt):`,
 								"",
 								truncateOutput(text || "(no output)"),
 							].join("\n"),

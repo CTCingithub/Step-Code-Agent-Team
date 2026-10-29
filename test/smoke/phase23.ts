@@ -113,6 +113,25 @@ export default function (pi: ExtensionAPI) {
 				JSON.stringify(topoProps).slice(0, 120),
 			);
 
+			// g. the name rule must be visible BEFORE the call, not only in the
+			// rejection: a CJK name costs one wasted tool call (2026-10-30 round).
+			const nameDesc = propsOf("team_create_member").name?.description ?? "";
+			check(
+				"schema: team_create_member.name states ASCII + letter-start",
+				/ASCII/i.test(nameDesc) && /start(s)? with a letter/i.test(nameDesc),
+				nameDesc.slice(0, 160),
+			);
+			// h. team_send with a taskId REPLACES the task's own prompt (title/detail);
+			// team_task start with detail APPENDS. Both paths exist, so the
+			// description is the only thing standing between the model and the
+			// "equivalent plus extra context" misreading (2026-10-30 round).
+			const sendDesc = tool("team_send")?.description ?? "";
+			check(
+				"schema: team_send documents the taskId replacement semantics",
+				/replace/i.test(sendDesc) && /team_task start/i.test(sendDesc),
+				sendDesc.slice(0, 200),
+			);
+
 			// f. the parameters root is a JSON object schema.
 			check("schema: team_task.parameters.type === \"object\"", (tool("team_task")?.parameters as Schema | undefined)?.type === "object", "");
 

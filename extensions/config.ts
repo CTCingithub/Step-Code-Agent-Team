@@ -386,6 +386,13 @@ function readUnifiedSection(file: string): Record<string, unknown> | null {
 	if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return null;
 	const section = (doc as Record<string, unknown>)[CONFIG_SECTION];
 	if (typeof section !== "object" || section === null || Array.isArray(section)) return null;
+	// Trace the successful read too. A silent success is what made "I edited the
+	// config and nothing changed" undebuggable: with only failure traces there
+	// was no way to confirm WHICH file was read (the sandbox's
+	// `sandbox/config.toml` is the right file, but a mid-session edit never
+	// takes effect because config is read once at load — the 2026-10-30 manual
+	// round concluded the opposite and wrote it into a permanent log).
+	configNote(`read ${file} (${CONFIG_SECTION} table)`);
 	return section as Record<string, unknown>;
 }
 
