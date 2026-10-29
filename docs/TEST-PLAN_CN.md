@@ -68,6 +68,10 @@
 4. **崩溃后状态滞留**（members.ts）：成员被外部 kill 后 `onClose` 仅在 running 时置 dead，idle 成员滞留"idle"。修复：任何退出都置 dead。
 5. **协调提示脆弱**（members.ts）：消息命令失败时 LLM 会去排查工具而弃任务。修复：提示中明确"命令失败不排查、继续干活并在汇报中注明"。
 
+### plan-43 之后发现的缺陷（后续轮次，供发版记录）
+
+6. **队长模型回落绕过 `models.available`**（members.ts，2026-10-29 R14 轮发现）：会话模型是复合 `provider/id` 串，而 `models.available` 里是可派生的裸 id；回落路径（无显式请求、预设也未钉模型）原样返回复合串、不做校验——显式参数分支会拒绝同一个串并给出清晰错误，预设分支会降级到 `available[0]`，唯独回落路径没有守卫。影响：内置 `worker` 预设未声明 `model:`，于是每个 worker 成员都以不可解析的模型派生、永不 settle，每次派发以 settle 超时告终且零 usage、无诊断（若是直接的 spawn 失败，读错成本会低得多）。修复：`spawnableModel()` 校验并降级到 `available[0]`；phase6 以复合队长模型串断言两个分支。冒烟探针此前用裸 id 充当 `LEADER_MODEL`，正好掩盖了该缺陷。
+
 ## 五、修复与复跑规则
 
 1. 失败先定位根因（产品缺陷 vs 探针缺陷 vs 陈旧状态），记录在本文档
@@ -144,7 +148,7 @@
 | # | 检查项 | 探针 | 缺口 |
 |---|---|---|---|
 | K1 | `/topo <请求>` 端到端 | RPC prompt 带命令 | 逐字请求落入会话日志；队长组建团队（不独自完成） |
-| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo <请求>` | 选单显示 4 档 + 自定义；带请求时三选项确认框（Accept / 自定义输入… / Cancel）展示模型生成的实际方案（一次性规划调用）；Accept 以高优先级注入该方案，自定义输入的文本随请求原样同行，Cancel 只注入激活指令。**Accept 路径 2026-10-25 人工实测；自定义输入由 `probe-remaining-manual.mjs 5a` live 验证；TUI 按键观感留 M3** |
+| K2 | 方案选单 + 档位指令 | 沙箱会话，`plan.enabled=true`，`/topo <请求>` | 选单显示 4 档 + 自定义；带请求时三选项确认框（Accept / Cancel / Other）展示模型生成的实际方案（一次性规划调用）；Accept 以高优先级注入该方案，选 Other 输入的自由文本随请求原样同行，Cancel 只注入激活指令。**Accept 路径 2026-10-25 人工实测；Other 输入由 `probe-remaining-manual.mjs 5a` live 验证；TUI 按键观感留 M3** |
 | K3 | `plan.tier` 固定档模式 | 配置 `tier="fast"` | 钉档=「别再问」：两条激活路径都不弹选单**也不弹三选项确认框**，直接应用该档。**已由 `probe-remaining-manual.mjs 5b` live 验证（双负向断言：选单与确认框均不出现）+ phase24 钉档零 token 场景**；关键词路径留一轮人工抽查 |
 | K4 | `/topo review <目标>` | 沙箱会话 | 三审查员 + worker 合并协议被执行 |
 | K5 | topo_team_msg 成功派发 | 两成员 + 一条声明的边；上游向下游发消息 | 回复经 socket 返回——拓扑修复留下的 E2E 缺口 |
@@ -158,7 +162,7 @@
 |---|---|---|
 | M1 | 真实安装：干净导出物 `step install`、激活、`step remove` | `step install` 命令 UX + 卸载；live-package-install 只覆盖 config packages 加载路径 |
 | M2 | 信任弹窗 UX | 项目级配置信任弹窗是交互式的 |
-| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept / 自定义输入… / Cancel 三选项（无倒计时——方案确认框等待用户决定）、自定义输入对话框、档位选单的 30s 回退 `balanced` |
+| M3 | TUI 选单/选择框渲染 | `ctx.ui.select` 观感、Accept / Cancel / Other 三选项（无倒计时——方案确认框等待用户决定）、Other 输入对话框、档位选单的 30s 回退 `balanced` |
 | M4 | TUI 渲染观感（render.ts） | phase15 只断言内容字符串，不覆盖像素 |
 | M5 | 英文译文审阅 | 文档双语准确性 |
 | M6 | 8 成员性能（主观，可选） | 定性 |
@@ -188,10 +192,12 @@
 | R11 | ✅ 沙箱实测驱动轮（2026-10-25）：来自用户手动轮日志的修复 | B：describeTopology 只渲染边参与者（已解散的 dead 记录不再列为「no direct peers」行）；C：送达回执补「勿重发」（占位符守卫本身经取证为设计行为）；D：规划提示词要求方案与拓扑自洽（star ⇒ 汇总只能经队长中转）；E：激活协议要求接力链任务书写明终稿回传路径；A：README 补 autonomousEffort 说明；F：create 结果无条件说明恢复事实；phase14/16/21 断言；全量套件绿（20 phase）、tsc 零错误 |
 | R12 | ✅ 手动场景收口轮（2026-10-25）：性能档方案执行 | T1 场景清单（7 项必测 + 降级依据）→ T2A 主笔修订 MANUAL-TESTING(_CN)（新增 §8–§11：场景 5a/5b/7/8/9 明细节，场景表明细列改指新节）→ T4 执行未完成测试：`sandbox/probe-remaining-manual.mjs` 五个子命令全部 PASS（5a 自定义输入原样进入转发请求 / 5b 钉档选单不出现 / 7 抑制+激活+team_create_member / 8 frontmatter tools+effort 落地 / 9 迁移提示恰好一次）；同步 TESTING(_CN) 探针表、sandbox/README(_CN)、K2/K3/K6/K7 行；全量冒烟门仍绿 |
 | R13 | ✅ 钉档一致性修复轮（2026-10-25）：性能档方案执行 | 三份沙箱日志分析（parallel-review/2301 均无插件缺陷，findings 全属演示项目）+ 用户报告的钉档语义不一致：根因=命令路径 `runTeamCommand` 钉档分支只跳过选单、仍走规划调用+三选项确认（关键词路径直接注入）；修复=index.ts 加 `pinnedTier` 标志跳过两者；phase24 新增钉档零 token 场景（2 断言）、probe 5b 翻转断言后 live 复跑 PASS；CONFIGURATION/README/MANUAL-TESTING/TEST-PLAN 双语同步；全量门绿 |
+| R14 | ✅ 测试排气轮（2026-10-29）：v0.3.0 正式版前在最终产品代码上复跑 LLM 层 | **发现并修复产品缺陷**：内置 `worker` 预设未声明 `model:`，`models.autonomousSelection = true` 时 `resolveMemberModel` 回落到队长的复合 `provider/id` 串（如 `step/step-5-preview`）并**未经 `models.available` 校验**即传给 `--model`——预设分支会降级到 `available[0]`、显式参数分支会直接报错，唯独回落路径没有守卫；后果=成员永不 settle，每次派发以 settle 超时告终且零 usage、无任何诊断。修复：新增 `spawnableModel()` 校验并降级；phase6 补双分支复合模型串回归断言（57/57）。**探针在修复后代码上复跑**（隔离 agentDir + `env -u` 卸载团队变量 + 拷入 fixture settings.json 防遮蔽）：phase4 4/4、phase10 A 支 2/2（`mode: parallel-bound (maxConcurrent=2)`）、B 支 1/1（`mode: nested-messaging-under-single-slot`，12.9s 无死锁）、phase11 4/4（零 SKIP——深度 2 链真实跑通）、phase12 9/9、probe-remaining-manual 5a/5b/7/9 PASS、8 首跑 FAIL 重跑 PASS（机械断言——create 结果含 role/effort:low/frontmatter tools——两次均过，抖动的只是成员对自身白名单的 LLM 自述）。修复后零 token 门由队长在干净进程重跑：20 phase + manifest + 7 live + orphan-check 全绿。**派发机制观察**：本轮连续 7 次成员派发 settle 超时（会话后期只读预设亦死），队长按既定模式在干净进程亲自执行；队长自写车道脚本时漏 export `STEP_CODING_AGENT_DIR`，复现了 Layer C 工具名冲突陷阱（5 个探针瞬间假失败），修正后通过 |
+| R15 | ✅ 界面改名与确认顺序轮（2026-10-29）：「Topology Agent Team」自称 + Accept/Cancel/Other | 用户需求：① 询问界面不得自称「智能体团队」——插件名是 Topology Agent Team；② 方案确认框选项顺序改为 Accept / Cancel / Other，选 Other 后让用户输入信息；③ 全面优化测试项至只剩必须手动项并同步文档。**改动**：`extensions/index.ts`——L2 关键词激活确认框（标题+正文，经 `detectLang` 按语言分流）与方案确认 select 标题均改为「Topology Agent Team」；确认框选项为 `[Accept, Cancel, Other]`，`Other` 与 Accept/Cancel 一样双语同一字符串；`extensions/forward.ts`——**尝试后已回退**：把注入指令自称改为 `[Topology Agent Team 已启用]` 会破坏模型服从性——probe 7 的 `[7-activate]` 连续三次失败（模型改用自带工具探索仓库并口头讲解协议，而不调用 `team_create_member`），还原该标签后立即通过，且期间询问对话框的改名始终在位（干净的单字符串隔离实验）。结论：面向模型的自称必须保留模型能归属到本插件的名字；只改用户可见的询问对话框。**测试加固**：phase24 新增选项顺序断言（`["Accept","Cancel","Other"]`）与输入被关闭断言（Esc/超时→undefined 与 Cancel 完全同果、同注入）——两者把「Esc 取消」的数据面移出手动集；`probe-remaining-manual.mjs` 改为按**标题**匹配对话框、按**精确标签**匹配选项且无位置兜底（旧 `?? options[1]` 在新顺序下会静默答成 Cancel），并为 LLM 自述类断言打印成员实际回复，新增 `all` 模式（各场景独立子进程跑完并汇总）。**验证**：零 token 全量门全绿（20 phase + manifest + 7 live + orphan-check）；phase21/24 绿；tsc 我方文件零错误；live 探针 5a/5b 在新标题新标签下 PASS，8 首跑 FAIL 重跑 PASS（机械断言两次均过——已知的 LLM 自述抖动）。派发机制再度退化（两次 settle 超时），剩余编辑由队长接管完成 |
 
 **轮次记录规约**：每轮改动代码、测试或测试流程（零 token 轮次也包括）都应追加 R 行——日期、跑了什么、结果、异常；人工沙箱轮另产 §7 会话日志。
 
-剩余交互项：K2/K3（方案选单 + 三选项确认框 Accept / 自定义输入… / Cancel）、K6（自定义角色）、K7（迁移提示）——见 MANUAL-TESTING 场景 5/8/9；K1/K4/K5/K8 已被自动化覆盖（K8 于 2026-10-25 重跑：22/22 断言，phase10 双分支）。人工项：M1–M6（见上表）。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
+**R14 之后的状态（2026-10-29）**：K1/K4/K5/K8 已被覆盖；**K2/K3/K6/K7 现已双重 live 验证**——`probe-remaining-manual.mjs` 5a/5b/7/8/9 在最终产品代码上全部 PASS（8 的 LLM 自述断言抖动过一次、重跑通过；其机械断言两次均过）。仍属交互式的只剩不可再约的人工集：M1（真实安装/卸载）、M2（项目级配置信任弹窗 + K6 项目级角色层）、M3/M4（TUI 像素与按键——探针驱动的是对话框数据面而非渲染）、M5（英文译文审阅）、M6（可选，8 成员满编性能），以及钉档关键词路径（5b）的一轮抽查。每轮人工演练结束后，按沙箱 README「会话日志」一节的 prompt 生成记录（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。
 
 ### 2026-10-20 沙箱会话发现
 

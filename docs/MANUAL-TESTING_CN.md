@@ -13,7 +13,7 @@
 > `session_start` 重激活团队注册表已存在的会话）、**工具 JSON-schema 契约**（phase23：
 > 每个团队工具与每个顶层参数都带非空 description——本可抓住 typebox 双参 Optional
 > description 丢失的守卫）、**确认路径合并契约**（phase24：假 ExtensionAPI + 脚本化
-> ctx 驱动真实扩展工厂——Accept 原样转发请求并注入方案指令、自定义输入 note 原样合并、
+> ctx 驱动真实扩展工厂——Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、
 > 空提交按原样接受、Cancel 仅注入激活指令，共 6 断言）、**激活护栏的句子锚定**
 > （phase6：带请求主体的 how-to 请求激活、对插件本身的纯提问仍抑制）、**预设加载与
 > 项目层信任门控**（phase3）与**废弃关键词剥离语义**（phase6/phase9）。
@@ -22,9 +22,9 @@
 > 分场景明细，均含**可直接复制粘贴的命令 / prompt**。TUI 渲染清单（只剩观感；内容层已被
 > phase15 断言）见第 1 节。
 
-## 状态总览（2026-10-23）
+## 状态总览（2026-10-29）
 
-> 自动化基线 2026-10-25 复核：冒烟 20 phase + manifest + 7 live + orphan-check 全绿；LLM 探针 22/22（K8，plan-101 于含自由输入与 settle 重试的代码上复跑）。
+> 自动化基线 **2026-10-29 两轮复核**：（R14 测试排气轮）零 token 冒烟 20 phase + manifest + 7 live + orphan-check 全绿；LLM 层 phase4 4/4、phase10 A 支 2/2 + B 支 1/1、phase11 4/4（零 SKIP）、phase12 9/9。（R15 界面改名 + Accept/Cancel/Other 轮）改名与选项调整后同一门禁再次全绿；phase24 现同时断言选项**顺序**（`Accept / Cancel / Other`）与**Other 输入被关闭**（Esc/超时）时与 Cancel 完全同果——后者把「Esc 取消」的数据面移出了本手动集；live 探针 5a/5b 在新标题新标签下 PASS，8 首跑 FAIL 重跑 PASS（机械断言两次均过，仅成员 LLM 自述抖动——探针现已打印该回复，失败无需重跑即可定性）。
 
 | # | 项目 | 状态 |
 |---|---|---|
@@ -34,10 +34,10 @@
 | 4 | LLM 行为遵循度（ring） | ✅ 2026-10-22 + 2026-10-25 两轮确认（两跳成功 + 第三跳被 maxLoopCount 拦下并原文引用） |
 | 5 | 沙箱演示剧本（三幕） | ✅ 2026-10-22 + 2026-10-25 两轮复测通过（修复轮 11/12→12/12、两轮并行审查零改动） |
 | 6 | 性能主观项（8 成员满编） | ➖ 可选，主观无判定标准 |
-| 7 | 实际方案三选项确认框（Accept / 自定义输入… / Cancel）+ 生成进度动画（新 UI） | ➖ 2026-10-25 轮次已实测走通（三档 Accept 路径）；**自定义输入路径与固定档已于 2026-10-25 由 RPC 驱动探针 live 验证**（`node sandbox/probe-remaining-manual.mjs 5a` / `5b`：用户文本原样进入转发请求、钉档后选单不出现）；剩余仅 TUI 按键观感 ⬜（M3：无倒计时/Esc/空提交） |
-| 8 | 激活护栏 L1（2026-10-23 重写） | ✅ phase6 八条用例全绿 + **2026-10-25 RPC 驱动 live 验证通过**（`probe-remaining-manual.mjs 7`：元问题零团队动作、how-to 带主体激活且 team_create_member 真实可用） |
-| 9 | 自定义角色（agentDir 层 + 信任项目层） | ➖ phase3 覆盖加载与信任门控 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 8`：frontmatter tools/effort/prompt 落到真实 spawn、成员自报白名单含 topo_team_msg）；项目级层仍需 M2 信任流 ⬜ |
-| 10 | 旧关键词迁移提示 | ✅ phase6/phase9 覆盖剥离语义 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 9`：迁移提示每会话恰好出现一次） |
+| 7 | 实际方案三选项确认框（Accept / Cancel / Other）+ 生成进度动画（新 UI） | ➖ 2026-10-25 轮次已实测走通（三档 Accept 路径）；**Other 路径与固定档已于 2026-10-25 由 RPC 驱动探针 live 验证**（`node sandbox/probe-remaining-manual.mjs 5a` / `5b`：用户文本原样进入转发请求、钉档后选单不出现）；剩余仅 TUI 按键观感 ⬜（M3：无倒计时/Esc/空提交） |；**2026-10-29（R14）在最终产品代码上复验通过**——5a PASS（Other 输入原样进入转发请求，确认后 team_create_member/team_set_topology/team_send 真实发生）、5b PASS（选单与确认框均不出现） |
+| 8 | 激活护栏 L1（2026-10-23 重写） | ✅ phase6 八条用例全绿 + **2026-10-25 RPC 驱动 live 验证通过**（`probe-remaining-manual.mjs 7`：元问题零团队动作、how-to 带主体激活且 team_create_member 真实可用） |；**2026-10-29（R14）复验通过**（两个子检查均 PASS） |
+| 9 | 自定义角色（agentDir 层 + 信任项目层） | ➖ phase3 覆盖加载与信任门控 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 8`：frontmatter tools/effort/prompt 落到真实 spawn、成员自报白名单含 topo_team_msg）；项目级层仍需 M2 信任流 ⬜ |；**2026-10-29（R14）复验**——create 结果那半两次均过，成员自述抖动一次、重跑通过（属 LLM 行为断言而非机械断言） |
+| 10 | 旧关键词迁移提示 | ✅ phase6/phase9 覆盖剥离语义 + **2026-10-25 live 验证通过**（`probe-remaining-manual.mjs 9`：迁移提示每会话恰好出现一次） |；**2026-10-29（R14）复验通过**（恰好一次） |
 | — | 英文版文档译文审阅 | ⬜ 建议过目 |
 
 ## 单轮测试 runbook（一轮完整测试）
@@ -72,7 +72,7 @@ npm run smoke   # 20 phase + manifest + 7 个 live 检查（+ orphan-check）；
 | 2 | 建成员 + pipeline + 任务板 | §1 第 3–8 步 | §1 | — |
 | 3 | `topo_team_msg` E2E | 粘贴：`让 scout1 通过 topo_team_msg 给 worker1 发一条一句话自我介绍，并原样报告工具的返回文本` | §1、§4 | 回复为尽力语义：投递回执（"Delivered to …"）不是队友的答复——产出经队长收集 |
 | 4 | ring 快巡（小步快跑） | §4 的 ring prompt | §4 | 每一跳保持小工作量（一个文件一个问题），使每跳都能在 600s 默认 `dispatch.timeoutMs`（覆盖成员整回合，含嵌套中继）内 settle——且超时不再触发盲目重试：任务会带着收割指引失败。只跑一圈；最终清单由队长收集。**环内闭环**：默认 `maxLoopCount=2` 下，3 成员环的闭环跳（r3→r1）必被拦下——闭环须由队长中转；确需环内闭环再调高 `maxLoopCount` |
-| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo <请求>` | §8（TEST-PLAN K2/K3） | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；确认框提供 **Accept / 自定义输入… / Cancel** 三选项、无倒计时、等待你决定——自定义输入的文本原样发送给模型并追加到转发的请求后（Esc 取消） |
+| 5 | 方案选单 / 固定档 | 在 `sandbox/config.toml` 开启，**重启会话**，再 `/topo <请求>` | §8（TEST-PLAN K2/K3） | `plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置；确认框提供 **Accept / Cancel / Other** 三选项、无倒计时、等待你决定——选 Other 输入的文本原样发送给模型并追加到转发的请求后（Esc 取消） |
 | 6 | 并行评审 | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 | 7 | 激活护栏（L1） | 粘贴：`如何用智能体小队并行审查这个仓库？` | §9 | 2026-10-23 重写：带请求主体的 how-to 请求会激活插件（正常组队）；对插件本身的纯提问（`什么是智能体小队？`）仍被抑制——不组队 |
 | 8 | 自定义角色（K6） | 写 `sandbox/agent/agents/quickfix.md`（frontmatter：`name`/`description`/`tools`/`effort`），重启，粘贴：`创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §10 | frontmatter 的 prompt/tools/effort 生效（工具列表即白名单）；项目级角色 `sandbox/project/.stepcode/agents/` 仅在信任的项目加载（删 `sandbox/agent/trust.json` 可重触发弹窗） |
@@ -83,11 +83,11 @@ npm run smoke   # 20 phase + manifest + 7 个 live 检查（+ orphan-check）；
 此处标注其必做属性——缺项不计一轮完整。
 
 **档位方案选择框内容（实际方案改造）**：`/topo` 带请求文本并选定档位后，插件先让模型
-做一次性规划调用（只出方案不执行，带“正在生成智能体拓扑协作方案”进度动画），为该请求起草实际组队方案；三选项选择框（Accept / 自定义输入… / Cancel）随后展示
+做一次性规划调用（只出方案不执行，带“正在生成智能体拓扑协作方案”进度动画），为该请求起草实际组队方案；三选项选择框（Accept / Cancel / Other）随后展示
 该方案，批准后以高于档位一般性指导的优先级注入。裸 `/topo`（无请求）或规划调用失败时
 回退为该档位的标准方案形态——此时没有可展示的请求相关内容。
 规划调用仅交互式会话生效——headless/RPC 的 `/topo <请求>` 会跳过它，直接按档位标准形态确认。
-确认框提供三个选项：**Accept**（按所示方案组队）、**自定义输入… / Custom input…**（你自己的文本原样发送给模型——不作解释——追加到转发的请求后；空提交=按原样接受）、
+确认框提供三个选项：**Accept**（按所示方案组队）、**Other**（你自己的文本原样发送给模型——不作解释——追加到转发的请求后；空提交=按原样接受）、
 **Cancel**（请求仍会转发，但只注入激活指令——不组队）。
 
 **派发异常与恢复（来自 2026-10-24 沙箱轮）**：
@@ -152,7 +152,7 @@ bash sandbox/restore-project.sh
 
 | # | 复制粘贴 | 预期渲染 | 结果 |
 |---|---|---|---|
-| 1 | `我想用智能体小队功能熟悉一下这个沙箱项目` | 先弹 L2 确认框「检测到团队请求关键词，是否启用智能体团队？」（`confirmBeforeActivate` 默认开，见 CONFIGURATION_CN）→ 选是 → 激活 notify：「Agent team plugin activated (explicit plugin mention). Team tools are now available.」；团队工具从此对模型可见 | ☐ |
+| 1 | `我想用智能体小队功能熟悉一下这个沙箱项目` | 先弹 L2 确认框（标题「Topology Agent Team」，正文「检测到团队请求关键词，是否启用 Topology Agent Team？」——`confirmBeforeActivate` 默认开，见 CONFIGURATION_CN）→ 选是 → 激活 notify：「Topology Agent Team activated (explicit plugin mention). Team tools are now available.」；团队工具从此对模型可见 | ☐ |
 | 2 | `/topo` | 团队板 notify：`Team "<id>"` + 成员行（○/●/✗ 图标 + role + status + model/effort）+ 任务行（含 blockedBy）+ `spend: $x.xxxx`；空队时提示用 team_create_member | ☐ |
 | 3 | `创建一个 scout 角色的成员，名字叫 scout1` | renderCall：`team +scout1 (scout)`；renderResult：`✓ scout1 (scout) [idle] … effort=high` | ☐ |
 | 4 | `再创建一个 worker 角色的成员，名字叫 worker1` | 同第 3 步的 `+worker1 (worker)` / `✓ worker1 (worker) [idle]`（为第 7 步的 pipeline 拓扑提供第二个成员） | ☐ |
@@ -333,13 +333,13 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 （5）净结果——基线对比、改动文件清单、未做的事；（6）还原方式。
 ```
 
-## 8. 场景 5 — 方案选单：自定义输入（5a）与固定档（5b）
+## 8. 场景 5 — 方案选单：Other 自由输入（5a）与固定档（5b）
 
 两个子场景共用同一条前置链：`sandbox/config.toml` 的 `[stepcodeAgentTeam.plan] enabled = true`（种子沙箱默认已开）、**重启会话**（`plan.enabled` / `plan.tier` 每会话只读一次——启动前改好配置）、**交互式 TUI**（`./sandbox/run.sh`）。规划调用仅交互式生效——headless/RPC 的 `/topo <请求>` 会跳过它、直接按档位标准形态确认，因此无对话框的一轮证明不了 5a 的任何东西。
 
-### 5a · 自定义输入路径（最高优先）
+### 5a · Other（自由文本输入）路径（最高优先）
 
-**测什么**：完整对话框链——`/topo <请求>` → 档位选单（四档 + 自定义需求…）→「正在生成智能体拓扑协作方案」进度动画（一次性、只出方案的模型调用）→ 三选项确认框（Accept / 自定义输入… / Cancel）——重点是「自定义输入…」分支：你的自由文本必须**原样**到达模型——trim 后以空行追加到转发的请求后，不作解释、不结构化。
+**测什么**：完整对话框链——`/topo <请求>` → 档位选单（四档 + 自定义需求…）→「正在生成智能体拓扑协作方案」进度动画（一次性、只出方案的模型调用）→ 三选项确认框（Accept / Cancel / Other）——重点是 **Other** 分支：你的自由文本必须**原样**到达模型——trim 后以空行追加到转发的请求后，不作解释、不结构化。
 
 **前置条件**：`sandbox/config.toml` 的 `plan.enabled = true`；改完配置重启会话；交互式 TUI；全新会话（先解散遗留 live 成员——`汇报一下团队当前状态`）。
 
@@ -351,7 +351,7 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 
 1. 档位选单里任选一档（如 均衡/balanced）。
 2. 等进度动画结束——起草的方案展示在确认框上方的 notify 里。
-3. 三选项确认框里选 **自定义输入… / Custom input…**（无倒计时——等你决定）。
+3. 三选项确认框里选 **Other**（无倒计时——等你决定）。
 4. 自由文本输入框里输入一句话，例如：
 
 ```text
@@ -360,9 +360,9 @@ r1→r2→r3 两跳接力成功（链长恰好用满 `maxLoopCount=2`）；revie
 
 **预期**：插件把原始请求**连同你那句话原样**作为一条 user 消息转发，模型两者都会顾及。核对会话 JSONL：文本与你输入的完全一致（仅去除首尾空白）、以空行追加——队长会话 `sandbox/agent/sessions/*.jsonl` 里有转发的 user 消息；成员派活后，`sandbox/agent/teams/<teamId>/sessions/*.jsonl` 里是由其派生的派发 prompt。另各验证一次两个姊妹分支：**空提交**=按所示方案接受（不追加任何内容）；**Esc**（在选单或输入框上）=取消——请求仍转发，但只注入激活指令、不组队。
 
-**自动化覆盖**：phase24 用假 ExtensionAPI + 脚本化 ctx 驱动完整确认链，断言合并契约（6 断言：Accept 原样转发请求并注入方案 / 自定义输入 note 原样合并 / 空提交按原样接受 / Cancel 仅注入激活指令）。
+**自动化覆盖**：phase24 用假 ExtensionAPI + 脚本化 ctx 驱动完整确认链，断言合并契约（6 断言：Accept 原样转发请求并注入方案 / Other 输入 note 原样合并 / 空提交按原样接受 / Cancel 仅注入激活指令）。
 
-**live 验证（2026-10-25，RPC 驱动探针）**：`node sandbox/probe-remaining-manual.mjs 5a` 以脚本化 RPC 客户端走完整链路——应答档位选单（均衡）→ 进度动画与模型起草的方案 → 三选项确认框选「自定义输入…」→ 输入 `只要 1 个只读成员，不要修改任何文件`。会话 JSONL 里转发的 user 消息为「原始请求 + 空行 + 该文本」（逐字一致，仅去首尾空白），随后模型正常调用 `team_create_member`。「文本原样到达模型」已在**真实宿主对话框 + 真实 LLM 往返**上成立；探针覆盖不到的只剩 TUI 像素与按键观感（Esc/空提交/无倒计时，归 M3）。
+**live 验证（2026-10-25，RPC 驱动探针）**：`node sandbox/probe-remaining-manual.mjs 5a` 以脚本化 RPC 客户端走完整链路——应答档位选单（均衡）→ 进度动画与模型起草的方案 → 三选项确认框选「Other」→ 输入 `只要 1 个只读成员，不要修改任何文件`。会话 JSONL 里转发的 user 消息为「原始请求 + 空行 + 该文本」（逐字一致，仅去首尾空白），随后模型正常调用 `team_create_member`。「文本原样到达模型」已在**真实宿主对话框 + 真实 LLM 往返**上成立；探针覆盖不到的只剩 TUI 像素与按键观感（Esc/空提交/无倒计时，归 M3）。
 
 **为何必须人工**：对话框是宿主渲染的 TUI（phase24 只是脚本化），且「文本原样到达模型并被采纳」只有真实模型回合才能端到端观察。
 

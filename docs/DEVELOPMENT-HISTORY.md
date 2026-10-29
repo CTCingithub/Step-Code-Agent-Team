@@ -732,20 +732,35 @@
 
 **遗留**：0.3.0 正式版（需合并定版决策与最终发版）；演示项目修复按约定还原为种子态（易失、每轮 restore 复位）。
 
+### 68. v0.3.0 正式版前测试排气：worker 模型回落缺陷修复与 LLM 层全量复跑（plan-106）
 
+**用户 prompt**：确认均衡档实际方案（Leader 统筹中转 / Scout 勘察 / Planner 规划 / Executor×2 执行 / Reviewer 审查，star 拓扑，T1 勘察→T2 排气计划→T3 执行记录→T4 文档清单→T5 终审）后「创建合理的计划，做测试排气，并检查更新所有文档」。
 
+**思路**：v0.3.0-preview 已发布但 LLM 层探针自 plan-101 后未复跑（其间 plan-102/104 有两个产品代码提交），按 runbook 把可自动化的测试全部排尽、不可自动化的交付为人工清单。建 5 成员星型团队，任务板串行派发。
 
+**工作**：① **T1 勘察（scout1，成功）**：建立事实基线——零 token 门 20 phase 全绿、LLM 探针失效判定（plan-101 之后 2 个产品提交）、三条硬约束（本地 `sandbox/config.toml` 遮蔽 fixture、`probe-remaining-manual.mjs` 硬编码 step-build、live 检查须队长干净进程）、只能人工项逐项归因、文档漂移（HANDOFF 18 vs 实际 20 phase）。② **T2 计划（planner1，成功）**：双车道排气计划（A 车道 phase4/10A/10B/11/12，B 车道 5a/5b/7/8/9）、四重防碰撞隔离、失败三级分类。计划有两处缺陷由队长修正：`step-bin.sh` 只提供 `resolve_step_bin` 函数而非 `$STEP_BIN` 变量；`< /dev/null` 会因 stdin EOF 触发 rpc-mode shutdown 杀死会话（改 FIFO 保持）。③ **T3 执行（派发机制连续 7 次 settle 超时，队长接管）**：成员进程被注入 `STEPCODE_TEAM_DEPTH=1` 等六变量并被子进程继承，不卸载则探针内扩展惰性不激活；队长在干净进程以双车道并行跑完 10 个探针。队长自写车道脚本首跑漏 export `STEP_CODING_AGENT_DIR`，复现 Layer C 工具名冲突陷阱（5 探针瞬间假失败），补上后通过。
 
+**缺陷修复（本轮核心产出）**：**worker 预设模型回落绕过 `models.available`**——`agents/worker.md` 未声明 `model:`（另三个预设都钉了 `model: step-5-preview`），`models.autonomousSelection = true` 时 `resolveMemberModel` 回落到队长复合模型串 `provider/id`（`step/step-5-preview`）并原样传给 `--model`：显式参数分支会拒绝该串、预设分支会降级到 `available[0]`，唯独回落路径无守卫。后果=worker 成员以不可解析模型派生、永不 settle，每次派发以 settle 超时告终且零 usage、无任何诊断（本项目多轮历史记录里的「派发机制退化」有一部分正是此缺陷）。修复：`extensions/members.ts` 新增 `spawnableModel()`——回落串不在 `models.available` 时降级到 `available[0]` 并记 debugNote；`test/smoke/phase6.ts` 补双分支复合队长模型串回归断言（探针原用裸 id 当 `LEADER_MODEL`，恰好掩盖了该缺陷）。修复经 phase6 在 autonomous on/off 两种配置下 57/57 验证。
 
+**排气结果**：phase4 4/4、phase10 A 支 2/2（`mode: parallel-bound (maxConcurrent=2)`）、B 支 1/1（`mode: nested-messaging-under-single-slot`，12.9s 无死锁）、phase11 4/4（零 SKIP，深度 2 链真实跑通）、phase12 9/9；`probe-remaining-manual.mjs` 5a/5b/7/9 PASS、8 首跑 FAIL 重跑 PASS（机械断言——create 结果含 role/effort:low/frontmatter tools——两次均过，抖动的只是成员对自身白名单的 LLM 自述，属探针稳健性问题）。修复后零 token 门由队长重跑：20 phase + manifest + 7 live + orphan-check 全绿。
 
+**文档更新**：TEST-PLAN(_CN) 新增 R14 执行记录行 + 「plan-43 之后发现的缺陷」第 6 条 + K 行状态收口；TESTING(_CN) 修正 5b 陈旧语义（plan-104 后选单与确认框均不出现）、phase10 断言计数注记、团队环境变量卸载注记；MANUAL-TESTING(_CN) 状态总览改 2026-10-29 且场景 7/8/9/10 标注复验；README(_CN) 相位清单补 phase24；HANDOFF 测试现状 18→20 phase + 派发机制警示；sandbox/README(_CN) 补 env -u 注记；`probe-remaining-manual.mjs` 头注 usage 行补 5b。
 
+**遗留**：① 剩余全部为不可自动化的人工项——M1（真实 install/remove）、M2（信任弹窗 + K6 项目级角色层）、M3/M4（TUI 像素与按键）、M5（英文审阅）、M6（可选）、钉档关键词路径抽查；② P2-8b/8e/9 测试加固仍未排期；③ storage.dir 行为半、settle 超时自动 harvest、宿主 select 倒计时不响应按键维持 deferred；④ 探针 8 的自述类建议改为可诊断断言（打印成员实际回复）；⑤ phase15/phase24 的 17 个 tsc 类型错误为探针桩问题（Theme 桩不完整、contextHandler 缺守卫），运行时不受影响但类型门未清零。
+### 69. 界面改名与确认顺序轮：Topology Agent Team + Accept/Cancel/Other（plan-107）
 
+**用户 prompt**：确认均衡档实际方案（Leader 统筹中转 / Planner 勘察规划 / Executor 界面与测试执行 / Reviewer 审查与文档，star 拓扑，任务板 blockedBy）后「创建合理的计划后做：1.询问界面中，不要自称智能体团队之类的，改为Topology Agent Team；2.确认方案界面，顺序改为Accept Cancel Other，选择Other以后让用户输入信息；3.全面优化测试项目，并测试直至只剩下必须手动测试项目。在此过程中，记得同步修改或更新文档」。
 
+**思路**：三项需求分离定性——①是命名/品牌（只动用户可见的询问对话框）；②是交互契约（选项顺序 + Other 输入分支，语义不变）；③是测试体系收敛。按 runbook 建 5 成员星型团队，任务板串行派发；派发机制本轮两次 settle 超时后按既定模式由队长接管。
 
+**改动**：① `extensions/index.ts`——L2 关键词激活确认框标题与正文改为「Topology Agent Team」，正文经 `detectLang` 按语言分流（原先硬编码中文，英文用户会看到中文）；方案确认 select 标题同改。② 确认框选项由 `[Accept, 自定义输入…, Cancel]` 改为 `[Accept, Cancel, Other]`——`Other` 与 Accept/Cancel 一样双语同一字符串（只本地化这三个会让对话框半中半英）；Other 分支的四种返回语义一律未动（undefined→取消 / 空→按原样接受 / 非空→note 并入 / Cancel→取消）。③ 文档 20+ 处双语同步（README(_CN)、MANUAL-TESTING(_CN)、TESTING(_CN)、TEST-PLAN(_CN)、sandbox/README(_CN)）。
 
+**测试加固（对应需求③）**：① `test/smoke/phase24.ts` 新增**选项顺序断言**（`["Accept","Cancel","Other"]`，直接锁定用户要求的顺序）与**输入被关闭断言**（Esc/超时→undefined 时与 Cancel 完全同果、同注入）——后者把「Esc 取消」的数据面移出手动集。② `sandbox/probe-remaining-manual.mjs`——对话框改按**标题**匹配、选项按**精确标签**匹配且**去掉位置兜底**（旧 `?? options[1]` 在新顺序下会静默答成 Cancel，把测试变成假绿）；为 probe 8 的 LLM 自述断言与 probe 7 的工具调用断言**打印实际回复/工具调用列表**，使失败可一次定性；新增 `all` 模式（各场景独立子进程跑完并输出汇总行）。
 
+**两项实测发现（均有隔离实验佐证）**：
+- **注入指令的自称不能改成模型不认识的名字（已回退）**：曾把 `extensions/forward.ts` 的注入指令自称从「智能体团队已启用」改为「Topology Agent Team 已启用」，随后 probe 7 的 `[7-activate]` 连续三次失败（模型改用自带工具探索仓库并口头讲解协议，不调用 `team_create_member`）；还原该标签后立即通过。**但后续同代码状态复跑又失败**——说明这是 LLM 抖动而非该字符串的因果，不过该改动本就超出「询问界面」范围，且存在未解释的相关性，故维持回退（`forward.ts` 现与 HEAD 一致）。教训：面向模型的自称与面向用户的自称是两条线，改动前应隔离验证。
+- **probe 7 的失败机制是固定等待窗口不足（已加固）**：`runSession` 对每个 prompt 只 sleep 固定 waitMs、不等回合 settle；模型惯常先探索仓库（list_directory/find_files/read_file/run_command…）再动手，60s 窗口内回合未结束就被杀，工具调用不落盘 → 断言失败。当日 8 次运行 3 过 5 败全为此因。已将 prompt 2 的窗口 60s→150s，复跑即 PASS（模型探索后连续 4 次 team_create_member + team_set_topology + 4 次 team_send）。
 
+**验证**：最终全量零 token 门（20 phase + manifest + 7 live + orphan-check）全绿；phase21/24 绿（含新断言）；tsc 对 extensions/ 与 test/smoke/phase2x 零错误；live 探针 5a/5b/8/9 PASS、7 加固后 PASS；`all` 模式机械正确（逐场景判定 + 汇总，曾因上述窗口问题报 3/5，加固后应全绿）。
 
-
-
-
+**遗留**：① 剩余必须手动项不变——M1（真实 install/remove）、M2（信任弹窗 + K6 项目级角色层）、M3/M4（TUI 像素与按键；「Esc 取消」的数据面已由 phase24 覆盖，只剩观感）、M5（英文审阅）、M6（可选）、钉档关键词路径抽查；② probe 5a 的「确认后模型调用 team 工具」与 probe 8 的自述断言同属 LLM 行为断言，仍有抖动可能（现已可诊断）；③ README 的产品自述 prose（「智能体团队插件」）、sandbox/project README 的「供智能体团队干活」等**非询问界面**表述未改，留待用户决定是否统一为 Topology Agent Team。

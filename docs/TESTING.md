@@ -116,7 +116,7 @@ either set, phase5 is part of the regression run.
 | phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) + `planConfirmDialogOpts` (no countdown in the TUI) | zero token |
 | phase22 | Tool-availability self-heal: `ensureToolsAvailable` restores tools after a host reset, no-ops while inactive, and `session_start` re-activates a session whose team registry already exists | zero token |
 | phase23 | Team-tool JSON-schema contract: every tool and every top-level parameter carries a non-empty description (guards the typebox two-argument Optional class of regression, which once dropped `reason`'s description) | zero token |
-| phase24 | End-to-end confirmation path: a fake ExtensionAPI plus a scripted context drives the real extension factory — asserts Accept forwards the request verbatim with the plan instruction injected, a custom input's note merges verbatim, an empty submission accepts as shown, and Cancel injects the activation-only instruction (`plan.enabled` switched through the resetConfigCache hook and restored) | zero token (standalone) |
+| phase24 | End-to-end confirmation path: a fake ExtensionAPI plus a scripted context drives the real extension factory — asserts the option order is exactly `Accept / Cancel / Other`, Accept forwards the request verbatim with the plan instruction injected, Other's note merges verbatim, an empty submission accepts as shown, a **dismissed** input (Esc/timeout → undefined) cancels exactly like Cancel, and Cancel injects the activation-only instruction (`plan.enabled` switched through the resetConfigCache hook and restored) | zero token (standalone) |
 
 **Runner behavior and pass criteria**: the phase list is derived on disk from `test/smoke/phase*.ts` (run-smoke.sh:37); a failed phase is retried once on a fresh session id (the first-failure line is prefixed `attempt1`, so a passing retry leaves no bare `FAILED` line for CI to misread); a phase that logs no `DONE` within 240s is reported as a hang (rc=124), distinct from assertion failures; a verdict requires a DONE marker and zero FAIL lines. After the phases: a manifest check, the 7 live checks, and a 15s orphan-process poll (a skipped phase17 makes it report `SKIPPED` rather than silently passing). **The live checks must run from the leader's own clean process** — inside a member process's restricted environment they fail wholesale (a false negative observed 2026-10-25; the leader's run was green).
 
@@ -143,10 +143,10 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | Concurrency cap live / nested messaging deadlock |
 | phase11 | cfg-deep2 | Real chain at recursion depth 2 |
 | phase12 | default | oneshot / task chains / Unicode / crash recovery / streaming progress |
-| probe-remaining-manual `5a` | isolated agentDir (plan.enabled) | the confirmation's custom-input path: a scripted RPC client answers the tier picker → picks 自定义输入… → the input dialog, asserting the user's text rides along verbatim in the forwarded user message |
-| probe-remaining-manual `5b` | isolated agentDir (plan.tier pinned) | negative assertion: with a pinned tier the picker does not appear while the three-option confirmation still does |
+| probe-remaining-manual `5a` | isolated agentDir (plan.enabled) | the confirmation's Other path: a scripted RPC client answers the tier picker → picks Other → the input dialog, asserting the user's text rides along verbatim in the forwarded user message. The dialog is answered by its **title** (`Topology Agent Team`) and the option by its **exact label** (`Other`) — no positional fallback, so a renamed or reordered option fails the probe instead of silently answering Cancel. Each scenario waits for the session's **`agent_settled`** event (the prompt command's own response is only a preflight ack — rpc-mode.ts emits it from `preflightResult`), with `waitMs` as a safety cap, plus a wait for the session file to stop growing |
+| probe-remaining-manual `5b` | isolated agentDir (plan.tier pinned) | negative assertion: with a pinned tier **neither** the picker **nor** the three-option confirmation appears (the plan-104 `pinnedTier` flag skips both; an explicit `/topo <tier>` still confirms) |
 | probe-remaining-manual `7` | isolated agentDir ×2 | the L1 guard: zero team actions for a meta question; a how-to with a body activates and `team_create_member` really works |
-| probe-remaining-manual `8` | isolated agentDir (agents/quickfix.md + autonomousEffort=false) | custom roles: the frontmatter's tools/effort land on a real spawn and the member self-reports the allowlist incl. topo_team_msg |
+| probe-remaining-manual `8` | isolated agentDir (agents/quickfix.md + autonomousEffort=false) | custom roles: the frontmatter's tools/effort land on a real spawn (the create result carries role/effort:low/tools) and the member self-reports the allowlist incl. topo_team_msg — note the self-report half is an **LLM-behavior assertion**: it flaked once in 2026-10-29 (failed, then passed on re-run) while the mechanical create-result assertion passed both times, so a single failure here is not by itself a product defect |
 | probe-remaining-manual `9` | isolated agentDir (keywords with a deprecated term) | the migration notice appears exactly once per session |
 
 phase10/phase11 read their behavior from the agent dir's config, so repoint the
@@ -170,6 +170,20 @@ truncated and `details.fullText` holds the full text. Additionally: the cfg-dead
 (phase10, `maxConcurrent=1`) must complete without deadlocking well inside the probe
 window (observed ~6s); phase11 must actually run its four checks (4/4) with
 `cfg-deep2` — a clean SKIP counts as a failure.
+
+Assertion-count note (2026-10-29 re-run): the phase10 branches log one check each in
+the current probe (Branch A: all 4 replies + observed max concurrency ≤ 2 — two
+checks; Branch B: the nested message completes — one check), so the historical
+"3/3 + 2/2" counts in older execution-record rows are probe-version notes, not
+regressions. A branch passes on `SMOKE10 DONE (all passed)` **plus** the `mode:`
+line matching the intended branch — a `mode:` line showing the other branch means
+the fixture was shadowed (environment false green), not a pass.
+
+Team-env note for leader-run probes: the probes must run with the six `STEPCODE_TEAM_*`
+variables unset (`env -u …`). Inside a member process they are injected and inherited by
+the probe's own `step` child, whose extension then reads depth 1 ≥ `maxRecursionDepth` 1
+and stays inert — every probe false-fails. The smoke runner's phases are exempt (it spawns
+from a clean process).
 
 After a manual sandbox round, have the agent record the session into
 `sandbox/logs/session-log-<date>.md` — the pasteable prompt is in the sandbox README's
