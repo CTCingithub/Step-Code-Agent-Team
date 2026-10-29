@@ -11,7 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { TeamManager } from "../../extensions/members.ts";
-import { agentDir, defaultConfig, getConfig, loadConfig } from "../../extensions/config.ts";
+import { agentDir, defaultConfig, getConfig, loadConfig, resetConfigCache } from "../../extensions/config.ts";
 import { teamsRoot } from "../../extensions/registry.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -85,12 +85,51 @@ export default function (pi: ExtensionAPI) {
 
 			// 2. storage.dir redirection
 			if (cfg.storage.dir) {
-				const expected = path.resolve(cfg.storage.dir);
+				const configured = cfg.storage.dir.trim();
+				// A relative storage.dir resolves against the AGENT DIR, not the process
+				// cwd — the leader's cwd is arbitrary and members inherit it, so resolving
+				// against cwd scattered one team's registries across projects.
+				const expected = path.isAbsolute(configured) ? configured : path.join(agentDir(), configured);
 				check("storage.dir: teamsRoot redirected", teamsRoot() === expected, `got ${teamsRoot()}`);
 				check(
 					"storage.dir: team registry created there",
 					fs.existsSync(path.join(expected, manager.teamId, "registry.json")),
 				);
+				if (!path.isAbsolute(configured)) {
+					check(
+						"storage.dir: relative path resolves under the agent dir (not cwd)",
+						teamsRoot().startsWith(agentDir() + path.sep) && !teamsRoot().startsWith(process.cwd() + path.sep),
+						`agentDir=${agentDir()} cwd=${process.cwd()} got=${teamsRoot()}`,
+					);
+				}
+			}
+
+			// 2b. storage.dir RELATIVE path — self-contained regression (the runner's
+			// mktemp agentDir sets no storage.dir, so the branch above stays dormant in
+			// the gate). A relative dir must resolve under the agent dir, never against
+			// the process cwd (the leader's cwd is arbitrary and members inherit it).
+			{
+				const relDir = "teams-relocated";
+				const ad = agentDir();
+				const settingsPath = path.join(ad, "settings.json");
+				const hadSettings = fs.existsSync(settingsPath);
+				const prevSettings = hadSettings ? fs.readFileSync(settingsPath, "utf8") : "";
+				fs.writeFileSync(settingsPath, JSON.stringify({ stepcodeAgentTeam: { storage: { dir: relDir } } }));
+				resetConfigCache();
+				const relRoot = teamsRoot();
+				check(
+					"storage.dir: relative resolves under the agent dir",
+					relRoot === path.join(ad, relDir),
+					`agentDir=${ad} got=${relRoot}`,
+				);
+				check(
+					"storage.dir: relative does NOT resolve against cwd",
+					!relRoot.startsWith(process.cwd() + path.sep) || process.cwd() === ad,
+					`cwd=${process.cwd()} got=${relRoot}`,
+				);
+				if (hadSettings) fs.writeFileSync(settingsPath, prevSettings);
+				else fs.rmSync(settingsPath, { force: true });
+				resetConfigCache();
 			}
 
 			// 3. pure loadConfig tests (synthetic dirs)
