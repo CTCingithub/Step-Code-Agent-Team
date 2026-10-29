@@ -124,7 +124,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const getManager = (ctx: ExtensionContext): TeamManager => {
-		if (shutDown) throw new Error("Agent team plugin has shut down for this session.");
+		if (shutDown) throw new Error("Topology Agent Team has shut down for this session.");
 		if (!manager) {
 			// Project-tier presets load only for trusted projects (the same gate
 			// as the project-level config); the trust probe lives on the context.
@@ -155,7 +155,7 @@ export default function (pi: ExtensionAPI) {
 			scheduleReap();
 		}
 		if (config.activation.notifyOnActivate) {
-			ctx.ui.notify(`Agent team plugin activated (${reason}). Team tools are now available.`, "info");
+			ctx.ui.notify(`Topology Agent Team activated (${reason}). Team tools are now available.`, "info");
 		}
 	};
 
@@ -230,9 +230,14 @@ export default function (pi: ExtensionAPI) {
 		if (cfg.activation.confirmBeforeActivate && isInteractive(ctx)) {
 			let ok = false;
 			try {
-				ok = await ctx.ui.confirm("智能体团队", "检测到团队请求关键词，是否启用智能体团队？", {
-					timeout: INTERACTIVE_TIMEOUT_MS,
-				});
+				const confirmLang: Lang = detectLang(trimmed);
+				ok = await ctx.ui.confirm(
+					"Topology Agent Team",
+					confirmLang === "zh"
+						? "检测到团队请求关键词，是否启用 Topology Agent Team？"
+						: "Detected a team-request keyword. Enable Topology Agent Team?",
+					{ timeout: INTERACTIVE_TIMEOUT_MS },
+				);
 			} catch {
 				ok = false;
 			}
@@ -433,10 +438,15 @@ export default function (pi: ExtensionAPI) {
 			// Three options, no extra text (the suffixes read as noise next to the
 			// plan already shown by the notify above): accept the plan as shown,
 			// type free-form text that rides along with the request verbatim, or
-			// cancel.
+			// cancel. The order is Accept / Cancel / Other — Cancel sits next to
+			// Accept so the safe exits are adjacent, and "Other" opens the
+			// free-text input below.
 			const acceptLabel = "Accept";
-			const customLabel = lang === "zh" ? "自定义输入…" : "Custom input…";
 			const cancelLabel = "Cancel";
+			// "Other" is the same string in both languages, exactly like
+			// Accept/Cancel: localizing only these three would leave the dialog
+			// reading half-translated.
+			const otherLabel = "Other";
 			// The host's select countdown is a TUI-only component that ignores
 			// keypresses — it runs to expiry and can dismiss the dialog while the
 			// user is still reading the plan, and the plugin cannot hook the
@@ -446,11 +456,11 @@ export default function (pi: ExtensionAPI) {
 			// same rule applies to the free-text input (typing takes time).
 			const dialogOpts = planConfirmDialogOpts(ctx.mode, INTERACTIVE_TIMEOUT_MS);
 			const picked = await ctx.ui.select(
-				"智能体团队",
-				[acceptLabel, customLabel, cancelLabel],
+				"Topology Agent Team",
+				[acceptLabel, cancelLabel, otherLabel],
 				dialogOpts,
 			);
-			if (picked === customLabel) {
+			if (picked === otherLabel) {
 				// The user's own words, sent as-is: no interpretation, no
 				// restructuring — the note joins the forwarded request verbatim.
 				const note = await ctx.ui.input(
@@ -473,7 +483,7 @@ export default function (pi: ExtensionAPI) {
 	const runTeamCommand = async (args: string | undefined, ctx: ExtensionContext): Promise<void> => {
 		currentCtx = ctx;
 		if (!config.activation.enabled) {
-			ctx.ui.notify("Agent team plugin is disabled by configuration (activation.enabled = false).", "warning");
+			ctx.ui.notify("Topology Agent Team is disabled by configuration (activation.enabled = false).", "warning");
 			return;
 		}
 		const trimmed = (args ?? "").trim();
@@ -488,9 +498,9 @@ export default function (pi: ExtensionAPI) {
 				regateTools();
 				activeChoice = null;
 				pendingInjection = null;
-				ctx.ui.notify("Agent team plugin deactivated. Team tools are hidden again (member sessions stay resumable).", "info");
+				ctx.ui.notify("Topology Agent Team deactivated. Team tools are hidden again (member sessions stay resumable).", "info");
 			} else {
-				ctx.ui.notify("Agent team plugin is not active.", "info");
+				ctx.ui.notify("Topology Agent Team is not active.", "info");
 			}
 			return;
 		}
@@ -621,7 +631,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerCommand("topo", {
 		description:
-			"Activate the agent team plugin and show the team board; optionally pick a team plan (economic/fast/balanced/performance/custom), run the parallel review protocol (/topo review [target]), or turn the plugin off (/topo off); text after the command is forwarded to the agent verbatim",
+			"Activate the Topology Agent Team plugin and show the team board; optionally pick a team plan (economic/fast/balanced/performance/custom), run the parallel review protocol (/topo review [target]), or turn the plugin off (/topo off); text after the command is forwarded to the agent verbatim",
 		getArgumentCompletions: (prefix: string) => {
 			const items = [...PLAN_TIER_IDS, "custom", "review", "off"].map((value) => ({
 				value,

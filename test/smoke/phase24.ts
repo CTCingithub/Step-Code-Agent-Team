@@ -3,7 +3,7 @@
  * (see STANDALONE_PHASES in run-smoke.sh): drives the real extension factory
  * with a fake ExtensionAPI and a scripted ExtensionContext, so the whole
  * confirmation chain — tier picker → (planning call fails offline → fallback)
- * → Accept / custom-input / cancel → request forwarding with the note merged
+ * → Accept / Cancel / Other → request forwarding with the note merged
  * verbatim — runs without a model call.
  *
  * Why this exists: confirmChoice is a closure inside the extension factory, so
@@ -107,8 +107,15 @@ export default function (pi: ExtensionAPI) {
 					.flatMap((m) => (m.content ?? []).map((c) => c.text ?? ""));
 				injectionTexts.push(texts.join("\n"));
 			};
-			const customOption = (options: string[]): string =>
-				options.find((o) => o.includes("自定义") || o.includes("Custom")) ?? "";
+			const otherOption = (options: string[]): string => options.find((o) => o === "Other") ?? "";
+			// The confirmation's option set and ORDER are part of the contract
+			// (Accept / Cancel / Other — the safe exits adjacent, "Other" last as
+			// the free-text door). Captured from the scripted select.
+			let confirmOptions: string[] = [];
+			const captureOptions: SelectScript = (options) => {
+				confirmOptions = options;
+				return otherOption(options);
+			};
 
 			try {
 				// 1. Accept: the request goes out verbatim and the plan instruction is injected.
@@ -124,18 +131,37 @@ export default function (pi: ExtensionAPI) {
 					injectionTexts[0].slice(0, 80),
 				);
 
-				// 2. Custom input: the note rides along verbatim, blank-line separated.
-				await runFlow((options) => customOption(options), () => NOTE);
+				// 2. Other → free-text input: the note rides along verbatim, blank-line separated.
+				await runFlow(captureOptions, () => NOTE);
 				check(
-					"confirm: custom input merges the note verbatim",
+					"confirm: option order is Accept / Cancel / Other",
+					confirmOptions.length === 3 &&
+						confirmOptions[0] === "Accept" &&
+						confirmOptions[1] === "Cancel" &&
+						confirmOptions[2] === "Other",
+					JSON.stringify(confirmOptions),
+				);
+				check(
+					"confirm: Other input merges the note verbatim",
 					sent.length === 1 && sent[0] === `${REQUEST}\n\n${NOTE}`,
 					`sent=${JSON.stringify(sent)}`,
 				);
 
 				// 3. Empty input: accepts the plan as shown, nothing appended.
-				await runFlow((options) => customOption(options), () => "   ");
+				await runFlow((options) => otherOption(options), () => "   ");
 				check(
 					"confirm: empty input accepts as-is",
+					sent.length === 1 && sent[0] === REQUEST,
+					`sent=${JSON.stringify(sent)}`,
+				);
+
+				// 3b. Esc / dismissed input (undefined): cancels the whole confirmation —
+				// the request still forwards, but with the activation-only injection,
+				// exactly like Cancel. This is the data plane of the "Esc cancels"
+				// behaviour; only the key feel itself stays manual (M3).
+				await runFlow((options) => otherOption(options), () => undefined);
+				check(
+					"confirm: dismissed Other input cancels like Cancel",
 					sent.length === 1 && sent[0] === REQUEST,
 					`sent=${JSON.stringify(sent)}`,
 				);
@@ -149,7 +175,14 @@ export default function (pi: ExtensionAPI) {
 				);
 				check(
 					"confirm: Cancel injects activation only (no plan instruction)",
-					injectionTexts[3] !== injectionTexts[0] && injectionTexts[3].length > 0,
+					injectionTexts[4] !== injectionTexts[0] && injectionTexts[4].length > 0,
+					injectionTexts[4].slice(0, 80),
+				);
+				// The dismissed Other input (3b) must land on the very same injection as
+				// Cancel — both drop the plan and keep the activation instruction only.
+				check(
+					"confirm: dismissed Other input injects exactly what Cancel injects",
+					injectionTexts[3] === injectionTexts[4] && injectionTexts[3].length > 0,
 					injectionTexts[3].slice(0, 80),
 				);
 			// 5. Pinned plan.tier: a standing preference means "stop asking" —
