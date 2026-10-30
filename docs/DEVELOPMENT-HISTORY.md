@@ -806,6 +806,6 @@
 
 **发布执行**（用户授权）：develop→main `--no-ff` 合并 → `scripts/release.sh 0.3.0`：冒烟门全绿（20 phase + manifest + 7 live + orphan-check）→ bump `0.3.0-preview`→`0.3.0` → `chore: release v0.3.0` → 附注 tag `v0.3.0` → push main + tag → **`latest` 移动到 v0.3.0**（正式版才会移动）→ hermetic 实测（throwaway agentDir 安装该 tag 并 RPC 激活）。
 
-**发布后状态**：`main` = 发布提交；`latest` = v0.3.0；`develop` 从 main 尖端继续（下一版开发按约定先 `git checkout main && git checkout -b develop`）；`v0.3.0-preview` tag 保留为历史预览线；npm 从未发布（git-only 分发）。
+**发布后状态**：`main` = `latest` = `develop` = 发布提交 `8bcdf44`（`chore: release v0.3.0`，package.json `0.3.0`）；附注 tag `v0.3.0` = `a4baac8`；`v0.3.0-preview`（73fdb81）保留为历史预览线；npm 从未发布（git-only 分发）。**hermetic 实测**：脚本内在推送后立即执行时撞上瞬时竞态失败（与 v0.3.0-preview 同一现象），手动重跑成立——一次性 agentDir 安装 `@v0.3.0` 成功，RPC 会话返回 `Topology Agent Team activated (/topo command). Team tools are now available.`。**环境注记**：本轮 SSH 到 github.com:22 被本地代理（198.18.0.8）拦截超时，`git push origin` 全部失败；HTTPS 读写正常但非交互推送缺凭据。改用 `gh auth setup-git` 让 gh 的 token 充当 credential helper 后推送成功——后续会话若遇同类网络问题可按此处理。
 
 **留给下一版**：① 六项纯人工测试（M1 真实 install/remove、M2 信任弹窗 + K6 项目级角色层、M3/M4 TUI 像素与按键、M5 英文审阅、M6 可选 8 成员性能）；② ring 巡游上限的演示目标需在同一次派发内连续嵌套中继才能触发（MANUAL-TESTING 场景 4 已写明）；③ deferred：P2-8e/9 测试加固、settle 超时自动 harvest（评估后不做）、宿主 select 倒计时不响应按键（上游缺口）、派发机制间歇性退化（根因未定位，队长接管可兜底）。
