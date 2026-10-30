@@ -796,3 +796,16 @@
 **验证**：零 token 全量门全绿（20 phase + manifest + 7 live + orphan-check）；tsc 零错误；探针 5a/5b/5c/7/8/9 全部 PASS（7 与 8 各抖动一次、复跑通过；7 收紧 prompt 后稳定通过）。
 
 **遗留**：ring 巡游上限的**演示目标**仍需一次手动轮才能真正触发（须在同一次派发内连续嵌套中继，不能逐跳 team_send）——已写入 MANUAL-TESTING 场景 4 的注意列；`sandbox/project` 的 39 条审查项按既定决议只记录不修；派发机制间歇性退化仍未定位根因。
+### 72. v0.3.0 正式版发布（plan-110）
+
+**用户 prompt**：「请更新HANDOFF和DEVELOPMENT HISTORY文档，然后发布为v0.3.0版本」。
+
+**思路**：preview 线（`v0.3.0-preview`，73fdb81）之后又跑了五轮（plan-106～109），自动化侧已全部排尽、只剩六项不可自动化的人工项；用户试用反馈已收敛（两轮手动测试，UI 确认无问题，且其日志驱动了 plan-109 的修正）。按 §7 分支约定执行正式版发布。
+
+**发布前文档更新**：README(_CN) 安装行改为三行（`@latest` 当前 v0.3.0 / `@v0.3.0` 钉住 / `@v0.3.0-preview` 历史预览线），Status 段由「0.3.0-preview 功能集」改为「0.3.0 功能集（tagged `v0.3.0`，`@latest` 随之移动）」；HANDOFF 头部日期与 §1 项目现状/分支状态、§5 决策项第 1/2 条更新（第 1 条划销、第 2 条改为两轮手动测试归档与剩余六项人工集）。
+
+**发布执行**（用户授权）：develop→main `--no-ff` 合并 → `scripts/release.sh 0.3.0`：冒烟门全绿（20 phase + manifest + 7 live + orphan-check）→ bump `0.3.0-preview`→`0.3.0` → `chore: release v0.3.0` → 附注 tag `v0.3.0` → push main + tag → **`latest` 移动到 v0.3.0**（正式版才会移动）→ hermetic 实测（throwaway agentDir 安装该 tag 并 RPC 激活）。
+
+**发布后状态**：`main` = 发布提交；`latest` = v0.3.0；`develop` 从 main 尖端继续（下一版开发按约定先 `git checkout main && git checkout -b develop`）；`v0.3.0-preview` tag 保留为历史预览线；npm 从未发布（git-only 分发）。
+
+**留给下一版**：① 六项纯人工测试（M1 真实 install/remove、M2 信任弹窗 + K6 项目级角色层、M3/M4 TUI 像素与按键、M5 英文审阅、M6 可选 8 成员性能）；② ring 巡游上限的演示目标需在同一次派发内连续嵌套中继才能触发（MANUAL-TESTING 场景 4 已写明）；③ deferred：P2-8e/9 测试加固、settle 超时自动 harvest（评估后不做）、宿主 select 倒计时不响应按键（上游缺口）、派发机制间歇性退化（根因未定位，队长接管可兜底）。
