@@ -96,7 +96,7 @@ STEP_CODING_AGENT_DIR="$T/agent" step install "$REPO_SPEC@v$VERSION" >/dev/null 
 out="$(cd "$T" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo"}\n' \
 	| STEP_CODING_AGENT_DIR="$T/agent" timeout 90 step --mode rpc \
 		--session-id release-verify --session-dir "$T/agent/sessions" --approval-mode auto 2>&1)" || true
-if echo "$out" | grep -q "Agent team plugin activated"; then
+if echo "$out" | grep -q "Topology Agent Team activated"; then
 	echo "release: hermetic verify OK — activated from the v$VERSION tag"
 else
 	echo "$out" | tail -8 >&2

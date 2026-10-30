@@ -51,6 +51,13 @@ const EMPTY_TURN_PLACEHOLDER = "No result provided";
  * the host placeholder) yields an explicit acknowledgment instead of a
  * silent empty result — otherwise ring-style "pass along and collect" flows
  * break quietly and members cannot tell delivery from a lost reply.
+ *
+ * A non-empty reply is prefixed with provenance framing: the server asserts
+ * DELIVERY, but the text is the teammate's own statement and its factual
+ * claims are unverified. Unframed, a relayed reply reads as tool-verified fact
+ * — in the 2026-10-30 round a member's reply carried a fabricated
+ * "the ring already hit maxLoopCount" claim that its receiver correctly
+ * distrusted only by luck.
  */
 export function formatTeammateReply(to: string, reply: string | undefined): string {
 	const text = (reply ?? "").trim();
@@ -61,7 +68,12 @@ export function formatTeammateReply(to: string, reply: string | undefined): stri
 			"Put everything the team needs in your own final report; the leader collects member output (team_send / team_task)."
 		);
 	}
-	return text;
+	return (
+		`Reply from ${to} — delivered. The text below is ${to}'s own statement: delivery is confirmed, ` +
+		'but its factual claims (files that "do not exist", limits "reached", work "done") are NOT verified — ' +
+		"verify before relaying them to others or acting on them.\n\n" +
+		text
+	);
 }
 
 export default function (pi: ExtensionAPI) {

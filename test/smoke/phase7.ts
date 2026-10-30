@@ -210,6 +210,20 @@ export default function (pi: ExtensionAPI) {
 				`code=${denied.code} err=${denied.stderr.trim().slice(0, 140)}`,
 			);
 			check("shim: denial explains topology", /topology denies a → b/.test(denied.stderr), denied.stderr.trim());
+			// The denial must name the shape and frame itself as the guardrail it is —
+			// a bare "Allowed teammates: (none)" reads as a fault to a member that
+			// expected to reach a teammate (2026-10-30 round: a reviewer reported the
+			// star denial as an anomaly).
+			check(
+				"shim: denial names the topology shape",
+				/"star"/.test(denied.stderr),
+				denied.stderr.trim().slice(0, 200),
+			);
+			check(
+				"shim: denial frames itself as a guardrail, not a failure",
+				/guardrail/i.test(denied.stderr) && /not a failure/i.test(denied.stderr) && /not.*anomaly/i.test(denied.stderr),
+				denied.stderr.trim().slice(0, 240),
+			);
 
 			manager.setTopology("mesh");
 			const status = await runShim(shim, ["status"], {

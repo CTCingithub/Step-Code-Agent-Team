@@ -24,10 +24,13 @@
 > rendering checklist (look-and-feel only; the content layer is asserted by phase15)
 > is §1.
 
-## Status overview (2026-10-23)
+## Status overview (2026-10-29)
 
-> Automation baseline re-verified 2026-10-25: smoke 20 phases + manifest + 7 live + orphan-check all green; LLM probes 22/22 (K8, re-run in plan-101 on the code with free-text input and the settle retry).
-
+> Automation baseline re-verified **2026-10-30 (R17, the manual-round-driven round)**: full gate green; tsc zero; probes 5a/5b/5c/7/8/9 all PASS. The 2026-10-29/30 manual round's two wrong conclusions are corrected in the docs (the ring chain-length semantics and the config file location), the config now traces which file it read and the effective values under `STEPCODE_TEAM_DEBUG=1`, the topology denial names its shape, and a teammate's reply carries provenance framing.
+>
+> Automation baseline re-verified **2026-10-29 (R16, the leftover-closure round)**: zero-token gate green again; **tsc across the whole import graph is now zero errors** (was 17); new probe scenario **5c** automates the pinned-tier KEYWORD path (the last item that still needed a manual spot-check), and a relative `storage.dir` now resolves under the agent dir instead of the launch directory.
+>
+> Automation baseline re-verified **2026-10-29 twice**: (R14, the v0.3.0 test-exhaustion round) zero-token smoke 20 phases + manifest + 7 live + orphan-check green; LLM layer phase4 4/4, phase10 A 2/2 + B 1/1, phase11 4/4 (zero SKIP), phase12 9/9. (R15, the UI-naming + Accept/Cancel/Other round) the same gate green again after the rename and the option reorder; phase24 now also asserts the option **order** (`Accept / Cancel / Other`) and that a **dismissed** Other input (Esc/timeout) cancels exactly like Cancel — which moves the "Esc cancels" data plane out of this manual set; live probes 5a/5b PASS on the new title and labels, 8 FAIL→PASS on re-run (mechanical assertion passed both times; only the member's LLM self-report flaked — the probe now prints that reply so a failure is diagnosable without a re-run).
 | # | Item | Status |
 |---|---|---|
 | 1 | Interactive TUI look and feel | ✅ Verified 2026-10-22 (full walkthrough, no rendering issues) + 2026-10-25 rerun passed (no rendering issues; see the archive `sandbox/archive/20261025-194159-20261025-manual-round/`) |
@@ -36,10 +39,10 @@
 | 4 | LLM behavior adherence (ring) | ✅ 2026-10-22 + 2026-10-25 two rounds confirmed (two hops succeeded + the third hop rejected verbatim — the previously unobserved part is now confirmed) |
 | 5 | Sandbox demo scripts (three acts) | ✅ 2026-10-22 + 2026-10-25 two reruns passed (the fix round 11/12→12/12; both parallel-review rounds changed nothing) |
 | 6 | Performance subjective items (8 full members) | ➖ Optional, subjective |
-| 7 | Actual-plan three-option confirmation (Accept / 自定义输入… / Cancel) + generation spinner (new UI) | ➖ 2026-10-25: the three-tier Accept path measured end-to-end; **the custom-input path and the pinned tier were live-verified 2026-10-25 by RPC-driver probes** (`node sandbox/probe-remaining-manual.mjs 5a` / `5b`: the user's text rides along verbatim; a pinned tier suppresses the picker); only TUI key feel remains ⬜ (M3: no countdown / Esc / empty submit) |
-| 8 | Activation guard L1 (rewritten 2026-10-23) | ✅ 8 phase6 cases green + **live-verified 2026-10-25 by an RPC-driver probe** (`probe-remaining-manual.mjs 7`: zero team actions for the meta question; a how-to with a body activates and `team_create_member` really works) |
-| 9 | Custom roles (agent-dir + trusted project tier) | ➖ phase3 covers loading and the trust gate + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 8`: the frontmatter's tools/effort/prompt land on a real spawn and the member self-reports the allowlist incl. topo_team_msg); the project tier still needs the M2 trust flow ⬜ |
-| 10 | Keyword migration notice | ✅ phase6/phase9 cover the stripping semantics + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 9`: the notice appears exactly once per session) |
+| 7 | Actual-plan three-option confirmation (Accept / Cancel / Other) + generation spinner (new UI) | ➖ 2026-10-25: the three-tier Accept path measured end-to-end; **the custom-input path and the pinned tier were live-verified 2026-10-25 by RPC-driver probes** (`node sandbox/probe-remaining-manual.mjs 5a` / `5b`: the user's text rides along verbatim; a pinned tier suppresses the picker); only TUI key feel remains ⬜ (M3: no countdown / Esc / empty submit); **re-verified 2026-10-29 (R14) on the final product code** — 5a PASS (the note rides along verbatim; `team_create_member`/`team_set_topology`/`team_send` follow the confirmation) and 5b PASS (picker and confirmation both suppressed); **R16 adds probe 5c** — the pinned tier on the keyword path, verified live (neither dialog appears, and the plugin provably activated), which removes the last manual spot-check |
+| 8 | Activation guard L1 (rewritten 2026-10-23) | ✅ 8 phase6 cases green + **live-verified 2026-10-25 by an RPC-driver probe** (`probe-remaining-manual.mjs 7`: zero team actions for the meta question; a how-to with a body activates and `team_create_member` really works); **re-verified 2026-10-29 (R14)** — both sub-checks PASS on the final product code |
+| 9 | Custom roles (agent-dir + trusted project tier) | ➖ phase3 covers loading and the trust gate + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 8`: the frontmatter's tools/effort/prompt land on a real spawn and the member self-reports the allowlist incl. topo_team_msg); **re-verified 2026-10-29 (R14)** — the create-result half passed twice, the member self-report flaked once and passed on re-run (an LLM-behavior assertion, not a mechanical one); the project tier still needs the M2 trust flow ⬜ |
+| 10 | Keyword migration notice | ✅ phase6/phase9 cover the stripping semantics + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 9`: the notice appears exactly once per session); **re-verified 2026-10-29 (R14)** — exactly one notice on the final product code |
 | — | English translation review | ⬜ Recommended |
 
 ## Round runbook (one complete test round)
@@ -70,13 +73,15 @@ npm run smoke   # 20 phases + manifest + 7 live checks (+ orphan-check); stop an
 
 **Two activation paths — one per prompt, never both**: the **`/topo` command** (the request rides as its argument) or a **keyword prompt** (natural language containing a plugin keyword). The §5 demo acts use the command path; §1 step 1 and scenarios 7/8/9 exercise the keyword path. Writing `/topo` and keyword phrasing into the same prompt tests neither path cleanly.
 
+**Numbers need evidence**: a member's output is an LLM statement — line counts, case counts and file counts are not tool-verified. In the 2026-10-30 round `scout1` reported `src/tasks.js` at 139 lines (actually 124), `test/tasks.test.js` at 132 (actually 146) and 13 cases (actually 12); the leader only caught it by re-running `wc -l`. State it in the brief — "every number in your report must come with the command you ran and its output" — and re-verify the key numbers yourself: correcting the presentation without correcting the member leaves the wrong figure in its context for the next round.
+
 | # | Scenario | Do | Detail | Watch out for |
 |---|---|---|---|---|
 | 1 | Activation + team board | §1 steps 1–2 | §1 | — |
 | 2 | Members + pipeline + task board | §1 steps 3–8 | §1 | — |
 | 3 | `topo_team_msg` E2E | paste: `Have scout1 send worker1 a one-line intro through topo_team_msg and report the tool's exact return text` | §1, §4 | The reply is best-effort: a delivery acknowledgment ("Delivered to …") is not the teammate's answer — collect outputs through the leader |
-| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list. **Ring closure**: with the default `maxLoopCount=2`, a 3-member ring's closing hop (r3→r1) is always rejected — the loop must close through the leader; raise `maxLoopCount` only if you truly need in-ring closure |
-| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo <请求>` | §8 (TEST-PLAN K2/K3) | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching; the confirmation offers **Accept / 自定义输入… / Cancel** with no countdown and waits for your decision — a custom input's text is sent to the model verbatim, appended to the forwarded request (Esc cancels) |
+| 4 | Ring tour (fast hops) | the §4 ring prompt | §4 | Keep each hop small (one file, one question) so every hop settles inside the 600s default `dispatch.timeoutMs` (it covers the member's whole turn, nested relays included) — and a timeout no longer triggers a blind retry: the task fails with harvest guidance instead. Run one loop; the leader collects the final list. **Ring closure**: `maxLoopCount` (default 2) counts the **nesting depth of relays inside one leader dispatch** — the leader's dispatch starts at 0 and each member→member forward adds one. If the relays nest continuously (no leader re-dispatch in between), a 3-member ring's closing hop (r3→r1) is rejected at the default; if the leader re-dispatches every hop, each starts from 0 and all succeed. To *observe* the bound: let r1→r2→r3 nest inside one dispatch. To close in-ring regardless: route the last hop through the leader, or raise `maxLoopCount` — and remember a config edit only takes effect after you **restart the session** (config is read once per session) |
+| 5 | Plan picker / pinned tier | enable in `sandbox/config.toml`, **restart the session**, then `/topo <请求>` | §8 (TEST-PLAN K2/K3) | `plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching; the confirmation offers **Accept / Cancel / Other** with no countdown and waits for your decision — choosing Other lets you type text that is sent to the model verbatim, appended to the forwarded request (Esc cancels) |
 | 6 | Parallel review | `/topo review src/tasks.js` | TEST-PLAN K4 | — |
 | 7 | Activation guard (L1) | paste: `如何用智能体小队并行审查这个仓库？` | §9 | Rewritten 2026-10-23: a how-to request with a body activates the plugin (the team forms); a pure question about the plugin itself (`什么是智能体小队？`) stays suppressed — no team forms |
 | 8 | Custom roles (K6) | write `sandbox/agent/agents/quickfix.md` (frontmatter: `name` / `description` / `tools` / `effort`), restart, paste: `创建一个 quickfix 角色的成员，取名 fixer1，让它用一句话列出自己的工具白名单` | §10 | The frontmatter's prompt/tools/effort apply (the tool list shows the allowlist); project-level roles under `sandbox/project/.stepcode/agents/` load only in trusted projects (delete `sandbox/agent/trust.json` to re-trigger the popup) |
@@ -89,13 +94,13 @@ out here so a round is not considered complete without them.
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
 a tier is picked, the plugin first asks the model (one-off, plan-only call with a
-"正在生成智能体拓扑协作方案" spinner) to draft the actual team plan for that request; the three-option selection (Accept / 自定义输入… / Cancel) then shows that plan,
+"正在生成智能体拓扑协作方案" spinner) to draft the actual team plan for that request; the three-option selection (Accept / Cancel / Other) then shows that plan,
 and on approval it is injected with precedence over the tier's general guidance. Bare
 `/topo` (no request) or a failed planning call falls back to the tier's standard
 shape — there is nothing request-specific to show yet.
 The planning call is interactive-only — headless/RPC `/topo <request>` skips it and
 confirms the tier's standard shape directly. The confirmation offers three options:
-**Accept** (form the team with the plan as shown), **自定义输入… / Custom input…**
+**Accept** (form the team with the plan as shown), **Other**
 (your own text is sent to the model verbatim — no interpretation — appended to the
 forwarded request; an empty submission accepts as shown), and **Cancel** (the request
 still forwards, but only the activation instruction is injected — no team forms).
@@ -167,7 +172,7 @@ members from an earlier round — if any show up, disband them before creating n
 
 | # | Copy-paste | Expected render | Result |
 |---|---|---|---|
-| 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | First the L2 confirm ("检测到团队请求关键词，是否启用智能体团队？" — `confirmBeforeActivate` is on by default; see CONFIGURATION.md) → yes → activation notify: "Agent team plugin activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
+| 1 | `I'd like to use the topo team feature to get familiar with this sandbox project` | First the L2 confirm (title "Topology Agent Team", body "Detected a team-request keyword. Enable Topology Agent Team?" — `confirmBeforeActivate` is on by default; see CONFIGURATION.md) → yes → activation notify: "Topology Agent Team activated (explicit plugin mention). Team tools are now available."; the team tools are visible to the model from then on | ☐ |
 | 2 | `/topo` | Team board notify: `Team "<id>"` + member rows (○/●/✗ icon + role + status + model/effort) + task rows (including blockedBy) + `spend: $x.xxxx`; when the team is empty it prompts you to use team_create_member | ☐ |
 | 3 | `Create a member with the scout role, named scout1` | renderCall: `team +scout1 (scout)`; renderResult: `✓ scout1 (scout) [idle] … effort=high` | ☐ |
 | 4 | `Create another member with the worker role, named worker1` | Same as step 3: `+worker1 (worker)` / `✓ worker1 (worker) [idle]` (provides the second member for step 7's pipeline topology) | ☐ |
@@ -391,9 +396,9 @@ restore the initial state.
 
 Both sub-scenarios share the same precondition chain: `[stepcodeAgentTeam.plan] enabled = true` in `sandbox/config.toml` (already on in the seeded sandbox), **restart the session** (`plan.enabled` / `plan.tier` are read once per session — edit the config BEFORE launching), and an **interactive TUI** (`./sandbox/run.sh`). The planning call is interactive-only — headless/RPC `/topo <request>` skips it and confirms the tier's standard shape directly, so a dialog-less round proves nothing about 5a.
 
-### 5a · Custom input path (highest priority)
+### 5a · Other (free-text input) path (highest priority)
 
-**What it tests**: the full dialog chain — `/topo <请求>` → tier select (four tiers + 自定义需求…) → the "正在生成智能体拓扑协作方案" spinner (the one-off, plan-only model call) → the three-option confirmation (Accept / 自定义输入… / Cancel) — and specifically the 「自定义输入…」 branch: your free-form text must reach the model **verbatim** — trimmed, then appended to the forwarded request after a blank line, with no interpretation or restructuring.
+**What it tests**: the full dialog chain — `/topo <请求>` → tier select (four tiers + 自定义需求…) → the "正在生成智能体拓扑协作方案" spinner (the one-off, plan-only model call) → the three-option confirmation (Accept / Cancel / Other) — and specifically the **Other** branch: your free-form text must reach the model **verbatim** — trimmed, then appended to the forwarded request after a blank line, with no interpretation or restructuring.
 
 **Preconditions**: `plan.enabled = true` in `sandbox/config.toml`; session restarted after the edit; interactive TUI; a fresh session (disband any leftover live team first — `Report the team's current status`).
 
@@ -405,7 +410,7 @@ Both sub-scenarios share the same precondition chain: `[stepcodeAgentTeam.plan] 
 
 1. In the tier select pick any tier (e.g. 均衡/balanced).
 2. Wait for the spinner to finish — the drafted plan shows in the notify above the confirmation.
-3. In the three-option confirmation choose **自定义输入… / Custom input…** (no countdown — it waits for your decision).
+3. In the three-option confirmation choose **Other** (no countdown — it waits for your decision).
 4. In the free-text input type one sentence, e.g.:
 
 ```text
@@ -416,7 +421,7 @@ Both sub-scenarios share the same precondition chain: `[stepcodeAgentTeam.plan] 
 
 **Automated coverage**: phase24 drives the whole confirmation chain with a fake ExtensionAPI plus a scripted context and asserts the merge contract (6 assertions: Accept forwards the request verbatim with the plan injected / a custom input's note merges verbatim / an empty submission accepts as shown / Cancel injects the activation-only instruction).
 
-**Live verification (2026-10-25, RPC-driver probe)**: `node sandbox/probe-remaining-manual.mjs 5a` walks the whole chain with a scripted RPC client — answers the tier picker (balanced) → the spinner and the model-drafted plan → picks 自定义输入… in the three-option confirmation → types `只要 1 个只读成员，不要修改任何文件`. The forwarded user message in the session JSONL is "the original request + a blank line + that text" (character-for-character, only outer whitespace trimmed), after which the model calls `team_create_member` normally. "The text reaches the model verbatim" now holds on a **real host dialog plus a real LLM round-trip**; what the probe cannot cover is TUI pixel and key feel (Esc / empty submit / no countdown — M3).
+**Live verification (2026-10-25, RPC-driver probe)**: `node sandbox/probe-remaining-manual.mjs 5a` walks the whole chain with a scripted RPC client — answers the tier picker (balanced) → the spinner and the model-drafted plan → picks Other in the three-option confirmation → types `只要 1 个只读成员，不要修改任何文件`. The forwarded user message in the session JSONL is "the original request + a blank line + that text" (character-for-character, only outer whitespace trimmed), after which the model calls `team_create_member` normally. "The text reaches the model verbatim" now holds on a **real host dialog plus a real LLM round-trip**; what the probe cannot cover is TUI pixel and key feel (Esc / empty submit / no countdown — M3).
 
 **Why manual**: the dialog is host-rendered TUI (phase24 only scripts it), and "the text reaches the model unchanged and is acted on" is observable only end-to-end with a real model turn.
 
@@ -444,9 +449,11 @@ then, for the keyword path, a fresh activation (new session, or after the first 
 
 **Automated coverage**: phase21 asserts the tier table itself (four tiers, five modes, bilingual labels, unknown-id fallback); phase24 drives the confirmation with `plan.enabled` toggled through the resetConfigCache hook.
 
-**Live verification (2026-10-25, re-run after the fix)**: `probe-remaining-manual.mjs 5b` pins `plan.tier` to `"fast"` and runs `/topo <request>` — the tier picker does **not** appear and neither does the three-option confirmation (both negative assertions pass; the request is forwarded verbatim). The command path is live-verified; the keyword path reads the same config, so one manual spot-check suffices.
+**Live verification (2026-10-25, re-run after the fix)**: `probe-remaining-manual.mjs 5b` pins `plan.tier` to `"fast"` and runs `/topo <request>` — the tier picker does **not** appear and neither does the three-option confirmation (both negative assertions pass; the request is forwarded verbatim). The command path is live-verified.
 
-**Why manual**: "no picker appears" is a negative UI observation only a real session can make, and the two activation paths share the config but not the code path — each must be exercised once.
+**Live verification (2026-10-29, R16)**: the new `probe-remaining-manual.mjs 5c` covers the **keyword path** — a natural-language keyword prompt under a pinned tier, asserting neither dialog appears **and that the plugin really activated** (otherwise "no dialog" could pass because nothing happened at all — the first run caught exactly that false green, where an unanswered L2 confirm meant the plugin never activated). Both activation paths are now live-verified.
+
+**Why it is no longer manual**: the negative assertions plus the activation assertion hold on a real host dialog and a real LLM round-trip; what remains is TUI pixel and key feel (M3).
 
 **Restore**: set `tier = "always ask"` back in `sandbox/config.toml`, then `bash sandbox/restore-project.sh`.
 

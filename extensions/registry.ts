@@ -59,7 +59,15 @@ export interface TeamRegistry {
 
 export function teamsRoot(): string {
 	const override = getConfig().storage.dir;
-	if (typeof override === "string" && override.trim()) return path.resolve(override.trim());
+	if (typeof override === "string" && override.trim()) {
+		const dir = override.trim();
+		// A relative storage.dir resolves against the agent dir, not the
+		// process cwd: the cwd is whatever directory the leader happened to be
+		// launched from (and members inherit the leader's), so a relative path
+		// silently scattered registries across projects — and an entry that
+		// looked configured was in fact never written where the docs said.
+		return path.isAbsolute(dir) ? dir : path.join(agentDir(), dir);
+	}
 	return path.join(agentDir(), "teams");
 }
 export function teamDir(teamId: string): string {

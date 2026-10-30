@@ -48,9 +48,9 @@ export default function (pi: ExtensionAPI) {
 
 			// 2. generic activation instruction (no tier chosen)
 			const zh = teamActivationInstruction("zh");
-			check("instruction: zh mentions the team tools", zh.includes("智能体团队已启用") && zh.includes("team_create_member"));
+			check("instruction: zh mentions the team tools", zh.includes("拓扑智能体团队已启用") && zh.includes("team_create_member"));
 			const en = teamActivationInstruction("en");
-			check("instruction: en mentions the team tools", en.includes("[Agent team active]") && en.includes("team_create_member"));
+			check("instruction: en mentions the team tools", en.includes("[Topology Agent Team active]") && en.includes("team_create_member"));
 			// 2b. relay chains: the task book must state the report return path —
 			// a 2026-10-25 round had a member promise a "direct report to the
 			// leader" that no channel could deliver (the leader is not a target).

@@ -450,6 +450,13 @@ export class TeamManager {
 	 * - on: explicit param → preset model → conversation model; an explicit
 	 *   model outside models.available is rejected; a preset model outside the
 	 *   list degrades to the first available entry.
+	 *
+	 * The conversation model is a composite "provider/id" string, while
+	 * models.available holds spawnable ids — so the fallback validates too and
+	 * degrades to the first available entry. Without that check a member with
+	 * no preset model (the bundled worker preset) spawned with an id the team
+	 * cannot resolve and never settled: every dispatch died on a settle
+	 * timeout with zero usage and no diagnostic.
 	 */
 	private resolveMemberModel(
 		name: string,
@@ -464,10 +471,10 @@ export class TeamManager {
 					`member "${name}": ignoring model "${requested}" — autonomous model selection is off; using the conversation model`,
 				);
 			}
-			return leaderModel ?? config.models.available[0];
+			return this.spawnableModel(name, leaderModel, config);
 		}
 		const chosen = requested ?? preset?.model;
-		if (!chosen) return leaderModel ?? config.models.available[0];
+		if (!chosen) return this.spawnableModel(name, leaderModel, config);
 		if (config.models.available.includes(chosen)) return chosen;
 		if (requested) {
 			throw new Error(
@@ -476,6 +483,21 @@ export class TeamManager {
 			);
 		}
 		debugNote(`member "${name}": preset model "${chosen}" is not in models.available; using "${config.models.available[0]}"`);
+		return config.models.available[0];
+	}
+
+	/**
+	 * The model a member actually spawns with when neither an explicit request
+	 * nor a preset pins one: the conversation model when the team can spawn it,
+	 * otherwise the first entry of models.available (the same degradation a
+	 * preset model outside the list gets). Returns undefined only when the pool
+	 * is empty, which lets the member fall back to its own default.
+	 */
+	private spawnableModel(name: string, leaderModel: string | undefined, config: PluginConfig): string | undefined {
+		if (leaderModel && config.models.available.includes(leaderModel)) return leaderModel;
+		debugNote(
+			`member "${name}": conversation model "${leaderModel ?? "unknown"}" is not in models.available; using "${config.models.available[0] ?? "member default"}"`,
+		);
 		return config.models.available[0];
 	}
 
@@ -518,11 +540,16 @@ export class TeamManager {
 		const coordination = [
 			"",
 			"## Team messaging",
-			`You are member "${member.name}" of an agent team coordinated by a leader.`,
+			`You are member "${member.name}" of a Topology Agent Team coordinated by a leader.`,
 			"Direct member-to-member messaging is gated by the team topology.",
 			"Use the topo_team_msg tool to message an allowed teammate (to = their name).",
 			"The leader is not a messaging target — it is not part of the topology and has no inbox; everything you report reaches the leader through your final report (task result / reply to its dispatch).",
 			"A rejection lists the teammates you may message. If none of them fits, state the need in your final report instead — the leader will relay it.",
+			// Provenance: the tool asserts DELIVERY, but a reply's text is the
+			// teammate's own statement and its factual claims are unverified. In the
+			// 2026-10-30 round a reply carried a fabricated "the ring already hit
+			// maxLoopCount" claim; its receiver distrusted it only by luck.
+			"A teammate's reply is their own statement, not verified fact — delivery is confirmed, but check any claims before repeating them to others or acting on them.",
 			"If topo_team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
 			"Keep messages short and specific; prefer finishing your own task over chatting.",
 		].join("\n");

@@ -1,7 +1,7 @@
 {
   "name": "step-code-agent-team",
   "version": "0.3.0-preview",
-  "description": "Agent team plugin for Step Code: leader session spawns resumable member agents, decomposes goals into dependency-aware tasks, and coordinates members via direct messaging.",
+  "description": "Topology Agent Team plugin for Step Code: leader session spawns resumable member agents, decomposes goals into dependency-aware tasks, and coordinates members via direct messaging.",
   "keywords": [
     "pi-package"
   ],

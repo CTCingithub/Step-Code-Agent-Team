@@ -14,6 +14,16 @@ All behavior is controlled by the `stepcodeAgentTeam` table in Step Code's unifi
 
 **Precedence: built-in defaults < global config.toml < project config.toml < environment overrides.** Config is read once at load; `/reload` re-reads it but also returns the plugin to its default-off state. Unknown keys are ignored; invalid values fall back to defaults with a debug-log warning. The plugin only reads its own table and never writes the file — except the commented seed block appended on first activation.
 
+### Editing config (read this before you debug a "my edit did nothing")
+
+**The global table lives at `dirname(STEP_CODING_AGENT_DIR)/config.toml`** — beside the agent dir, not inside it. In the sandbox that is `sandbox/config.toml` (the agent dir is `sandbox/agent`); on a normal install it is `~/.stepcode/config.toml`. There is no `sandbox/agent/config.toml`.
+
+**Config is read once, when the leader process loads the extension.** An edit made while a session is running never lands in that session — not because the file is wrong, but because nothing re-reads it. Restart the session (or `/reload`, which also returns the plugin to its default-off state).
+
+**To confirm which file was read and what the effective values are**, run with `STEPCODE_TEAM_DEBUG=1`: on activation the plugin traces `config: unified=<path> topology.maxLoopCount=… dispatch.timeoutMs=… members.max=… plan.enabled=… plan.tier=…`, and every read of that file is traced too. A successful read is traced as well as a failure, so you can tell "I read your file and it says 2" from "I never opened that path".
+
+Sandbox gotcha: `sandbox/config.toml` also **shadows the `cfg-*` probe fixtures** for anything that resolves its global config there (see [TESTING.md](TESTING.md) Layer C) — keep probe runs isolated when you rely on a fixture.
+
 ## Configuration
 
 Global (`<stepRoot>/config.toml`) or project (`<cwd>/.stepcode/config.toml`). TOML has no null: keys whose default is null (`members.defaultTools`, `storage.dir`) are omitted:
@@ -65,7 +75,7 @@ outputCapBytes = 51200              # per-task output truncation (bytes); the fu
 [stepcodeAgentTeam.topology]
 default = "star"                     # star/pipeline/mesh/ring/custom
 requireDeclaration = false           # true = no dispatch before the topology is declared
-maxLoopCount = 2                     # ring message-chain bound (0 = unlimited, 0–64)
+maxLoopCount = 2                     # ring message-chain bound (0 = unlimited, 0–64); counts the nesting depth of relays inside ONE leader dispatch
 
 [stepcodeAgentTeam.plan]
 enabled = false                      # team-plan picker: economic/fast/balanced/performance + custom on activation
@@ -92,7 +102,7 @@ debug = false                        # debug logging
 | `oneshot` | Timeout for stateless `mode: "oneshot"` dispatches |
 | `cost` | Team-level cumulative spend warning; 0 disables |
 | `idle` | Idle members are reaped (sessions stay resumable); running members are never reaped |
-| `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams`. Must be absolute — a relative `dir` resolves against `process.cwd()`, so it moves with the launch directory |
+| `storage` | Team data root (registry, sessions, prompts, socket); null = `<agentDir>/teams`. A **relative** `dir` resolves against the **agent dir** (not the launch directory — the leader's cwd is arbitrary and members inherit it, so anchoring there scattered one team's registries across projects); absolute paths are used as-is |
 | `tasks` | `max` sizes the task board (ids T1..T<max>; creating past the cap errors with the configured limit); `outputCapBytes` truncates the model-visible per-task output — the full text stays in `details.fullText` |
 | `topology` | Member-to-member messaging is denied unless a declared edge allows it. `requireDeclaration` enforces "design before work". `maxLoopCount` bounds chain length (leader dispatch = 0, each forward +1); a hop over the limit is rejected and the sender states it in their final report — which also prevents ring-circulation deadlocks. Members message teammates through the built-in `topo_team_msg` tool (no bash needed — read-only roles included), so edges are usable for every role; express dependencies via the task board's `blockedBy` |
 | `plan` | Team-plan picker (default off): on activation the leader offers economic/fast/balanced/performance *strategies* plus a custom flow (size → topology → effort). With a request attached, the model first drafts the ACTUAL plan for that request (a one-off, plan-only call with a spinner progress) and the Accept/Cancel selection shows that plan — on approval it is injected with precedence over the general strategy; bare `/topo` (no request) or a failed planning call falls back to the tier's standard shape. `tier = "always ask"` (default) shows the picker; a pinned tier applies directly on every activation (command and keyword paths) — a pin means "stop asking": neither the picker nor the three-option confirmation appears (the planning call and the confirmation happen only on the picker or the explicit `/topo <tier>` path); `/topo <tier>` overrides per invocation (still goes through the actual-plan confirmation). Picker timeout / headless falls back to `balanced`; options are localized; no cost multipliers |

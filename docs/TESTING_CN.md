@@ -85,7 +85,7 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase6 | 默认关闭激活 + 配置纯函数 + 模型/effort 解析 + 强制关键词迁移（剥离/上报/全旧词禁用）+ L1 否定护栏矩阵 | 零 token |
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
-| phase9 | 配置边界（storage.dir/项目级/非法回退）+ [tasks] 节校验 | 零 token |
+| phase9 | 配置边界（storage.dir——按配置绝对值、相对值解析到 agentDir 下 / 项目级 / 非法回退）+ [tasks] 节校验 | 零 token |
 | phase13 | 项目级配置（trust 门控/深合并/优先级/env/MAXDEPTH） | 零 token |
 | phase14 | 环形 loop 上限（配置面/manager 层即抛/server 层经 shim 拒绝/拓扑优先/边界放行） | 零 token |
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
@@ -97,9 +97,9 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议）+ `planConfirmDialogOpts`（TUI 无倒计时） | 零 token |
 | phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
 | phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
-| phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言 Accept 原样转发请求并注入方案指令、自定义输入 note 原样合并、空提交按原样接受、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
+| phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言选项顺序恰为 `Accept / Cancel / Other`、Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、空提交按原样接受、**输入被关闭**（Esc/超时→undefined）与 Cancel 完全同果、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
 
-**runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。
+**runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**类型门**：`sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`（paths 把四个 `@step-harness` 包映射到 `dist/*.d.ts` + typebox）对 `extensions/` 与 `test/smoke/` 必须**零错误**——自 R16（2026-10-29）补全 phase15 的 Theme 桩与 phase24 的 contextHandler 守卫后已归零。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。仓库的类型检查同样算门禁的一部分：tsc 全导入图零错误（R16 轮前为 17——phase15 的 Theme 桩与 phase24 的 context hook 读取；复现命令 `sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`）。
 
 LLM 路径探针（phase4/10/11/12）需要测试 key，位于 `sandbox/`——探针本身已跟踪入库，仅沙箱运行时状态在 .gitignore 内（见 C 层）。
 
@@ -121,10 +121,12 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | 并发上限 live / 嵌套消息死锁 |
 | phase11 | cfg-deep2 | 递归深度 2 真实链 |
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
-| probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框自定义输入路径：脚本化 RPC 客户端应答档位选单→确认框选「自定义输入…」→input，断言用户文本原样进入转发的 user 消息 |
-| probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单不出现、三选项确认框仍出现 |
+| probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框 Other 路径：脚本化 RPC 客户端应答档位选单→确认框选「Other」→input，断言用户文本原样进入转发的 user 消息。对话框按**标题**（`Topology Agent Team`）、选项按**精确标签**（`Other`）匹配——无位置兜底，选项改名或换序会让探针失败而非 silently 答成 Cancel。每个场景等待会话的 **`agent_settled`** 事件（prompt 命令自己的 response 只是 preflight 应答——rpc-mode.ts 在 `preflightResult` 里就发出了），`waitMs` 仅作安全上限，另等会话文件大小稳定后再读取 |
+| probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单与三选项确认框**均不出现**（plan-104 的 `pinnedTier` 标志同时跳过两者；显式 `/topo <档位>` 仍保留确认） |
+| probe-remaining-manual `5c` | 隔离 agentDir（plan.tier 钉档，关键词 prompt） | 钉档走**关键词**路径（命令路径是 5b）：`applyStandingTier` 与 `runTeamCommand` 的钉档分支是两条代码路径，且「对话框不出现」是负向观察——故断言两个对话框均不出现**外加**一条激活正向断言防假绿（首跑即靠该断言抓到真假绿：未应答 L2 confirm 导致插件根本没激活，仅负向断言会因错误的理由通过） |
 | probe-remaining-manual `7` | 隔离 agentDir ×2 | L1 护栏：元问题零团队动作；how-to 带主体激活且 team_create_member 真实可用 |
-| probe-remaining-manual `8` | 隔离 agentDir（agents/quickfix.md + autonomousEffort=false） | 自定义角色：frontmatter tools/effort 落到真实 spawn、成员自报白名单含 topo_team_msg |
+| probe-remaining-manual `8` | 隔离 agentDir（agents/quickfix.md + autonomousEffort=false） | 自定义角色：frontmatter tools/effort 落到真实 spawn（create 结果含 role/effort:low/tools），成员自报白名单含 topo_team_msg——注意自报那半是**LLM 行为断言**：2026-10-29 抖动过一次（失败、重跑通过），而机械的 create 结果断言两次均过，因此单次失败本身不构成产品缺陷 |
+| probe-remaining-manual `5c` | 隔离 agentDir（plan.enabled + 钉档） | 关键词路径上的钉档：档位选单与三选项确认框均不出现——外加一条「插件确实已激活」的正向断言，使「没弹框」永不会因为「什么都没发生」而通过 |
 | probe-remaining-manual `9` | 隔离 agentDir（keywords 含废弃词） | 迁移提示每会话恰好出现一次 |
 
 phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的 export 指向对应 fixture
@@ -133,12 +135,24 @@ phase10/phase11 的行为来自 agentDir 的配置，因此运行时把上面的
 
 **本地配置遮蔽**：全局 `config.toml` 位于 agentDir **旁边**（`dirname(agentDir)/config.toml`），优先级高于 fixture 的 `settings.json`。因此本地的 `sandbox/config.toml`（gitignored）会遮蔽 `sandbox/cfg-*`——其 `dispatch.maxConcurrent` 会静默取代 fixture 的值，phase10 将走 Branch A 而非 B（2026-10-25 实测假绿）。有该文件的机器上隔离探针：把 fixture 的 `settings.json` 拷进临时 agentDir 并把 `STEP_CODING_AGENT_DIR` 指过去。
 
+探针注意事项（2026-10-30 记录）：场景 7 与 8 各含一条**LLM 行为**断言——「模型调用了 `team_create_member`」与「成员自述点名 `topo_team_msg`」。两者都可能在没有任何产品缺陷的情况下抖动（模型可能先探索，或只列自己的预设工具）；两个探针现都会打印工具调用列表/成员实际回复，使失败可一次定性，7 的第二条 prompt 也因此改为指令式。此类失败请先复跑再判定为缺陷。
+
 通过标准（摘要）：并行调度均成功；任务链状态流转 pending→ready→running→done；
 oneshot 有回复且不留常驻进程；kill -9 后下一次 send 成功且记得上文；
 `STEPCODE_TEAM_COST_WARN=0.0001` 触发告警、设为 0 禁用；abort 后无孤儿进程；
 onUpdate 至少被调用一次；>50KB 输出截断且 details.fullText 含全量。另：cfg-deadlock 分支
 （phase10，`maxConcurrent=1`）须在探针窗口内（实测约 6s）无死锁完成；phase11 必须配
 `cfg-deep2` 实跑四条检查（4/4）——干净 SKIP 算失败。
+
+断言计数注记（2026-10-29 复跑）：现行探针中 phase10 两个分支各记一条检查（A 支：4 条回复全到
++ 观测并发 ≤ 2，共两条；B 支：嵌套消息完成，一条），因此旧执行记录行里的「3/3 + 2/2」是探针版本
+注记而非回归。分支通过 = `SMOKE10 DONE (all passed)` **且** `mode:` 行与目标分支一致——`mode:`
+显示另一支意味着 fixture 被遮蔽（环境假绿），不算通过。
+
+团队环境变量注记（队长跑探针时）：探针必须在卸载六个 `STEPCODE_TEAM_*` 变量的情况下运行
+（`env -u …`）。在成员进程内它们会被注入并遗传给探针自启的 `step` 子进程，该子进程里的扩展读到
+depth 1 ≥ `maxRecursionDepth` 1 而保持惰性——所有探针都会假失败。冒烟 runner 的 phase 不受此影响
+（它本身就从干净进程派生）。
 
 每轮人工沙箱演练结束后，让 agent 把过程记录到 `sandbox/logs/session-log-<日期>.md`——可粘贴的
 prompt 见沙箱 README 的「会话日志」一节（[../sandbox/README_CN.md](../sandbox/README_CN.md#会话日志)）。

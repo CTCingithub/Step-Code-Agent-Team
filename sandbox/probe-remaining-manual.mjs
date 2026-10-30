@@ -11,7 +11,7 @@
  * of these dialogs, the Esc key, the no-countdown behavior) — see
  * docs/MANUAL-TESTING(_CN).md §8–§11 and M3.
  *
- * Usage:  node sandbox/probe-remaining-manual.mjs <5a|7|8|9>
+ * Usage:  node sandbox/probe-remaining-manual.mjs <5a|5b|5c|7|8|9|all>
  * Needs:  the API key from sandbox/TEST-KEY.md (sandbox/with-test-key.sh sets it).
  * Rules:  every scenario runs in an isolated temp agentDir and from THIS
  *         process (live checks false-negative inside member processes).
@@ -20,7 +20,7 @@
  *         agentDir (the smoke runner's included) — keep each scenario's config
  *         inside its own mktemp root, and never write /tmp/config.toml.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -47,6 +47,18 @@ async function runSession(tag, agentDir, steps, answer) {
 		"--session-id", tag, "--session-dir", path.join(agentDir, "sessions"), "--approval-mode", "auto",
 	], { cwd: REPO, env: { ...process.env, STEP_CODING_AGENT_DIR: agentDir }, stdio: ["pipe", "pipe", "pipe"] });
 	const notifies = [];
+	// A prompt's turn is DONE when the host answers that prompt command with a
+	// response event ({"type":"response","command":"prompt","id":…}). Waiting on
+	// that instead of sleeping a fixed waitMs is what makes these probes
+	// trustworthy: the model routinely explores the repo first, so a fixed
+	// window used to kill the session mid-turn and the assertion then failed on
+	// timing rather than behaviour (observed 2026-10-29: probe 7 went 3/8 that
+	// day). waitMs stays as the safety cap, not the wait itself.
+	// A turn is DONE when the session emits `agent_settled`. Note the prompt
+	// command's own response is only a PREFLIGHT ACK (rpc-mode.ts emits it from
+	// preflightResult), so waiting on it resolves before the model has done
+	// anything — that was the bug that made every behavioural assertion fail.
+	let currentDone = null;
 	let buf = "";
 	child.stdout.on("data", (d) => {
 		buf += d.toString();
@@ -54,6 +66,12 @@ async function runSession(tag, agentDir, steps, answer) {
 			if (!line.trim()) continue;
 			let msg;
 			try { msg = JSON.parse(line); } catch { continue; }
+			if (msg.type === "agent_settled") {
+				const done = currentDone;
+				currentDone = null;
+				if (done) done();
+				continue;
+			}
 			if (msg.type !== "extension_ui_request") continue;
 			if (msg.method === "notify") notifies.push(String(msg.message ?? "").replace(/\n/g, " | "));
 			const a = answer?.(msg);
@@ -63,11 +81,34 @@ async function runSession(tag, agentDir, steps, answer) {
 	});
 	child.stderr.on("data", () => {});
 	for (const step of steps ?? []) {
+		const finished = new Promise((resolve) => {
+			currentDone = resolve;
+			setTimeout(resolve, step.waitMs ?? 120000); // safety cap only
+		});
 		child.stdin.write(`${JSON.stringify({ type: "prompt", message: step.message })}\n`);
-		await new Promise((r) => setTimeout(r, step.waitMs ?? 30000));
+		await finished;
+		currentDone = null;
 	}
-	const files = fs.readdirSync(path.join(agentDir, "sessions")).filter((f) => f.endsWith(".jsonl"));
-	const jsonl = files.map((f) => fs.readFileSync(path.join(agentDir, "sessions", f), "utf8")).join("\n");
+	// The host's prompt response can arrive a beat before the session file is
+	// flushed, so wait for the JSONL to stop growing before reading it — otherwise
+	// the assertions see a stale file and fail on timing (the race the
+	// event-driven wait above would otherwise introduce).
+	const sessDir = path.join(agentDir, "sessions");
+	const readSize = () => {
+		try {
+			return fs.readdirSync(sessDir).filter((f) => f.endsWith(".jsonl"))
+				.reduce((n, f) => n + fs.statSync(path.join(sessDir, f)).size, 0);
+		} catch { return -1; }
+	};
+	let last = readSize();
+	for (let i = 0; i < 40; i++) {
+		await new Promise((r) => setTimeout(r, 250));
+		const now = readSize();
+		if (now === last && now > 0) break;
+		last = now;
+	}
+	const files = fs.readdirSync(sessDir).filter((f) => f.endsWith(".jsonl"));
+	const jsonl = files.map((f) => fs.readFileSync(path.join(sessDir, f), "utf8")).join("\n");
 	child.kill("SIGKILL");
 	return { notifies, jsonl };
 }
@@ -90,6 +131,21 @@ const ACTIVATION_CFG = [
 const PLAN_CFG = ACTIVATION_CFG + "[stepcodeAgentTeam.plan]\nenabled = true\n\n[stepcodeAgentTeam.dispatch]\ntimeoutMs = 120000\n";
 
 let pass = false;
+if (scenario === "all") {
+	// One command for the whole suite. Each scenario still runs in its own
+	// child process — and therefore its own mktemp agentDir — so one failure
+	// never hides the others' verdicts, and the per-scenario output stays
+	// attributable.
+	const SCENARIOS = ["5a", "5b", "5c", "7", "8", "9"];
+	let failed = 0;
+	for (const tag of SCENARIOS) {
+		console.log(`[all] ---- ${tag} ----`);
+		const r = spawnSync(process.execPath, [import.meta.filename, tag], { stdio: "inherit" });
+		if (r.status !== 0) failed++;
+	}
+	console.log(`[all] ${SCENARIOS.length - failed}/${SCENARIOS.length} scenarios passed`);
+	process.exit(failed === 0 ? 0 : 1);
+}
 if (scenario === "5a") {
 	// Tier picker -> spinner/plan -> three-option confirm -> custom input ->
 	// the user's text rides along with the forwarded request verbatim.
@@ -100,8 +156,11 @@ if (scenario === "5a") {
 			const pick = (msg.options ?? []).find((o) => o.startsWith("均衡")) ?? (msg.options ?? [])[0];
 			return { value: pick };
 		}
-		if (msg.method === "select" && msg.title === "智能体团队") {
-			return { value: (msg.options ?? []).find((o) => o.includes("自定义输入")) ?? (msg.options ?? [])[1] };
+		if (msg.method === "select" && msg.title === "Topology Agent Team") {
+			// Accept / Cancel / Other — answer the third option. No positional
+			// fallback: a missing label must fail this probe loudly instead of
+			// silently answering Cancel (index 1 in this order).
+			return { value: (msg.options ?? []).find((o) => o === "Other") };
 		}
 		if (msg.method === "input") return { value: NOTE };
 		return null;
@@ -123,16 +182,50 @@ if (scenario === "5a") {
 	const r = await runSession("probe5b", a.agentDir, [{ message: "/topo 统计这个项目的源文件数量并汇报", waitMs: 90000 }], (msg) => {
 		if (msg.method === "select") {
 			seen.push(msg.title);
-			if (msg.title === "智能体团队") return { value: (msg.options ?? [])[0] };
+			if (msg.title === "Topology Agent Team") return { value: (msg.options ?? [])[0] };
 		}
 		return null;
 	});
 	const pickerSeen = seen.includes("选择团队方案");
-	const confirmSeen = seen.includes("智能体团队");
+	const confirmSeen = seen.includes("Topology Agent Team");
 	pass = !pickerSeen && !confirmSeen;
 	console.log(`[5b] picker dialog appeared: ${pickerSeen} (must be false)`);
 	console.log(`[5b] confirmation dialog appeared: ${confirmSeen} (must be false — a pinned tier asks nothing)`);
 	console.log(`[5b] VERDICT: ${pass ? "PASS" : "FAIL"}`);
+	fs.rmSync(a.root, { recursive: true, force: true });
+} else if (scenario === "5c") {
+	// Pinned tier on the KEYWORD path (the command path is 5b). applyStandingTier
+	// is a different code path from runTeamCommand's pinned branch, and "no dialog
+	// appears" is a negative UI observation — so this used to be a manual
+	// spot-check. Negative assertions on BOTH dialogs, plus a positive assertion
+	// that the plugin really activated (otherwise "no dialog" would pass simply
+	// because nothing happened at all — a false green).
+	const a = makeAgent("probe5c", PLAN_CFG.replace('[stepcodeAgentTeam.plan]\nenabled = true', '[stepcodeAgentTeam.plan]\nenabled = true\ntier = "fast"'));
+	const seen = [];
+	const r = await runSession(
+		"probe5c",
+		a.agentDir,
+		[{ message: "我想用智能体小队统计这个项目的源文件数量并汇报", waitMs: 120000 }],
+		(msg) => {
+			if (msg.method === "select") {
+				seen.push(msg.title);
+				return { value: (msg.options ?? [])[0] };
+			}
+			// The keyword path opens the L2 confirm first (confirmBeforeActivate
+			// is on by default); answer it or the plugin never activates and the
+			// negative assertions below would pass for the wrong reason.
+			if (msg.method === "confirm") return { confirmed: true };
+			return null;
+		},
+	);
+	const activated = r.notifies.some((n) => n.includes("activated"));
+	const pickerSeen = seen.includes("选择团队方案");
+	const confirmSeen = seen.includes("Topology Agent Team");
+	pass = activated && !pickerSeen && !confirmSeen;
+	console.log(`[5c] activated (guard against a false green): ${activated}`);
+	console.log(`[5c] picker dialog appeared: ${pickerSeen} (must be false)`);
+	console.log(`[5c] confirmation dialog appeared: ${confirmSeen} (must be false — a pinned tier asks nothing)`);
+	console.log(`[5c] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else if (scenario === "7") {
 	// L1 guard: a pure meta question stays suppressed; a how-to with a body
@@ -148,13 +241,30 @@ if (scenario === "5a") {
 		b.agentDir,
 		[
 			{ message: "如何用智能体小队并行审查这个仓库？", waitMs: 30000 },
-			{ message: "创建一个 scout 角色的成员，名字叫 probe7", waitMs: 60000 },
+			// The window must cover a model that explores the repo first (it
+			// routinely does: list_directory/find_files/read_file… before the
+			// tool call). At 60s the turn was still running when the session was
+			// killed, so the assertion failed on timing rather than behaviour —
+			// observed 2026-10-29 (5 failures, 3 passes across the day).
+			// Directive on purpose: the plain "create a member" phrasing lets the model
+// answer with a plan instead of acting (observed twice on 2026-10-30 — it
+// explored the repo and produced a full review plan, so no tool call
+// landed). The probe verifies the activation path, not the model's
+// willingness, so say what to do and forbid the detour.
+			{ message: "立即执行：调用 team_create_member 创建一个 scout 角色的成员，名字叫 probe7。不要先探索仓库、不要输出方案，直接调用工具。", waitMs: 150000 },
 		],
 		(msg) => (msg.method === "confirm" ? { confirmed: true } : null),
 	);
 	const actOk = act.notifies.some((n) => n.includes("activated"));
 	const created = parts(act.jsonl).some((p) => p.type === "toolCall" && p.name === "team_create_member");
 	console.log(`[7-activate] activated=${actOk} team_create_member called: ${created} :: ${actOk && created ? "PASS" : "FAIL"}`);
+	// Diagnosability: "the model called the tool" is an LLM-behaviour assertion.
+	// Dump the tool calls and the last assistant text so a failure can be told
+	// apart from a real regression (tools never released) without a re-run.
+	const actCalls = parts(act.jsonl).filter((p) => p.type === "toolCall").map((p) => p.name);
+	const actLast = parts(act.jsonl).filter((p) => p.type === "text").map((p) => p.text ?? "").filter(Boolean).pop() ?? "";
+	console.log(`[7-activate] tool calls seen: ${JSON.stringify(actCalls)}`);
+	console.log(`[7-activate] last assistant text (diagnosis): ${actLast.replace(/\s+/g, " ").slice(0, 300)}`);
 	pass = supOk && actOk && created;
 	fs.rmSync(a.root, { recursive: true, force: true });
 	fs.rmSync(b.root, { recursive: true, force: true });
@@ -176,6 +286,12 @@ if (scenario === "5a") {
 	pass = createOk && replyOk;
 	console.log(`[8] create result shows role+effort:low+frontmatter tools: ${createOk}`);
 	console.log(`[8] member self-report lists the whitelist + topo_team_msg: ${replyOk}`);
+	// Diagnosability: the self-report half is an LLM-behaviour assertion (it
+	// flaked on 2026-10-29 and passed on re-run while the mechanical half above
+	// passed both times). Print the member's actual reply so a failure can be
+	// classified without re-running the whole scenario.
+	const lastReply = parts(r.jsonl).filter((p) => p.type === "text").map((p) => p.text ?? "").filter(Boolean).pop() ?? "";
+	console.log(`[8] member reply (diagnosis): ${lastReply.replace(/\s+/g, " ").slice(0, 300)}`);
 	console.log(`[8] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else if (scenario === "9") {
@@ -199,7 +315,7 @@ if (scenario === "5a") {
 	console.log(`[9] VERDICT: ${pass ? "PASS" : "FAIL"}`);
 	fs.rmSync(a.root, { recursive: true, force: true });
 } else {
-	console.error("usage: node sandbox/probe-remaining-manual.mjs <5a|5b|7|8|9>");
+	console.error("usage: node sandbox/probe-remaining-manual.mjs <5a|5b|5c|7|8|9|all>");
 	process.exit(2);
 }
 process.exit(pass ? 0 : 1);

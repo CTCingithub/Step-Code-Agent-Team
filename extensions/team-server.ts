@@ -144,11 +144,21 @@ export class TeamServer {
 				// Topology enforcement: A may message B only when edge A→B exists.
 				if (!manager.mayMessage(from, req.to)) {
 					const allowed = manager.outboundTargets(from);
+					// Name the shape and frame the denial as the guardrail it is. A bare
+					// "Allowed teammates: (none)" reads as a fault to a member that expected
+					// to reach a teammate: in the 2026-10-30 round a reviewer reported it as
+					// an anomaly when "star" simply has no direct edges at all.
+					const shape = manager.getTopology().shape;
+					const shapeNote =
+						shape === "star"
+							? 'under "star" there is no direct member messaging at all — everything routes through the leader'
+							: `under "${shape}" only the declared edges exist`;
 					this.reply(conn, {
 						ok: false,
-						error: `topology denies ${from} → ${req.to}. Allowed teammates: ${
-							allowed.length > 0 ? allowed.join(", ") : "(none — report it in your final report)"
-						}.`,
+						error:
+							`topology denies ${from} → ${req.to}. Allowed teammates: ${
+								allowed.length > 0 ? allowed.join(", ") : "(none — report it in your final report)"
+							}. This is the declared topology ("${shape}") enforced as designed — a guardrail, not a failure (${shapeNote}); do not report it as an anomaly. Work within your allowed edges, or state the need in your final report and the leader will relay it.`,
 					});
 					return;
 				}

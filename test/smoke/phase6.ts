@@ -21,6 +21,14 @@ import { TEAM_TOOL_NAMES, activate, detectKeyword, detectSlashCommand, initActiv
 
 const LEADER_MODEL = "step-5-preview";
 
+// The conversation model is a composite "provider/id" string, while
+// models.available holds spawnable ids. A member whose preset pins no model
+// (the bundled worker preset) used to spawn with the composite string — an id
+// the team's own validation rejects — and never settled, so every dispatch
+// died on a settle timeout with zero usage. The fallback must degrade to the
+// pool instead; this constant is the regression guard.
+const COMPOSITE_LEADER_MODEL = "step/step-5-preview";
+
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		const log = (...a: unknown[]) => console.error("[smoke6]", ...a);
@@ -253,6 +261,14 @@ export default function (pi: ExtensionAPI) {
 					const r2 = await manager.createMember({ name: "res2", role: "worker", effort: "low" }, LEADER_MODEL);
 					check("resolution: explicit effort honored", r2.member.effort === "low", `got ${r2.member.effort}`);
 					await manager.disband("res2");
+					const rcOff = await manager.createMember({ name: "res-cmp-off", role: "worker" }, COMPOSITE_LEADER_MODEL);
+					check(
+						"resolution: off + composite conversation model → spawnable pool model",
+						rcOff.member.model !== COMPOSITE_LEADER_MODEL &&
+							(rcOff.member.model === undefined || cfg.models.available.includes(rcOff.member.model)),
+						`got ${rcOff.member.model}`,
+					);
+					await manager.disband("res-cmp-off");
 				} else {
 					const r1 = await manager.createMember({ name: "res1", role: "worker", model: "step-5-preview" }, LEADER_MODEL);
 					check("resolution: on → explicit available model", r1.member.model === "step-5-preview", `got ${r1.member.model}`);
@@ -271,6 +287,14 @@ export default function (pi: ExtensionAPI) {
 					check("resolution: on + no model → conversation model", r4.member.model === LEADER_MODEL, `got ${r4.member.model}`);
 					check("resolution: on + no effort → preset medium", r4.member.effort === "medium", `got ${r4.member.effort}`);
 					await manager.disband("res4");
+					const rcOn = await manager.createMember({ name: "res-cmp-on", role: "worker" }, COMPOSITE_LEADER_MODEL);
+					check(
+						"resolution: on + composite conversation model → spawnable pool model",
+						rcOn.member.model !== COMPOSITE_LEADER_MODEL &&
+							(rcOn.member.model === undefined || cfg.models.available.includes(rcOn.member.model)),
+						`got ${rcOn.member.model}`,
+					);
+					await manager.disband("res-cmp-on");
 				}
 			} else {
 				check("disabled config: activate refused", activate("probe") === false);
