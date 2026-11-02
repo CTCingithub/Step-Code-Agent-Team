@@ -421,6 +421,10 @@ function renderSeed(sections: SeedSection[], version: string, first: boolean): s
 		`# "${DEFAULT_SENTINEL}" means "use the built-in default" — such a key keeps following the`,
 		"# default even when a newer version changes it. Omitting a key does the same.",
 		"# Null-defaulted keys (members.defaultTools, storage.dir) show an example; omit for null.",
+		"#",
+		"# KEEP THE QUOTES. A bare DEFAULT (no quotes) is not a TOML scalar: step's reader",
+		"# then drops the WHOLE table, silently taking every real setting in it — and the",
+		"# plugin cannot see it happen, because the table is gone before our code runs.",
 	];
 	for (const section of sections) {
 		const header = section.name ? `# [stepcodeAgentTeam.${section.name}] (v${version})` : `# [stepcodeAgentTeam] (v${version})`;

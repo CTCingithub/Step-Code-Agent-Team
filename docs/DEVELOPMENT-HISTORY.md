@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30（plan-116，config.toml 初始化轮：DEFAULT 标记与升级增量；此前为 plan-115）。
+> 最近更新：2026-10-30（plan-117，DEFAULT 合法性实证与 sandbox 配置初始化；此前为 plan-116）。
 
 ## 总览
 
@@ -943,3 +943,33 @@
 **验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误。门禁规模声明已从 25 同步到 26（8 处，含 standalone 清单补 31）。
 
 **仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
+### 79. DEFAULT 合法性实证与 sandbox 配置初始化轮（plan-117）
+
+**用户 prompt**：「[团队方案·均衡] …勘察员A(0.6)/规划员B(0.7)/执行员C(0.8)/审查员D(0.7)，拓扑 custom（勘察→规划→执行→审查线性，审查可向执行回派）…DEFAULT字段不合法的话，请修改为合适的字段，并重新全面检查。此外，请给我把sandbox/config.toml也初始化字段」。
+
+**组建与执行降级**：建 scout-a / planner-b / worker-c / reviewer-d 四成员（`model: step-5-preview`，effort 按 0.6/0.7/0.8 映射为 low/medium/high），设 custom 四边线性拓扑，建 T50–T55 任务板。T1 派发即 settle 超时（本会话第 23 次），T1–T5 由 Leader 亲自执行，范围未缩。
+
+**T1 实证勘察（不靠推理）**：对 `defaultConfig()` 的 **27 个配置键** × **4 种书写形态** × 各配置层逐一写 fixture，且**每个用例都带一个真实兄弟键**——兄弟键是否生效直接说明"整表是否被丢弃"。
+
+| 形态 | 该键 | 兄弟键 | 判定 |
+|---|---|---|---|
+| `max = "DEFAULT"` | 回到默认 | **生效** | ✅ 合法且正确 |
+| `max = DEFAULT`（裸） | 回到默认 | **被丢弃** | ❌ 整表静默丢失 |
+| `max = "default"`（小写） | 变成字面量 `"default"` | 生效 | ⚠️ 不是哨兵 |
+| `max = "SENTINEL"` | 类型校验回落默认 | 生效 | ⚠️ 普通字面量 |
+
+**结论：字段合法，保留。** 带引号的 `"DEFAULT"` 对全部 27 个键（含 null 默认键、数组键、布尔、数字、字符串、嵌套 `presets.effort`）都正确。不需要改成别的字段。
+
+**但发现一个我们无法处置的危害形态**：裸 `DEFAULT` 不是合法 TOML 标量，step 的读取器会**静默丢弃整表**，且损害发生在我们的代码之前——`mergeSection` 根本看不到该表，无法识别、无法回落、无法警告；而 `logWarnings()`（config.ts:841）是 debug-only，普通用户也看不到。两点叠加意味着**既无法检测也无法警告**。因此加固只能走"预防"路线。
+
+**T3 实施**：
+- 种子块头部新增 `KEEP THE QUOTES` 三段说明，把后果写清（整表被丢弃、插件看不见、告警不可见）；
+- phase31 新增两条守门断言：**块中每条 DEFAULT 行都带引号**（这样取消注释不可能产生裸形态）、块内含该警告；
+- CONFIGURATION(_CN) 把 `"DEFAULT"` 记为**保留 token**，并写明小写 `"default"` 不是标记、会被当字面值（`storage.dir = "default"` 会悄悄把团队数据送到名为 `default` 的目录）；
+- **sandbox/config.toml 已初始化**：补齐缺失的三个 v0.4.x 段 `searcher`/`encryption`/`records`（默认值活动键，searcher 段附注释），step 自己的键（theme/defaultProvider/defaultModel/mcp_import/recentModels）与用户已设的每个值**逐字节未动**（diff 只有新增行）。
+
+**T4 复查**：先以一次性绝对路径断言对**真实** sandbox/config.toml 实测 10 条（三段齐全、step 键完好、加载不回落、searcher 未被钉值、encryption/records 正确、用户原值 preserved、presets.effort 完好）全部通过；随后**把这些断言从提交的探针中移除**，因为该文件被 gitignore、在新克隆上不存在，留著会让门禁依赖环境。改为可移植的 fixture 断言（活动配置携带三个 v0.4.x 段能正确加载）。另在门禁首跑中抓到自己引入的一处语法错误（字符串误用反引号收尾）并立即修复。
+
+**验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误；phase31 扩到 **45 条断言全部通过**。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key（现在 `sandbox/config.toml` 里已有 `searchApiKey` 空位可填）；v0.4.x 发版待用户同意。

@@ -27,6 +27,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import {
+	agentDir,
 	DEFAULT_SENTINEL,
 	defaultConfig,
 	loadConfig,
@@ -109,6 +110,13 @@ export default function (pi: ExtensionAPI) {
 			}
 			check("seed: every role in presets.effort is documented", Object.keys(d.presets.effort).every((r) => text.includes(`${r} = "${DEFAULT_SENTINEL}"`)));
 			check("seed: the searcher keys are commented like the rest", text.split("\n").filter((l) => l.includes("searchUrl =")).every((l) => l.trim().startsWith("#")));
+			// The one hazard the plugin cannot detect: a bare `DEFAULT` is not a TOML
+			// scalar, so step's reader drops the whole table before our code ever sees
+			// it. Every DEFAULT line in the block must therefore be quoted, so that
+			// uncommenting one can never produce the bare form.
+			const defaultLines = text.split("\n").filter((l) => /= "DEFAULT"/.test(l));
+			check("seed: every DEFAULT line is quoted", defaultLines.length > 0 && defaultLines.every((l) => new RegExp(`= "${DEFAULT_SENTINEL}"`).test(l)), defaultLines.filter((l) => !new RegExp(`= "${DEFAULT_SENTINEL}"`).test(l)).slice(0, 2).join(" | "));
+			check("seed: the block warns about the bare form", text.includes("KEEP THE QUOTES"));
 
 			// ---- 3. DEFAULT means "use the built-in default" ----
 			const a3 = mkAgent();
@@ -220,6 +228,40 @@ export default function (pi: ExtensionAPI) {
 			check("seed: the other tables are still offered alongside it", afterActive.includes("[stepcodeAgentTeam.searcher] (v"));
 			resetConfigCache();
 			check("seed: the user's active value survives the seeding", loadConfig({ agentDir: a5 }).members.max === 3, String(loadConfig({ agentDir: a5 }).members.max));
+
+			// ---- 7. an ACTIVE config carrying the v0.4.x sections loads cleanly ----
+			// sandbox/config.toml is a hand-maintained active config (not the
+			// commented reference block), so this is the shape a real session
+			// presents. It is a fixture rather than that file because the sandbox
+			// config is gitignored and absent on a fresh clone — asserting on it
+			// would make the gate environment-dependent.
+			const a7 = mkAgent();
+			fs.writeFileSync(
+				cfgOf(a7),
+				[
+					"theme = \"dark\"",
+					"",
+					"[stepcodeAgentTeam.searcher]",
+					'searchUrl = ""',
+					'searchApiKey = ""',
+					'fetchUrl = ""',
+					'fetchApiKey = ""',
+					"",
+					"[stepcodeAgentTeam.encryption]",
+					"enabled = true",
+					"",
+					"[stepcodeAgentTeam.records]",
+					"enabled = true",
+					'dir = "records"',
+				].join("\n"),
+			);
+			resetConfigCache();
+			const c7 = loadConfig({ agentDir: a7 });
+			check("active config: the searcher section parses and stays at its defaults", c7.searcher.searchUrl === "" && c7.searcher.fetchApiKey === "", JSON.stringify(c7.searcher));
+			check("active config: encryption reads true", c7.encryption.enabled === true, String(c7.encryption.enabled));
+			check("active config: records read enabled with the default dir", c7.records.enabled === true && c7.records.dir === "records", `${c7.records.enabled}/${c7.records.dir}`);
+			check("active config: an unrelated top-level key is not mistaken for ours", c7.debug === d.debug, String(c7.debug));
+			resetConfigCache();
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE31 DONE (all passed)" : `SMOKE31 DONE (${failed}/${results.length} failed)`);
