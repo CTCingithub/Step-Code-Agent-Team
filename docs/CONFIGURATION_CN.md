@@ -89,10 +89,15 @@ reviewer = "high"
 searcher = "medium"                  # searcher 角色（v0.4.0 新增）
 
 [stepcodeAgentTeam.searcher]           # searcher 角色的检索/抓取端点与凭证（v0.4.0 新增）
-searchUrl = ""                        # 空 = stepfun 自带（宿主 search_web 的凭证解析）
-searchApiKey = ""                     # 空 = STEPCODE_SEARCH_API_KEY 或 step login
-fetchUrl = ""                         # 空 = 直连目标 URL 的普通 HTTP（无认证）
-fetchApiKey = ""                      # 空 = 不带 Authorization 头
+searchUrl = ""                        # 空 = 内置默认（DeepSeek 的 /v1/tools/search）
+searchApiKey = ""                     # 空 = 环境变量 DEEPSEEK_API_KEY
+fetchUrl = ""                         # 空 = 内置默认（DeepSeek 的 /v1/tools/fetch）
+fetchApiKey = ""                      # 空 = 复用 searchApiKey
+#
+# 这四个键就是重点：searcher 角色**不绑定任何厂家**。把 searchUrl/fetchUrl 指向
+# 任何遵循该脚本 JSON 契约的端点（{query,count,need_content} → {results}；
+# {url} → {title,content}）并在此配上对应密钥即可。队长会把它们以
+# STEPCODE_TOPO_SEARCH_URL / _SEARCH_KEY / _FETCH_URL / _FETCH_KEY 注入成员进程。
 
 [stepcodeAgentTeam.encryption]         # 团队注册表的落盘加密（v0.4.0 新增，默认开）
 enabled = true                        # AES-256-GCM；密钥在 .topo/team.key（0600）
@@ -164,7 +169,7 @@ debug = false                        # 调试日志
 | `STEPCODE_TEAM_COST_WARN=<usd>` | 覆盖 `cost.warnThreshold`（非法值忽略） |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | 覆盖 `members.maxRecursionDepth`（1–4，非法值忽略）；队长按生效值注入子成员进程 |
 | `STEPCODE_TEAM_SOCK` | 由队长自动注入成员进程，指向团队服务 socket（无需手动设置） |
-| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` | 由队长在 searcher 配置非空时注入成员进程（searcher 角色按名取用；见 `docs/ROLES_CN.md`） |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` / `STEPCODE_TOPO_SEARCH_KEY` | 由队长按 `[stepcodeAgentTeam.searcher]` 注入成员进程（searcher 角色按名取用；见 `docs/ROLES_CN.md`）。仅在直接测 `bin/topo-search.mjs` 时才需要手工设置 |
 | `STEPCODE_SEARCH_API_KEY` | searcher 的 `searchApiKey` 非空时由队长注入；也是宿主 `search_web` 自带的凭证键 |
 
 ## 说明

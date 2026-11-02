@@ -126,6 +126,7 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | 并发上限 live / 嵌套消息死锁 |
 | phase11 | cfg-deep2 | 递归深度 2 真实链 |
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
+| probe-searcher | 沙箱配置的 `[stepcodeAgentTeam.searcher]`（需真实 key） | **真实** search 与 fetch——与 hermetic 覆盖同一契约的 phase28 对应的 Layer-C 版本。端点与密钥从**配置文件**读取（不是某厂家的 key 文件），经与队长注入成员完全相同的 `STEPCODE_TOPO_*` 变量传给脚本，然后断言：结果非空且每条带 url、`need_content` 返回正文、fetch 返回标题与 Markdown、抓取真实项目内容可匹配、批量扇出逐行成功。探针在开头声明本次计费调用上限（最多 6 次）；未配置 key 时 exit 2 并打印应添加的配置（零调用）；支持 `TOPO_PROBE_MAX_CALLS=0` 只做配置干跑。**不计入零 token 门**——每次成功调用都由服务方计费 |
 | probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框 Other 路径：脚本化 RPC 客户端应答档位选单→确认框选「Other」→input，断言用户文本原样进入转发的 user 消息。对话框按**标题**（`Topology Agent Team`）、选项按**精确标签**（`Other`）匹配——无位置兜底，选项改名或换序会让探针失败而非 silently 答成 Cancel。每个场景等待会话的 **`agent_settled`** 事件（prompt 命令自己的 response 只是 preflight 应答——rpc-mode.ts 在 `preflightResult` 里就发出了），`waitMs` 仅作安全上限，另等会话文件大小稳定后再读取 |
 | probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单与三选项确认框**均不出现**（plan-104 的 `pinnedTier` 标志同时跳过两者；显式 `/topo <档位>` 仍保留确认） |
 | probe-remaining-manual `5c` | 隔离 agentDir（plan.tier 钉档，关键词 prompt） | 钉档走**关键词**路径（命令路径是 5b）：`applyStandingTier` 与 `runTeamCommand` 的钉档分支是两条代码路径，且「对话框不出现」是负向观察——故断言两个对话框均不出现**外加**一条激活正向断言防假绿（首跑即靠该断言抓到真假绿：未应答 L2 confirm 导致插件根本没激活，仅负向断言会因错误的理由通过） |

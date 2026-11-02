@@ -89,10 +89,16 @@ reviewer = "high"
 searcher = "medium"                  # the searcher role (added in v0.4.0)
 
 [stepcodeAgentTeam.searcher]           # endpoints/credentials for the searcher role (added in v0.4.0)
-searchUrl = ""                        # empty = the stepfun default (host search_web credential resolution)
-searchApiKey = ""                     # empty = STEPCODE_SEARCH_API_KEY / step login
-fetchUrl = ""                         # empty = plain unauthenticated request to the target URL
-fetchApiKey = ""                      # empty = no Authorization header
+searchUrl = ""                        # empty = the built-in default (DeepSeek's /v1/tools/search)
+searchApiKey = ""                     # empty = DEEPSEEK_API_KEY from the environment
+fetchUrl = ""                         # empty = the built-in default (DeepSeek's /v1/tools/fetch)
+fetchApiKey = ""                      # empty = the search key
+#
+# These four keys are the whole point: the searcher role is NOT tied to one
+# provider. Point searchUrl/fetchUrl at any endpoint that speaks the script's
+# JSON contract ({query,count,need_content} → {results}; {url} → {title,content})
+# and set the matching key here. The leader injects them into member processes
+# as STEPCODE_TOPO_SEARCH_URL / _SEARCH_KEY / _FETCH_URL / _FETCH_KEY.
 
 [stepcodeAgentTeam.encryption]         # at-rest encryption of the team registry (added in v0.4.0, on by default)
 enabled = true                        # AES-256-GCM; key in .topo/team.key (0600)
@@ -179,7 +185,7 @@ Whether it is encrypted follows YOUR option: `encryption.enabled` with a key ava
 | `STEPCODE_TEAM_COST_WARN=<usd>` | Overrides `cost.warnThreshold` (invalid values ignored) |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | Overrides `members.maxRecursionDepth` (1–4; invalid values ignored); the leader injects the effective value into sub-member processes |
 | `STEPCODE_TEAM_SOCK` | Injected automatically by the leader into member processes, pointing at the team service socket (no manual setup needed) |
-| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` | Injected automatically by the leader into member processes when the searcher config is non-empty (the searcher role reads them by name; see `docs/ROLES.md`) |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` / `STEPCODE_TOPO_SEARCH_KEY` | Injected automatically by the leader into member processes from `[stepcodeAgentTeam.searcher]` (the searcher role reads them by name; see `docs/ROLES.md`). Set them by hand only to test `bin/topo-search.mjs` directly |
 | `STEPCODE_SEARCH_API_KEY` | Injected by the leader when the searcher `searchApiKey` is set; also the host `search_web` tool's own credential key |
 
 ## Notes

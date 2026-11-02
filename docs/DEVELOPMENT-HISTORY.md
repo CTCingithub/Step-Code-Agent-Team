@@ -853,3 +853,23 @@
 **验证**：零 token 全量门全绿（25 phase + manifest + 7 live + orphan-check）；tsc 全导入图零错误；live 探针 5a/5b/5c/7/8/9 全部 PASS（5a 抖动一次、复跑通过）。
 
 **遗留**：① 脚本竞速未实际发生（派发故障），`bin/topo-search-b.mjs` 未写——契约中 B 的差异化项（批量已有、`--stdin-jsonl` 已实现；令牌桶与退避已在 A 中实现）大部分已被 A 覆盖，剩余差异是 stderr 可观测细节，价值有限；② 协作记录的拓扑只记终态（见上）；③ 宿主会话 JSONL 仍未覆盖加密（需宿主侧 mode/umask，已在安全评估中立项）；④ 派发机制间歇性退化根因仍未定位。
+### 75. searcher 实测方案：配置驱动的真实 search/fetch（plan-113）
+
+**用户 prompt**：「请检查并调整测试方案，我希望在sandbox测试searcher功能时，使用我的deepseek api key实现search和fetch」→ 修正为「我的要求是searcher使用的key是在配置文件中设置的，不局限于任何一家厂家」。
+
+**思路**：用户的修正推翻了最初方向（原打算把 key 放进 `sandbox/TEST-KEY.md` 这类厂家 key 文件）。正确设计是：端点与密钥一律来自 `[stepcodeAgentTeam.searcher]` 配置文件，沙箱实测探针读该配置并经**与队长注入成员完全相同**的 `STEPCODE_TOPO_*` 变量驱动脚本——这样测的就是成员真正走的那条路，且不绑定任何厂家。
+
+**实现**：
+- **`sandbox/probe-searcher.mjs`（新，Layer C，会计费）**：读 `sandbox/config.toml` 的 `[stepcodeAgentTeam.searcher]` 表（自写的极简 TOML 段解析：去引号、剥行内注释、未知键报告而非静默忽略），注入为 `STEPCODE_TOPO_*` 后跑真实 search（含 `need_content`）、两次 fetch（一为恒定页面，一为本项目 README 并对内容断言）、batch 扇出。**开头声明本次计费调用上限（最多 6 次）**；未配置 key 时 exit 2 并打印应添加的配置且**零调用**；`TOPO_PROBE_MAX_CALLS=0` 只做配置干跑。
+- **脚本加固（`bin/topo-search.mjs`）**：① `resolveKey` 的文档注释重写为"配置注入键优先 → `DEEPSEEK_API_KEY` 仅为默认端点的便捷回退"，明确 key 的正路是配置；② 响应信封不匹配时**不再静默返回空结果**——`meta.shape` 报告实际键名，否则换个厂家的端点会被误读成"没搜到"而白跑一轮。
+- **文档**：TESTING(_CN) Layer C 表加 `probe-searcher` 行；sandbox/README(_CN) 新增「searcher 实测（会计费）」专节（配置怎么写、怎么跑、计费与零调用语义、如何端到端测角色）；CONFIGURATION(_CN) 的 searcher 段重写为"配置驱动、厂家无关"，并补明四个键与脚本 JSON 契约的对应；TEST-KEY.md 行说明改为"searcher 自己的 key 应写在配置里，那才是与厂家无关的正路"。
+
+**验证（无真实 key 下的三条路径）**：
+1. 未配置 key → exit 2、打印应添加的配置、**零调用**（不计费）
+2. 临时假 key → 全链路走通：配置文件 → 探针读取 → `STEPCODE_TOPO_*` 注入 → 脚本 → 真实端点 → **401 干净失败，`attempts=1` 不重试**（失败不计费），断言如预期 FAIL；测后配置已还原
+3. `TOPO_PROBE_MAX_CALLS=0` → 只打印配置，零调用
+4. 另用独立 node 脚本复现确认 `process.execPath` 在 step RPC 会话里是 bun 编译的 step 而非 node（探针因此显式解析真实 node）
+
+**门禁**：全量零 token 门全绿（25 phase + manifest + 7 live + orphan-check）；tsc 零错误；phase28 复跑通过（脚本加固未改契约）。
+
+**待用户执行**：把真实 key 写进 `sandbox/config.toml` 的 `[stepcodeAgentTeam.searcher]`，然后 `node sandbox/probe-searcher.mjs`——届时 6 条断言应全 PASS。**该文件已 gitignored，key 不会入库。**

@@ -49,10 +49,18 @@ function envInt(name, fallback) {
 	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/** Never printed, never written: the only thing that leaves here is whether it existed. */
+/**
+ * The credential, in the order the plugin's config makes available:
+ *   1. the per-kind key the leader injects from `[stepcodeAgentTeam.searcher]`
+ *      (`STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_TOPO_FETCH_KEY`) — this is the
+ *      documented, vendor-neutral path and the one the config file drives;
+ *   2. `DEEPSEEK_API_KEY`, a convenience for the DEFAULT endpoint only. It is
+ *      a fallback, never a requirement: point `searchUrl`/`fetchUrl` at any
+ *      provider that speaks this script's JSON contract and set the matching
+ *      key in the config instead.
+ * The key is never printed, never written, and never reaches stdout.
+ */
 function resolveKey(kind) {
-	// A configured fetch key wins for fetch; otherwise the DeepSeek key serves
-	// both, because the two endpoints share one account and one Bearer token.
 	const configured = kind === "fetch" ? env("STEPCODE_TOPO_FETCH_KEY") : env("STEPCODE_TOPO_SEARCH_KEY");
 	return configured || env("DEEPSEEK_API_KEY");
 }
@@ -141,7 +149,6 @@ async function callApi(kind, payload, opts) {
 	const key = resolveKey(kind);
 	const endpoint = kind === "search" ? `${base}/v1/tools/search` : `${base}/v1/tools/fetch`;
 	const meta = { endpoint: process.env[kind === "fetch" ? "STEPCODE_TOPO_FETCH_URL" : "STEPCODE_TOPO_SEARCH_URL"] ? "configured" : "default", attempts: 0, ms: 0, truncated: false };
-
 	if (!key) {
 		// A missing credential is the caller's setup problem, not a failed
 		// request — it must not be mistaken for (or retried like) an API error.
@@ -206,6 +213,12 @@ async function callApi(kind, payload, opts) {
 			}
 			if (kind === "search") {
 				const results = Array.isArray(body?.results) ? body.results : [];
+				// A provider that answers with a different envelope must not look
+				// like "no results" — that is how a mis-pointed endpoint wastes a
+				// whole round before anyone notices. Surface the shape instead.
+				if (!Array.isArray(body?.results)) {
+					meta.shape = `unrecognised response envelope (keys: ${Object.keys(body ?? {}).join(", ") || "none"})`;
+				}
 				return { ok: true, kind, data: { results, needContent: Boolean(payload.need_content) }, meta };
 			}
 			return { ok: true, kind, data: { title: body?.title ?? "", content: body?.content ?? "" }, meta };
