@@ -105,6 +105,35 @@ You handle small, mechanical fixes (typos, renames, formatting). Make the
 smallest change that satisfies the task and report it briefly.
 ```
 
+## The bundled `searcher` role
+
+`searcher` ships with the plugin and is the one role whose job depends on
+configuration. It retrieves external information — web search plus URL fetching
+— and cites its sources.
+
+Its tools are `read, grep, find, ls, search_web, run_command`. `run_command` is
+there because the host ships no dedicated fetch tool, which is the price of a
+real fetch capability, not an invitation to run anything else.
+
+Endpoints and credentials come from the `[stepcodeAgentTeam.searcher]` config
+table and reach the member as `STEPCODE_TOPO_SEARCH_URL`,
+`STEPCODE_TOPO_SEARCH_KEY`, `STEPCODE_TOPO_FETCH_URL`, `STEPCODE_TOPO_FETCH_KEY`
+and `STEPCODE_SEARCH_API_KEY` (the host search tool's own name — the configured
+key arrives under both names). When the searcher config is configured the
+leader also injects `STEPCODE_TOPO_SEARCH_SCRIPT`, the path of
+`bin/topo-search.mjs`, and the role prefers that script: it prints one line of
+JSON (`ok` / `kind` / `data` / `error` / `retryable` / `meta`), rate-limits
+itself, and exits 0 on success, 1 on a failed request and 2 on a usage error
+(a missing key is 2, not 1 — it is a configuration problem, so report it rather
+than retrying). Without a configured provider the role falls back to
+`search_web` plus `curl`.
+
+Nothing here is tied to one provider: point `searchUrl` / `fetchUrl` at any
+endpoint that speaks the script's JSON contract and set the matching key. The
+DeepSeek endpoints are only the defaults. Note that the host `search_web`
+endpoint itself cannot be redirected from the environment — a configured
+`searchUrl` is guidance for the role, not an override of that tool.
+
 ## Notes
 
 - Project-level roles load only when the project is trusted.

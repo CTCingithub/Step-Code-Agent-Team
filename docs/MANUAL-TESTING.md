@@ -30,6 +30,8 @@
 >
 > Automation baseline re-verified **2026-10-29 (R16, the leftover-closure round)**: zero-token gate green again; **tsc across the whole import graph is now zero errors** (was 17); new probe scenario **5c** automates the pinned-tier KEYWORD path (the last item that still needed a manual spot-check), and a relative `storage.dir` now resolves under the agent dir instead of the launch directory.
 >
+> Automation baseline re-verified **2026-10-30 (plan-114, the team-scheme round)**: zero-token gate green at **25 phases** + manifest + 7 live + orphan-check; tsc zero across the whole import graph; phase27 reworked to assert the exported `searcherSpawnEnv` instead of a hand-copied mirror of `buildSpawnArgs` (that mirror is what let a missing `STEPCODE_TOPO_SEARCH_KEY` pass the gate while the script's search path had no credential). The searcher's real search/fetch is still unrun — it needs a real key in `[stepcodeAgentTeam.searcher]`.
+>
 > Automation baseline re-verified **2026-10-29 twice**: (R14, the v0.3.0 test-exhaustion round) zero-token smoke 20 phases + manifest + 7 live + orphan-check green; LLM layer phase4 4/4, phase10 A 2/2 + B 1/1, phase11 4/4 (zero SKIP), phase12 9/9. (R15, the UI-naming + Accept/Cancel/Other round) the same gate green again after the rename and the option reorder; phase24 now also asserts the option **order** (`Accept / Cancel / Other`) and that a **dismissed** Other input (Esc/timeout) cancels exactly like Cancel — which moves the "Esc cancels" data plane out of this manual set; live probes 5a/5b PASS on the new title and labels, 8 FAIL→PASS on re-run (mechanical assertion passed both times; only the member's LLM self-report flaked — the probe now prints that reply so a failure is diagnosable without a re-run).
 | # | Item | Status |
 |---|---|---|
@@ -66,7 +68,7 @@ required; without one those steps fail.
 ### Step 1 — automated gate (must be green before any manual work)
 
 ```bash
-npm run smoke   # 20 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
+npm run smoke   # 25 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
 ```
 
 ### Step 2 — interactive scenarios (in order, one prompt at a time)

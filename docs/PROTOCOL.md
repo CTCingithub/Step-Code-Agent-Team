@@ -143,3 +143,9 @@ text is streamed to the TUI via `onUpdate`.
 | `STEPCODE_TEAM_DEPTH` | This member's depth in the team tree (leader = 0) |
 | `STEPCODE_TEAM_MAXDEPTH` | The effective depth cap (may come from project-level config, readable only when the leader loads); the member process's config loader uses it to override `members.maxRecursionDepth` |
 | `STEPCODE_TEAM_AUTOACTIVATE` | `1` = grant a sub-team; the member process loads this extension and auto-activates |
+| `STEPCODE_TEAM_REPLY_TIMEOUT_MS` | The effective dispatch timeout; the member-side `topo_team_msg` reply wait uses it so a nested relay never outlives the outer dispatch that contains it |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` | Searcher endpoints from `[stepcodeAgentTeam.searcher]`; empty means the consumer's own default |
+| `STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_TOPO_FETCH_KEY` | Searcher credentials. The configured `searchApiKey` is injected under **both** `STEPCODE_TOPO_SEARCH_KEY` (what `bin/topo-search.mjs` reads) and `STEPCODE_SEARCH_API_KEY` (the host `search_web` tool's own name) — injecting only the latter once left the script unauthenticated on the search path while fetch worked |
+| `STEPCODE_TOPO_SEARCH_SCRIPT` | Path of `bin/topo-search.mjs`, injected only when the searcher config is configured (a member cannot guess where the package lives) |
+
+Only non-empty searcher values are injected, so an unconfigured team leaves the member's environment untouched and the defaults apply. The mapping itself is the exported `searcherSpawnEnv` in `extensions/config.ts`, which the phase27 probe asserts directly rather than through a copy of it.

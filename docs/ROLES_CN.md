@@ -101,6 +101,16 @@ You handle small, mechanical fixes (typos, renames, formatting). Make the
 smallest change that satisfies the task and report it briefly.
 ```
 
+## 内置 `searcher` 角色
+
+`searcher` 随插件发布，是唯一一个工作内容取决于配置的角色：负责检索外部信息——网页搜索与 URL 抓取——并给出来源。
+
+其工具为 `read, grep, find, ls, search_web, run_command`。带 `run_command` 是因为宿主没有专门的抓取工具，这是真实抓取能力的代价，不是"可以随便跑命令"的许可。
+
+端点与凭证来自 `[stepcodeAgentTeam.searcher]` 配置表，以 `STEPCODE_TOPO_SEARCH_URL`、`STEPCODE_TOPO_SEARCH_KEY`、`STEPCODE_TOPO_FETCH_URL`、`STEPCODE_TOPO_FETCH_KEY` 和 `STEPCODE_SEARCH_API_KEY`（宿主 search 工具自己的名字——配置的 key 会以两个名字到达）进入成员环境。searcher 配置非空时，队长还会注入 `STEPCODE_TOPO_SEARCH_SCRIPT`，即 `bin/topo-search.mjs` 的路径，角色优先使用该脚本：它输出单行 JSON（`ok` / `kind` / `data` / `error` / `retryable` / `meta`），自带限流，退出码 0 成功 / 1 请求失败 / 2 用法错误（缺 key 是 2 不是 1——那是配置问题，应上报而非重试）。未配置厂家时，角色回落到 `search_web` 加 `curl`。
+
+这里不绑定任何厂家：把 `searchUrl` / `fetchUrl` 指向任何遵循该脚本 JSON 契约的端点并配上对应密钥即可，DeepSeek 端点只是默认值。注意宿主 `search_web` 端点本身无法从环境变量改向——配置的 `searchUrl` 是给角色的指引，不是对该工具的覆盖。
+
 ## 注意事项
 
 - 项目级角色仅在项目被信任时加载。

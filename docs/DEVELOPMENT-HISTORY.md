@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30（plan-114，团队方案轮：searcher 配置链路收口；此前为 plan-113）。
+> 最近更新：2026-10-30（plan-115，全量文档检查与更新轮：测试线对齐与中英成对；此前为 plan-114）。
 
 ## 总览
 
@@ -901,3 +901,24 @@
 **仍未闭环**：① searcher 真实 search/fetch 实跑仍待用户把真实 key 写入 `sandbox/config.toml`；② v0.4.x 发版待用户同意；③ 派发机制退化根因仍未定位（本会话 21+ 次 settle 超时）。
 
 **教训（可复用）**：探针绝不能手抄被测逻辑——抄本会与原版共享盲区，使「断言」退化为恒真。凡是生产里有一段纯映射，就应提成导出函数让探针直接测它。
+### 77. 全量文档检查与更新轮：测试线对齐与中英成对（plan-115）
+
+**用户 prompt**：「[团队方案·性能] …成员：Leader(统筹,high)、TestDoc(测试文档,high)、DevDoc(开发文档,high)、Integrator(整合,high)、Reviewer(竞速评审,high)；拓扑 mesh；任务 T1全量文档盘点(Leader) / T2测试文档更新(TestDoc) / T3开发·API文档更新(DevDoc) / T4并行竞速修订 / T5交叉验证择优 / T6终审合并发布(Leader)…请给我检查更新所有的文档，尤其是测试相关的」。
+
+**团队组建**：建 test-doc / dev-doc / integrator / reviewer 四名成员（均 `model: step-5-preview`、`effort: high`），设 mesh 拓扑（12 条边），建 T44–T49 任务板；Leader 由本会话担任（不另建同名成员）。
+
+**执行降级（第 22 次）**：T2 派发即 `timeout waiting for member to settle`，T2–T5 由 Leader 亲自执行。范围未缩：每项工单按原验收标准完成。
+
+**T1 盘点结论**：入库文档 18 份，其中测试线 10 份、开发线 8 份。发现 12 项滞后（D1–D12），测试线 4 项为高优先。
+
+**修复的滞后项**：
+- **测试线（用户重点关注）**：① TESTING(_CN) phase27 行原写"四个文档化的 env 键"——实际五个外加按需的脚本路径变量，且未反映"改为断言导出函数 `searcherSpawnEnv` 而非其手抄副本"这一关键变化；② 门禁规模"20 phases"实际 25，共 8 处（TEST-PLAN 头注+A1 行、MANUAL-TESTING runbook 指令、sandbox/README 双语、HANDOFF 两处），另抓到 TEST-PLAN_CN 头注还写着更旧的"19 个"；③ sandbox/README 的 standalone 清单漏 28/30；④ TEST-PLAN(_CN) 缺 R20 行，已补（plan-113 + plan-114 两轮）；⑤ MANUAL-TESTING(_CN) 追加当期基线；⑥ TESTING-OPTIMIZATION-PLAN(_CN) 加历史存档标注。
+- **开发线**：⑦ ARCHITECTURE(_CN) §1 组件总览整体重写——原文档滞后两轮，缺 `collab-record.ts`、`crypto.ts`、`topo-init.ts`、`tasks.ts`、`plan.ts`、`forward.ts` 六个模块，`bin/` 缺 `topo-search.mjs`，`agents/` 缺 `searcher`；⑧ ARCHITECTURE(_CN) §3 持久化布局补 `.topo/` 子树（原文档完全没有 v0.4.0 新增的工作目录）；⑨ ROLES(_CN) 新增 `searcher` 角色专节（此前仅第 6 行一句）；⑩ PROTOCOL(_CN) §5 成员环境变量表补 searcher 全部变量与 `STEPCODE_TEAM_REPLY_TIMEOUT_MS`。
+
+**交叉验证中抓到「本轮自己引入的错误」**：给 TESTING-OPTIMIZATION-PLAN 加存档标注时写"现在 extensions/ 有 17 个模块"，实际 **18** 个——已在双语改回。教训：声明与代码的比对必须在改完后**再跑一次**，盘点时跑过不算数。
+
+**未改动项及理由**：DEVELOPMENT-HISTORY 与 TEST-PLAN 的 R9–R19 历史行、MANUAL-TESTING 的 2026-10-29 基线中的"20 phase"——那是当时的准确记录，改写历史会破坏执行日志的可信度；已在 R20 行与当期基线中说明现为 25。
+
+**验证**：本回合**纯文档改动**（16 份入库文档 + 2 份 gitignored），代码零改动；无探针读取 `docs/` 内容（仅 phase5/phase15 注释提及路径）；manifest 检查只校验 package.json。仍按惯例实跑全量门禁取证。另做了三轮机械核查：25 个 phase 在中英 TESTING 中逐一对上无缺失；文档声明的 12 个 `STEPCODE_*` 与代码注入完全一致；中英关键词计数对称性扫描（差异经逐条核实均为翻译措辞，非内容缺失）。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。

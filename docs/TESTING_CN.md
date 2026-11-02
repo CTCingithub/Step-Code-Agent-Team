@@ -99,8 +99,8 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
 | phase25 | `.topo/` 初始化契约：目录创建、0600 密钥材料、幂等、`.gitignore` 四种可接受拼写、CRLF 保留，以及全部降级路径（`.topo` 是文件、符号链接不跟随、超长路径）——全部对 hermetic mktemp cwd 执行 | 零 token（独立运行） |
 | phase26 | 落盘加密：AES-256-GCM 信封往返、篡改与错钥拒绝、**明文** registry 仍可读（向后兼容）、`enabled = false` 写明文、缺密钥时降级不抛 | 零 token（独立运行） |
-| phase28 | `bin/topo-search.mjs` 对本地假 DeepSeek 端点：请求体与端点路径、Bearer 头（且绝不进 stdout/stderr）、**计费诚实的重试策略**（429 重试、400 不重试）、5xx 重试、超时分类、批量模式、退出码契约、缺 key 路径 | 零 token（独立运行） |
-| phase27 | `searcher` 角色：预设 frontmatter 五字段（含钉住的 `model:`）、`presets.effort` 覆盖、searcher/encryption 配置面与种子块、四个文档化的 env 键 | 零 token（独立运行） |
+| phase28 | `bin/topo-search.mjs` 对本地假 DeepSeek 端点：请求体与端点路径、Bearer 头（且绝不进 stdout/stderr）、**计费诚实的重试策略**（429 重试、400 不重试）、5xx 重试、超时分类、批量模式、退出码契约、缺 key 路径（exit 2，且文案列明整条 key 链——`STEPCODE_TOPO_SEARCH_KEY` → `STEPCODE_SEARCH_API_KEY` → `DEEPSEEK_API_KEY`）、以及厂家无关的响应形态守卫（无法识别的信封经 `meta.shape` 报告实际键名，而非静默返回空结果） | 零 token（独立运行） |
+| phase27 | `searcher` 角色：预设 frontmatter 五字段（含钉住的 `model:`）、`presets.effort` 覆盖、searcher/encryption 配置面与种子块，以及成员 spawn 环境——断言对象是生产代码自己调用的**导出函数 `searcherSpawnEnv`**，而不是它的副本。这一区别正是重点：本探针过去携带的副本照抄了 `buildSpawnArgs` 的四行，于是与原版共享盲区——缺失的 `STEPCODE_TOPO_SEARCH_KEY` 顺利过了门禁，而脚本的 search 路径压根没有凭证。现在它钉住五个 env 键（`STEPCODE_TOPO_SEARCH_KEY`、`STEPCODE_SEARCH_API_KEY`、`STEPCODE_TOPO_SEARCH_URL`、`STEPCODE_TOPO_FETCH_URL`、`STEPCODE_TOPO_FETCH_KEY`）外加按需注入的 `STEPCODE_TOPO_SEARCH_SCRIPT`，以及"一个配置 key 以两个名字注入"与"空字符串绝不变成变量"两条规则 | 零 token（独立运行） |
 | phase30 | 协作记录：内容与文件布局、幂等、三种落盘形态（加密 / 因关闭而明文 / 因无密钥而明文）、`records.enabled=false`、自定义 `records.dir`、配置面与种子块、`.topo` 损坏时的降级 | 零 token（独立运行） |
 | phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言选项顺序恰为 `Accept / Cancel / Other`、Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、空提交按原样接受、**输入被关闭**（Esc/超时→undefined）与 Cancel 完全同果、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
 

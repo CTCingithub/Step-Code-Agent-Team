@@ -6,6 +6,16 @@
 > (10 `extensions/` modules + the `bin` shim + presets + docs).
 > This document has four parts: **① Findings summary (graded by severity)
 > ② Testing plan (four layers) ③ Optimization plan (milestones) ④ Execution order**.
+>
+> **Historical archive (as of 2026-10-30).** This was the plan that built the
+> four-layer testing system, and its four layers now exist and run: the
+> zero-token layer is `test/smoke/phase*.ts` (25 phases, discovered on disk by
+> the runner), the LLM layer lives in `sandbox/`, and the operational reference
+> is [docs/TESTING.md](TESTING.md) with the execution log in
+> [docs/TEST-PLAN.md](TEST-PLAN.md). Read this document for the reasoning
+> behind the layers and the original findings, **not** for the current phase
+> list or milestone status — those moved. The module count below is also
+> historical (there are now 18 `extensions/` modules plus `bin/topo-search.mjs`).
 
 ---
 

@@ -13,21 +13,32 @@ Leader session (step, loads this extension)
 │                            setUnavailableTools closes the gate (off by default);
 │                            activation triggers: /topo command, input hook, before_agent_start hook,
 │                            STEPCODE_TEAM_AUTOACTIVATE (sub-leader grant)
-├── extensions/config.ts     config: the [stepcodeAgentTeam] table of the unified config.toml (defaults < global < project < environment overrides); validation, caching, and first-activation seeding
+├── extensions/config.ts     config: the [stepcodeAgentTeam] table of the unified config.toml (defaults < global < project < environment overrides); validation, caching, first-activation seeding, and searcherSpawnEnv (the searcher config → member-spawn env mapping)
 ├── extensions/activation.ts activation gate: keyword/command detection, tool release
+├── extensions/forward.ts    team-request instructions injected into the model's context (first-person framing, coordination protocol)
+├── extensions/plan.ts       team plan tiers (tier strategy prompts, picker options, pinned tier)
 ├── extensions/tools.ts      6 LLM tools (create_member / send / task / set_topology / disband / status)
+├── extensions/tasks.ts      task-board dependency graph (validateGraph / recomputeReady / assertDispatchable)
 ├── extensions/members.ts    TeamManager: member lifecycle, concurrency gate, task-board dispatch, topology methods,
-│                            per-member spawn mutex, kill on failure, oneshot, idle reaping
+│                            per-member spawn mutex, kill on failure, oneshot, idle reaping, searcher env injection
 ├── extensions/rpc-client.ts JSONL RPC client (strict \n line splitting, id correlation, handshake, abort, killAndWait)
 ├── extensions/team-server.ts Unix socket server: topology enforcement + status(mayMessage)
 ├── extensions/topology.ts   five-shape topology construction/validation/parsing
-├── extensions/registry.ts   team state persistence (atomic write, storage.dir, legacy compatibility)
-├── extensions/presets.ts    preset loading (bundled + user/project agents/ dirs), extension entry path, shim path
+├── extensions/registry.ts   team state persistence (atomic write, storage.dir, legacy compatibility, at-rest encryption)
+├── extensions/crypto.ts     AES-256-GCM envelope for the registry (key in .topo/team.key, 0600; plaintext still readable)
+├── extensions/topo-init.ts  the .topo/ workspace, created on first activation (never at load time); symlink-safe, degrades instead of throwing
+├── extensions/collab-record.ts collaboration records under .topo/records/ after every team task (idempotent per teamId, sealed or plaintext per the encryption config, never blocks a disband)
+├── extensions/presets.ts    preset loading (bundled + user/project agents/ dirs), extension entry path, shim path, searcher script path
 ├── extensions/member-messaging.ts member-side topo_team_msg tool (direct socket, no bash)
 ├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │
 ├── bin/stepcode-team.mjs    member-side CLI shim (msg / status; manual/external path — members normally use the topo_team_msg tool)
-└── agents/                  bundled role presets (scout · planner · worker · reviewer; custom roles: <agentDir>/agents/, <project>/.stepcode/agents/)
+├── bin/topo-search.mjs      the searcher role's retrieval script: search / fetch / batch against the endpoint
+│                            configured in [stepcodeAgentTeam.searcher] (any provider speaking its JSON contract;
+│                            DeepSeek's /v1/tools endpoints are only the defaults). Billing-honest: a 4xx is never
+│                            retried, because providers charge successful calls only. Exit 0 success / 1 request
+│                            failed / 2 usage error (a missing key is 2, not 1).
+└── agents/                  bundled role presets (scout · planner · worker · reviewer · searcher; custom roles: <agentDir>/agents/, <project>/.stepcode/agents/)
 ```
 
 Members are independent `step --mode rpc` subprocesses that do not load this extension (unless granted a sub-team, see §4),
@@ -61,13 +72,23 @@ posture and their topology edges stay usable. The shim remains for manual/extern
 ```
 <agentDir>/teams/<teamId>/
   registry.json     team state (schemaVersion 1; atomic write: tmp + rename, mode 0600)
+                    — encrypted at rest by default (AES-256-GCM envelope); a
+                      plaintext registry still loads, so teams created before
+                      encryption existed keep working
   sessions/         member session files (--session-dir; the carrier for context continuation)
   prompts/          member system prompts (include the coordination section; reused via --append-system-prompt on respawn)
   sock              Unix socket (mode 0600, only the owner may connect)
+
+<cwd>/.topo/                     created on first activation, never at load time
+  team.key           the encryption key, mode 0600 (absent → plaintext degrade, never a throw)
+  records/           one collaboration record per team task (idempotent per teamId)
+  .gitignore         appended, never rewritten, so the workspace stays out of git
 ```
 
 `<agentDir>` follows `STEP_CODING_AGENT_DIR` (default `~/.stepcode/agent`), so the sandbox is isolated from the real environment;
 `storage.dir` can redirect it wholesale. teamId is derived from the leader session's filename (sessions with an eph- prefix cannot be re-attached).
+
+The two stores are deliberately separate: `<agentDir>/teams/` is machine-local runtime state, while `.topo/` is the project-local workspace the plugin owns. `.topo/` is only ever appended to an existing `.gitignore` (a symlinked `.topo` is not followed, and every degrade path returns instead of throwing), so a repository that already ignores the right paths is left untouched.
 
 ## 4. Depth and concurrency
 
