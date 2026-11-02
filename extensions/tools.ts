@@ -18,6 +18,8 @@ import type { MemberUsage } from "./registry.ts";
 import type { PluginConfig } from "./config.ts";
 import { getConfig, VALID_EFFORT } from "./config.ts";
 import { isActive } from "./activation.ts";
+import { writeCollabRecord } from "./collab-record.ts";
+import * as path from "node:path";
 import { renderTeamCall, renderTeamResult, type TeamToolName } from "./render.ts";
 import { dispatchPrompt } from "./tasks.ts";
 
@@ -434,7 +436,18 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const manager = getManager(ctx);
 			assertActive();
+			let recordNote = "";
 			const killed = await manager.disband(params.member);
+			// A whole-team disband is one collaboration task reaching its end:
+			// write the record before the team is gone (never blocks the disband).
+			if (!params.member) {
+				try {
+					const written = writeCollabRecord(manager);
+					if (written.length > 0) recordNote = ` Collaboration record: ${written.map((f) => path.basename(f)).join(", ")}.`;
+				} catch {
+					/* a record must never break a disband */
+				}
+			}
 			if (killed.length === 0) {
 				return {
 					content: [{ type: "text", text: `No members to disband (team "${manager.teamId}" is empty).` }],
@@ -445,7 +458,7 @@ export function registerTeamTools(pi: ExtensionAPI, getManager: GetManager, conf
 				content: [
 					{
 						type: "text",
-						text: `Disbanded: ${killed.join(", ")}. Sessions preserved; recreate members to resume.`,
+						text: `Disbanded: ${killed.join(", ")}. Sessions preserved; recreate members to resume.${recordNote}`,
 					},
 				],
 				details: { teamId: manager.teamId, disbanded: killed },

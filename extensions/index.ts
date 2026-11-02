@@ -32,6 +32,7 @@ import type { ContextEvent, ExtensionAPI, ExtensionContext } from "@step-harness
 import { currentDepth, TeamManager, teamIdForSession } from "./members.ts";
 import { registryPath } from "./registry.ts";
 import { ensureTopoDir } from "./topo-init.ts";
+import { writeCollabRecord } from "./collab-record.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
 import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample, consumeKeywordMigration, unifiedConfigFilePath } from "./config.ts";
@@ -523,6 +524,19 @@ export default function (pi: ExtensionAPI) {
 		// for a misfired activation; member sessions stay resumable).
 		if (first === "off" || first === "退出") {
 			if (isActive()) {
+				// Deactivation ends the collaboration task too: write the record
+				// while the manager still exists (it is torn down with the team).
+				try {
+					const mgr = getManager(ctx);
+					if (mgr) {
+						const written = writeCollabRecord(mgr);
+						if (written.length > 0) {
+							ctx.ui.notify(`Collaboration record written: ${written.map((f) => f.split("/").pop()).join(", ")}`, "info");
+						}
+					}
+				} catch {
+					/* a record must never block the escape hatch */
+				}
 				deactivate();
 				regateTools();
 				activeChoice = null;

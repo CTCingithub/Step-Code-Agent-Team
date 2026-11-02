@@ -195,6 +195,12 @@ export interface EncryptionConfig {
 	enabled: boolean;
 }
 
+/** Collaboration records written under `.topo/` after every team task. */
+export interface RecordsConfig {
+	enabled: boolean;
+	dir: string;
+}
+
 export interface TasksConfig {
 	/** Task-board capacity: ids are allocated in the T1..T<max> sequence. */
 	max: number;
@@ -229,6 +235,7 @@ export interface PluginConfig {
 	storage: StorageConfig;
 	searcher: SearcherConfig;
 	encryption: EncryptionConfig;
+	records: RecordsConfig;
 	tasks: TasksConfig;
 	topology: TopologyConfig;
 	plan: PlanConfig;
@@ -370,6 +377,10 @@ function seedBlock(): string {
 		"# [stepcodeAgentTeam.encryption]",
 		line(`enabled = ${d.encryption.enabled}`, "encrypt the team registry at rest (AES-256-GCM, key in .topo/team.key)"),
 		"#",
+		"# [stepcodeAgentTeam.records]",
+		line(`enabled = ${d.records.enabled}`, "write a collaboration record to .topo/records after every team task"),
+		line(`dir = "${d.records.dir}"`, "sub-directory of .topo/ for those records"),
+		"#",
 		"# [stepcodeAgentTeam.tasks]",
 		line(`max = ${d.tasks.max}`, "task-board capacity (ids T1..T<max>; 1-10000)"),
 		line(`outputCapBytes = ${d.tasks.outputCapBytes}`, "per-task output truncation (bytes); the full text stays in details.fullText"),
@@ -467,6 +478,7 @@ export function defaultConfig(): PluginConfig {
 		storage: { dir: null },
 		searcher: { searchUrl: "", searchApiKey: "", fetchUrl: "", fetchApiKey: "" },
 		encryption: { enabled: true },
+		records: { enabled: true, dir: "records" },
 		tasks: { max: 999, outputCapBytes: 50 * 1024 },
 		topology: { default: "star", requireDeclaration: false, maxLoopCount: 2 },
 		plan: { enabled: false, tier: DEFAULT_TIER_MODE },
@@ -771,6 +783,11 @@ function validate(config: PluginConfig): string[] {
 		}
 	}
 	expectBoolean(asRecord(config.encryption), "enabled", d.encryption.enabled, warnings);
+	expectBoolean(asRecord(config.records), "enabled", d.records.enabled, warnings);
+	if (typeof config.records.dir !== "string" || !config.records.dir.trim()) {
+		config.records.dir = d.records.dir;
+		warnings.push("records.dir");
+	}
 	if (!VALID_TOPOLOGY_SHAPES.includes(config.topology.default as TopologyShape)) {
 		config.topology.default = d.topology.default;
 		warnings.push("topology.default");
