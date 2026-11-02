@@ -32,3 +32,4 @@ local/
 
 # Session handoff doc — kept locally for session takeover, never published
 HANDOFF.md
+.topo/
