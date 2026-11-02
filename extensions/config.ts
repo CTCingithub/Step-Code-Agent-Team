@@ -418,11 +418,11 @@ function renderSeed(sections: SeedSection[], version: string, first: boolean): s
 			? "# ---- stepcode-agent-team configuration (uncomment to override) ----"
 			: `# ---- stepcode-agent-team: options added or changed in v${version} ----`,
 		"# Full reference: docs/CONFIGURATION.md",
-		`# "${DEFAULT_SENTINEL}" means "use the built-in default" — such a key keeps following the`,
+		`# "${DEFAULT_MARKER}" means "use the built-in default" — such a key keeps following the`,
 		"# default even when a newer version changes it. Omitting a key does the same.",
 		"# Null-defaulted keys (members.defaultTools, storage.dir) show an example; omit for null.",
 		"#",
-		"# KEEP THE QUOTES. A bare DEFAULT (no quotes) is not a TOML scalar: step's reader",
+		"# KEEP THE QUOTES. A bare default (no quotes) is not a TOML scalar: step's reader",
 		"# then drops the WHOLE table, silently taking every real setting in it — and the",
 		"# plugin cannot see it happen, because the table is gone before our code runs.",
 	];
@@ -443,7 +443,7 @@ interface SeedSection {
  * The reference block, one entry per config table. Each section carries the
  * version that documented it, so a later version can append just what changed.
  *
- * Default-valued keys are written as `DEFAULT` (see DEFAULT_SENTINEL) with the
+ * Default-valued keys are written as `default` (see DEFAULT_MARKER) with the
  * actual value in the trailing comment — the comment keeps the block
  * informative, the sentinel keeps it upgrade-proof. Null-defaulted keys show an
  * example instead, because there is no default to point at.
@@ -455,59 +455,59 @@ function seedSections(): SeedSection[] {
 	const line = (kv: string, comment: string): string => `# ${kv.padEnd(Math.max(34, kv.length + 1))}# ${comment}`;
 	const kw = d.activation.keywords.map((k) => `"${k}"`).join(", ");
 	const models = d.models.available.map((m) => `"${m}"`).join(", ");
-	const effort = (role: string, value: string): string => line(`${role} = "${DEFAULT_SENTINEL}"`, `built-in default "${value}"`);
+	const effort = (role: string, value: string): string => line(`${role} = "${DEFAULT_MARKER}"`, `built-in default "${value}"`);
 	return [
 		{
 			name: "activation",
 			lines: [
-				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.enabled}; master switch, false disables both triggers`),
-				line(`keywords = "${DEFAULT_SENTINEL}"`, `built-in default [${kw}]`),
+				line(`enabled = "${DEFAULT_MARKER}"`, `built-in default ${d.activation.enabled}; master switch, false disables both triggers`),
+				line(`keywords = "${DEFAULT_MARKER}"`, `built-in default [${kw}]`),
 				line("keywords = []", "disable keyword activation entirely"),
-				line(`notifyOnActivate = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.notifyOnActivate}; notify on activation`),
-				line(`guardEnabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.guardEnabled}; suppress negation / meta-discussion / code-reference hits`),
-				line(`confirmBeforeActivate = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.confirmBeforeActivate}; TUI confirm before a keyword activation (headless ignores it)`),
-				line(`headlessAutoActivate = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.headlessAutoActivate}; headless/RPC activate on keyword hits without a dialog`),
+				line(`notifyOnActivate = "${DEFAULT_MARKER}"`, `built-in default ${d.activation.notifyOnActivate}; notify on activation`),
+				line(`guardEnabled = "${DEFAULT_MARKER}"`, `built-in default ${d.activation.guardEnabled}; suppress negation / meta-discussion / code-reference hits`),
+				line(`confirmBeforeActivate = "${DEFAULT_MARKER}"`, `built-in default ${d.activation.confirmBeforeActivate}; TUI confirm before a keyword activation (headless ignores it)`),
+				line(`headlessAutoActivate = "${DEFAULT_MARKER}"`, `built-in default ${d.activation.headlessAutoActivate}; headless/RPC activate on keyword hits without a dialog`),
 			],
 		},
 		{
 			name: "models",
 			lines: [
-				line(`available = "${DEFAULT_SENTINEL}"`, `built-in default [${models}]; member model pool`),
-				line(`autonomousSelection = "${DEFAULT_SENTINEL}"`, `built-in default ${d.models.autonomousSelection}; the leader picks a model per member`),
-				line(`autonomousEffort = "${DEFAULT_SENTINEL}"`, `built-in default ${d.models.autonomousEffort}; the leader picks the effort per member`),
+				line(`available = "${DEFAULT_MARKER}"`, `built-in default [${models}]; member model pool`),
+				line(`autonomousSelection = "${DEFAULT_MARKER}"`, `built-in default ${d.models.autonomousSelection}; the leader picks a model per member`),
+				line(`autonomousEffort = "${DEFAULT_MARKER}"`, `built-in default ${d.models.autonomousEffort}; the leader picks the effort per member`),
 			],
 		},
 		{
 			name: "members",
 			lines: [
-				line(`max = "${DEFAULT_SENTINEL}"`, `built-in default ${d.members.max}; live-member cap (1-64)`),
-				line(`defaultRole = "${DEFAULT_SENTINEL}"`, `built-in default "${d.members.defaultRole}"; default role for new members`),
+				line(`max = "${DEFAULT_MARKER}"`, `built-in default ${d.members.max}; live-member cap (1-64)`),
+				line(`defaultRole = "${DEFAULT_MARKER}"`, `built-in default "${d.members.defaultRole}"; default role for new members`),
 				line('defaultTools = ["read", "bash"]', "member tool allowlist; omit for null (preset or all tools)"),
-				line(`maxRecursionDepth = "${DEFAULT_SENTINEL}"`, `built-in default ${d.members.maxRecursionDepth}; team-tree depth bound (1-4)`),
+				line(`maxRecursionDepth = "${DEFAULT_MARKER}"`, `built-in default ${d.members.maxRecursionDepth}; team-tree depth bound (1-4)`),
 			],
 		},
 		{
 			name: "dispatch",
 			lines: [
-				line(`maxConcurrent = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.maxConcurrent}; parallel member cap (1-16), extra dispatches queue`),
-				line(`timeoutMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.timeoutMs}; per-dispatch timeout (ms), covers the member's whole turn`),
-				line(`handshakeTimeoutMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.handshakeTimeoutMs}; member spawn handshake timeout (ms)`),
-				line(`retries = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.retries}; task retry count (0-5)`),
+				line(`maxConcurrent = "${DEFAULT_MARKER}"`, `built-in default ${d.dispatch.maxConcurrent}; parallel member cap (1-16), extra dispatches queue`),
+				line(`timeoutMs = "${DEFAULT_MARKER}"`, `built-in default ${d.dispatch.timeoutMs}; per-dispatch timeout (ms), covers the member's whole turn`),
+				line(`handshakeTimeoutMs = "${DEFAULT_MARKER}"`, `built-in default ${d.dispatch.handshakeTimeoutMs}; member spawn handshake timeout (ms)`),
+				line(`retries = "${DEFAULT_MARKER}"`, `built-in default ${d.dispatch.retries}; task retry count (0-5)`),
 			],
 		},
 		{
 			name: "oneshot",
-			lines: [line(`timeoutMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.oneshot.timeoutMs}; stateless oneshot dispatch timeout (ms)`)],
+			lines: [line(`timeoutMs = "${DEFAULT_MARKER}"`, `built-in default ${d.oneshot.timeoutMs}; stateless oneshot dispatch timeout (ms)`)],
 		},
 		{
 			name: "cost",
-			lines: [line(`warnThreshold = "${DEFAULT_SENTINEL}"`, `built-in default ${d.cost.warnThreshold}; cumulative spend warning (USD), 0 = off`)],
+			lines: [line(`warnThreshold = "${DEFAULT_MARKER}"`, `built-in default ${d.cost.warnThreshold}; cumulative spend warning (USD), 0 = off`)],
 		},
 		{
 			name: "idle",
 			lines: [
-				line(`reapAfterMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.idle.reapAfterMs}; idle reaping threshold (ms)`),
-				line(`reapIntervalMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.idle.reapIntervalMs}; reaping check interval (ms)`),
+				line(`reapAfterMs = "${DEFAULT_MARKER}"`, `built-in default ${d.idle.reapAfterMs}; idle reaping threshold (ms)`),
+				line(`reapIntervalMs = "${DEFAULT_MARKER}"`, `built-in default ${d.idle.reapIntervalMs}; reaping check interval (ms)`),
 			],
 		},
 		{
@@ -515,15 +515,15 @@ function seedSections(): SeedSection[] {
 			lines: [line('dir = "/path/to/teams"', "team data root; omit for null (<agentDir>/teams)")],
 		},
 		{
-			// The one table whose defaults are the empty string, so DEFAULT and an
+			// The one table whose defaults are the empty string, so default and an
 			// explicit "" would read the same; spell out what empty means for each
 			// consumer instead of leaving the reader to guess.
 			name: "searcher",
 			lines: [
-				line(`searchUrl = "${DEFAULT_SENTINEL}"`, "the role falls back to the host search_web endpoint, the script to its built-in one"),
-				line(`searchApiKey = "${DEFAULT_SENTINEL}"`, "the role to the login profile / STEPCODE_SEARCH_API_KEY, the script to DEEPSEEK_API_KEY"),
-				line(`fetchUrl = "${DEFAULT_SENTINEL}"`, "the role to a plain curl of the target URL, the script to its built-in one"),
-				line(`fetchApiKey = "${DEFAULT_SENTINEL}"`, "no Authorization header"),
+				line(`searchUrl = "${DEFAULT_MARKER}"`, "the role falls back to the host search_web endpoint, the script to its built-in one"),
+				line(`searchApiKey = "${DEFAULT_MARKER}"`, "the role to the login profile / STEPCODE_SEARCH_API_KEY, the script to DEEPSEEK_API_KEY"),
+				line(`fetchUrl = "${DEFAULT_MARKER}"`, "the role to a plain curl of the target URL, the script to its built-in one"),
+				line(`fetchApiKey = "${DEFAULT_MARKER}"`, "no Authorization header"),
 				"#",
 				line('searchUrl = "https://api.deepseek.com"', "any provider speaking the script's JSON contract works — see docs/ROLES.md"),
 				line('searchApiKey = "<your key>"', "injected as STEPCODE_TOPO_SEARCH_KEY and STEPCODE_SEARCH_API_KEY"),
@@ -534,36 +534,36 @@ function seedSections(): SeedSection[] {
 		{
 			name: "encryption",
 			lines: [
-				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.encryption.enabled}; encrypt the team registry at rest (AES-256-GCM, key in .topo/team.key)`),
+				line(`enabled = "${DEFAULT_MARKER}"`, `built-in default ${d.encryption.enabled}; encrypt the team registry at rest (AES-256-GCM, key in .topo/team.key)`),
 			],
 		},
 		{
 			name: "records",
 			lines: [
-				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.records.enabled}; write a collaboration record to .topo/records after every team task`),
-				line(`dir = "${DEFAULT_SENTINEL}"`, `built-in default "${d.records.dir}"; sub-directory of .topo/ for those records`),
+				line(`enabled = "${DEFAULT_MARKER}"`, `built-in default ${d.records.enabled}; write a collaboration record to .topo/records after every team task`),
+				line(`dir = "${DEFAULT_MARKER}"`, `built-in default "${d.records.dir}"; sub-directory of .topo/ for those records`),
 			],
 		},
 		{
 			name: "tasks",
 			lines: [
-				line(`max = "${DEFAULT_SENTINEL}"`, `built-in default ${d.tasks.max}; task-board capacity (ids T1..T<max>; 1-10000)`),
-				line(`outputCapBytes = "${DEFAULT_SENTINEL}"`, `built-in default ${d.tasks.outputCapBytes}; per-task output truncation (bytes), full text stays in details.fullText`),
+				line(`max = "${DEFAULT_MARKER}"`, `built-in default ${d.tasks.max}; task-board capacity (ids T1..T<max>; 1-10000)`),
+				line(`outputCapBytes = "${DEFAULT_MARKER}"`, `built-in default ${d.tasks.outputCapBytes}; per-task output truncation (bytes), full text stays in details.fullText`),
 			],
 		},
 		{
 			name: "topology",
 			lines: [
-				line(`default = "${DEFAULT_SENTINEL}"`, `built-in default "${d.topology.default}"; star/pipeline/mesh/ring/custom`),
-				line(`requireDeclaration = "${DEFAULT_SENTINEL}"`, `built-in default ${d.topology.requireDeclaration}; true = no dispatch before the topology is declared`),
-				line(`maxLoopCount = "${DEFAULT_SENTINEL}"`, `built-in default ${d.topology.maxLoopCount}; ring message-chain bound (0 = unlimited, 0-64)`),
+				line(`default = "${DEFAULT_MARKER}"`, `built-in default "${d.topology.default}"; star/pipeline/mesh/ring/custom`),
+				line(`requireDeclaration = "${DEFAULT_MARKER}"`, `built-in default ${d.topology.requireDeclaration}; true = no dispatch before the topology is declared`),
+				line(`maxLoopCount = "${DEFAULT_MARKER}"`, `built-in default ${d.topology.maxLoopCount}; ring message-chain bound (0 = unlimited, 0-64)`),
 			],
 		},
 		{
 			name: "plan",
 			lines: [
-				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.plan.enabled}; team-plan picker: economic/fast/balanced/performance + custom on activation`),
-				line(`tier = "${DEFAULT_SENTINEL}"`, `built-in default "${d.plan.tier}"; always ask = picker every time, a pinned tier applies directly`),
+				line(`enabled = "${DEFAULT_MARKER}"`, `built-in default ${d.plan.enabled}; team-plan picker: economic/fast/balanced/performance + custom on activation`),
+				line(`tier = "${DEFAULT_MARKER}"`, `built-in default "${d.plan.tier}"; always ask = picker every time, a pinned tier applies directly`),
 			],
 		},
 		{
@@ -582,7 +582,7 @@ function seedSections(): SeedSection[] {
 			// The root table itself: `debug` sits directly under
 			// [stepcodeAgentTeam], so this section has no sub-name.
 			name: "",
-			lines: [line(`debug = "${DEFAULT_SENTINEL}"`, `built-in default ${d.debug}; diagnostic logging to stderr`)],
+			lines: [line(`debug = "${DEFAULT_MARKER}"`, `built-in default ${d.debug}; diagnostic logging to stderr`)],
 		},
 	];
 }
@@ -791,17 +791,17 @@ function configNote(message: string): void {
 
 /**
  * The explicit "use the built-in default" marker. The seed block writes it for
- * every default-valued key, so a config that says `DEFAULT` keeps following the
+ * every default-valued key, so a config that says `default` keeps following the
  * default when a newer version changes it — which is the whole point of
  * seeding defaults rather than literals: a literal would pin the old value
  * forever and silently outrank the new one.
  *
  * It works for every type at once because the merge starts from
  * `defaultConfig()`: skipping the key leaves the default in place. A literal
- * `DEFAULT` value is therefore not expressible for these keys (there is no
- * realistic collision — no role, path or tier is named DEFAULT).
+ * `default` value is therefore not expressible for these keys (there is no
+ * realistic collision — no role, path or tier is named default).
  */
-export const DEFAULT_SENTINEL = "DEFAULT";
+export const DEFAULT_MARKER = "default";
 
 /** Recursive merge limited to keys present in the defaults (unknown keys ignored). */
 function mergeSection(target: Record<string, unknown>, source: Record<string, unknown>): void {
@@ -810,7 +810,7 @@ function mergeSection(target: Record<string, unknown>, source: Record<string, un
 		// Object.prototype keys ("constructor", "toString", …).
 		if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
 		const value = source[key];
-		if (value === DEFAULT_SENTINEL) continue; // keep the built-in default
+		if (value === DEFAULT_MARKER) continue; // keep the built-in default
 		const current = target[key];
 		if (
 			typeof current === "object" &&

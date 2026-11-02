@@ -156,7 +156,7 @@ export default function (pi: ExtensionAPI) {
 			seedGlobalConfigExample(seedAgent);
 			const seeded = fs.readFileSync(seedCfg, "utf8");
 			check("seed: the appended block carries [stepcodeAgentTeam.records]", seeded.includes("[stepcodeAgentTeam.records]"));
-			check("seed: the block documents both keys", seeded.includes("collaboration record") && seeded.includes('dir = "DEFAULT"') && seeded.includes('built-in default "records"'));
+			check("seed: the block documents both keys", seeded.includes("collaboration record") && seeded.includes('dir = "default"') && seeded.includes('built-in default "records"'));
 			check("config: reading it back gives the defaults", getConfig().records.enabled === true);
 
 			if (had) fs.writeFileSync(settingsFile, prev);

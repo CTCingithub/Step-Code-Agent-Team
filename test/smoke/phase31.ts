@@ -1,6 +1,6 @@
 /**
  * Config-seeding probe (plan-116). Zero-token, standalone: the first-activation
- * seed block, the `DEFAULT` sentinel, and the upgrade delta — all driven against
+ * seed block, the `"default"` marker, and the upgrade delta — all driven against
  * hermetic mktemp agent dirs, so no model call and no real config is touched.
  *
  * What it locks down:
@@ -11,14 +11,14 @@
  *   2. every config table is documented. A section missing from the block is an
  *      option nobody can discover, which is how the searcher table went
  *      unnoticed for a round;
- *   3. `DEFAULT` means "use the built-in default" for every type at once — the
+ *   3. `"default"` means "use the built-in default" for every type at once — the
  *      merge skips the key, so the default stands. That is what makes a seeded
  *      config follow a new version's default instead of pinning the old one;
  *   4. an upgrade appends only what is new or changed, and never twice. This is
  *      the requirement that new options appear after installing a new version;
  *   5. a legacy block with no version markers is not duplicated wholesale, but
  *      genuinely new sections still appear;
- *   6. an explicit value still wins over the default (DEFAULT must not become a
+ *   6. an explicit value still wins over the default (the marker must not become a
  *      way to silently ignore configuration).
  */
 
@@ -28,7 +28,7 @@ import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import {
 	agentDir,
-	DEFAULT_SENTINEL,
+	DEFAULT_MARKER,
 	defaultConfig,
 	loadConfig,
 	resetConfigCache,
@@ -103,56 +103,56 @@ export default function (pi: ExtensionAPI) {
 			const tables = tableNames(d);
 			const missing = tables.filter((t) => !text.includes(`[stepcodeAgentTeam.${t}] (v`));
 			check("seed: every config table is documented", missing.length === 0, missing.join(","));
-			check("seed: the root-level debug key is documented", text.includes(`[stepcodeAgentTeam] (v`) && text.includes('debug = "DEFAULT"'));
+			check("seed: the root-level debug key is documented", text.includes(`[stepcodeAgentTeam] (v`) && text.includes('debug = "default"'));
 			check("seed: presets.effort is documented too", text.includes("[stepcodeAgentTeam.presets.effort] (v"));
 			for (const role of Object.keys(d.presets.effort)) {
-				if (!text.includes(`${role} = "${DEFAULT_SENTINEL}"`)) check(`seed: presets.effort.${role} documented`, false);
+				if (!text.includes(`${role} = "${DEFAULT_MARKER}"`)) check(`seed: presets.effort.${role} documented`, false);
 			}
-			check("seed: every role in presets.effort is documented", Object.keys(d.presets.effort).every((r) => text.includes(`${r} = "${DEFAULT_SENTINEL}"`)));
+			check("seed: every role in presets.effort is documented", Object.keys(d.presets.effort).every((r) => text.includes(`${r} = "${DEFAULT_MARKER}"`)));
 			check("seed: the searcher keys are commented like the rest", text.split("\n").filter((l) => l.includes("searchUrl =")).every((l) => l.trim().startsWith("#")));
-			// The one hazard the plugin cannot detect: a bare `DEFAULT` is not a TOML
-			// scalar, so step's reader drops the whole table before our code ever sees
-			// it. Every DEFAULT line in the block must therefore be quoted, so that
-			// uncommenting one can never produce the bare form.
-			const defaultLines = text.split("\n").filter((l) => /= "DEFAULT"/.test(l));
-			check("seed: every DEFAULT line is quoted", defaultLines.length > 0 && defaultLines.every((l) => new RegExp(`= "${DEFAULT_SENTINEL}"`).test(l)), defaultLines.filter((l) => !new RegExp(`= "${DEFAULT_SENTINEL}"`).test(l)).slice(0, 2).join(" | "));
+			// The one hazard the plugin cannot detect: a bare `default` (no quotes) is
+			// not a TOML scalar, so step's reader drops the whole table before our code
+			// ever sees it. Every marker line in the block must therefore be quoted, so
+			// that uncommenting one can never produce the bare form.
+			const defaultLines = text.split("\n").filter((l) => /= "default"/.test(l));
+			check("seed: every default line is quoted", defaultLines.length > 0 && defaultLines.every((l) => new RegExp(`= "${DEFAULT_MARKER}"`).test(l)), defaultLines.filter((l) => !new RegExp(`= "${DEFAULT_MARKER}"`).test(l)).slice(0, 2).join(" | "));
 			check("seed: the block warns about the bare form", text.includes("KEEP THE QUOTES"));
 
-			// ---- 3. DEFAULT means "use the built-in default" ----
+			// ---- 3. the "default" marker means "use the built-in default" ----
 			const a3 = mkAgent();
 			const f3 = cfgOf(a3);
 			fs.writeFileSync(
 				f3,
 				[
 					"[stepcodeAgentTeam.members]",
-					`max = "${DEFAULT_SENTINEL}"`,
+					`max = "${DEFAULT_MARKER}"`,
 					"defaultRole = \"scout\"",
 					`[stepcodeAgentTeam.activation]`,
-					`enabled = "${DEFAULT_SENTINEL}"`,
-					`keywords = "${DEFAULT_SENTINEL}"`,
+					`enabled = "${DEFAULT_MARKER}"`,
+					`keywords = "${DEFAULT_MARKER}"`,
 					`[stepcodeAgentTeam.topology]`,
-					`requireDeclaration = "${DEFAULT_SENTINEL}"`,
+					`requireDeclaration = "${DEFAULT_MARKER}"`,
 				].join("\n"),
 			);
 			resetConfigCache();
 			const c3 = loadConfig({ agentDir: a3 });
-			check("DEFAULT: a number key keeps its default", c3.members.max === d.members.max, `${c3.members.max} vs ${d.members.max}`);
-			check("DEFAULT: a boolean key keeps its default", c3.activation.enabled === d.activation.enabled, String(c3.activation.enabled));
-			check("DEFAULT: an array key keeps its default", c3.activation.keywords.length === d.activation.keywords.length, `${c3.activation.keywords.length} vs ${d.activation.keywords.length}`);
-			check("DEFAULT: an explicit value still wins", c3.members.defaultRole === "scout", c3.members.defaultRole);
-			check("DEFAULT: a neighbouring explicit value is unaffected", c3.topology.requireDeclaration === d.topology.requireDeclaration, String(c3.topology.requireDeclaration));
+			check("default: a number key keeps its default", c3.members.max === d.members.max, `${c3.members.max} vs ${d.members.max}`);
+			check("default: a boolean key keeps its default", c3.activation.enabled === d.activation.enabled, String(c3.activation.enabled));
+			check("default: an array key keeps its default", c3.activation.keywords.length === d.activation.keywords.length, `${c3.activation.keywords.length} vs ${d.activation.keywords.length}`);
+			check("default: an explicit value still wins", c3.members.defaultRole === "scout", c3.members.defaultRole);
+			check("default: a neighbouring explicit value is unaffected", c3.topology.requireDeclaration === d.topology.requireDeclaration, String(c3.topology.requireDeclaration));
 
-			// DEFAULT inside a nested table (presets.effort is the only one).
+			// The marker inside a nested table (presets.effort is the only one).
 			const a3b = mkAgent();
-			fs.writeFileSync(cfgOf(a3b), ["[stepcodeAgentTeam.presets.effort]", `scout = "${DEFAULT_SENTINEL}"`, 'worker = "max"'].join("\n"));
+			fs.writeFileSync(cfgOf(a3b), ["[stepcodeAgentTeam.presets.effort]", `scout = "${DEFAULT_MARKER}"`, 'worker = "max"'].join("\n"));
 			resetConfigCache();
 			const c3b = loadConfig({ agentDir: a3b });
-			check("DEFAULT: works inside a nested table", c3b.presets.effort.scout === d.presets.effort.scout, String(c3b.presets.effort.scout));
-			check("DEFAULT: a sibling in the same table still applies", c3b.presets.effort.worker === "max", String(c3b.presets.effort.worker));
+			check("default: works inside a nested table", c3b.presets.effort.scout === d.presets.effort.scout, String(c3b.presets.effort.scout));
+			check("default: a sibling in the same table still applies", c3b.presets.effort.worker === "max", String(c3b.presets.effort.worker));
 
-			// ---- 3b. uncommenting every DEFAULT line still yields the defaults ----
+			// ---- 3b. uncommenting every marker line still yields the defaults ----
 			// The whole point of the sentinel, and the reason it must be quoted: a
-			// bare `DEFAULT` is not a TOML scalar, so step's reader drops the entire
+			// bare `default` is not a TOML scalar, so step's reader drops the entire
 			// section and the user's real settings in it silently stop applying.
 			// This is the guard against that class of bug.
 			const a3c = mkAgent();
@@ -160,9 +160,9 @@ export default function (pi: ExtensionAPI) {
 			const uncommented = text
 				.split("\n")
 				.map((l) => l.replace(/^#\s?/, ""))
-				.filter((l) => l.includes(`= "${DEFAULT_SENTINEL}"`))
+				.filter((l) => l.includes(`= "${DEFAULT_MARKER}"`))
 				.join("\n");
-			check("uncomment: the block has DEFAULT lines to uncomment", uncommented.split("\n").length > 20, String(uncommented.split("\n").length));
+			check("uncomment: the block has default lines to uncomment", uncommented.split("\n").length > 20, String(uncommented.split("\n").length));
 			const byTable = new Map<string, string[]>();
 			let current = "";
 			for (const l of uncommented.split("\n")) {
@@ -188,7 +188,7 @@ export default function (pi: ExtensionAPI) {
 				}
 			};
 			walk(c3c as unknown as Record<string, unknown>, d as unknown as Record<string, unknown>, "");
-			check("uncomment: every DEFAULT line resolves to the built-in default", drifted.length === 0, drifted.slice(0, 4).join(" | "));
+			check("uncomment: every default line resolves to the built-in default", drifted.length === 0, drifted.slice(0, 4).join(" | "));
 			resetConfigCache();
 
 			// ---- 4. idempotence and the upgrade delta ----

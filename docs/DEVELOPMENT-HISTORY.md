@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30（plan-117，DEFAULT 合法性实证与 sandbox 配置初始化；此前为 plan-116）。
+> 最近更新：2026-10-30（plan-118，标记改名轮：DEFAULT → "default" 合法 TOML 标量；此前为 plan-117）。
 
 ## 总览
 
@@ -973,3 +973,33 @@
 **验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误；phase31 扩到 **45 条断言全部通过**。
 
 **仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key（现在 `sandbox/config.toml` 里已有 `searchApiKey` 空位可填）；v0.4.x 发版待用户同意。
+### 80. 标记改名轮：DEFAULT → "default" 合法 TOML 标量（plan-118）
+
+**用户 prompt**：「[团队方案·经济] …成员名单：执行者（角色：TOML 配置修改，effort：低）；通信拓扑：star；单人节点，队长即执行者，零协作开销；任务拆解：T1 将 DEFAULT 改为合法 TOML 标量 "default" 并验证 step 读取器可解析…请把DEFAULT改为合法TOML标量，比如"default"之类的，方便step读取器读取配置」。
+
+**组建与执行降级**：按经济方案建单成员 `executor`（`model: step-5-preview`、effort low）、star 拓扑、单任务 T56（无 blockedBy）。派发即 settle 超时（本会话第 24 次），由 Leader 亲自执行，范围未缩。
+
+**对"是否合法"的实证回答**（用 step 自己的读取器，不靠推理）：
+
+| 写法 | step 读取器行为 |
+|---|---|
+| `max = "default"` | ✅ 可解析，该键回到内置默认值，同表 `defaultRole="scout"` **不受影响** |
+| `max = "DEFAULT"` | ✅ 同上 |
+| `max = default`（裸） | ❌ **整表被丢弃**，`defaultRole` 回落默认 |
+| `max = DEFAULT`（裸） | ❌ 同上 |
+
+结论：**带引号的标记值本就合法**；不合法的是裸写形态，与大小写无关。因此本轮不是"修正非法值"，而是按用户要求改成约定俗成的小写拼写，并让常量名与值一致。
+
+**实施**：
+- `DEFAULT_SENTINEL` → `DEFAULT_MARKER`，值 `"default"`（41 处引用同步；名字不再与值矛盾）；
+- 种子块头部说明文字统一为 `"default"`，`KEEP THE QUOTES` 段保留（引号要求不变，且现在有读取器实证佐证）；
+- phase31 头部与行内注释同步改名；
+- CONFIGURATION(_CN)、TESTING(_CN) 的标记表述统一为 `"default"`，并把读取器实证写进文档。
+
+**途中抓到两个真实缺陷（重要）**：`test/smoke/phase20.ts:69` 与 `phase30.ts:159` 仍在断言 `tier = "DEFAULT"` / `dir = "DEFAULT"`——上一轮把值改成小写时**漏改的硬编码字符串**，两个探针当时都在失败（我上一轮的门禁跑在漏改之前，属我的验证疏漏）。已修到新标记。
+
+**教训**：常量值变更后，必须全仓搜一次硬编码的旧值字符串——`grep -rn '"DEFAULT"'` 这类搜索比"我记得改过了"可靠。探针里出现与实现不一致的硬编码，本质是让断言悄悄失效。
+
+**验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误；phase20/30/31 复跑全绿。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。

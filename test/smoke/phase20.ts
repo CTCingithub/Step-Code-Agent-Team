@@ -63,10 +63,10 @@ export default function (pi: ExtensionAPI) {
 			const missingSections = seedSections.filter((s) => !afterSeed.includes(s));
 			check("seed: every config section is listed", missingSections.length === 0, `missing: ${missingSections.join(", ")}`);
 			check("seed: keywords line carries the full default list", afterSeed.includes("组小队") && afterSeed.includes("topo team"), "keywords show examples only");
-			// Default-valued keys are the DEFAULT marker with the real value in the
+			// Default-valued keys carry the "default" marker with the real value in the
 			// comment: the block stays informative and the config stays
 			// upgrade-proof (a literal would pin the value forever).
-			check("seed: plan tier uses the DEFAULT marker", afterSeed.includes('tier = "DEFAULT"'), "tier shows the default only");
+			check("seed: plan tier uses the default marker", afterSeed.includes('tier = "default"'), "tier shows the default only");
 			check("seed: the real default is still documented in the comment", afterSeed.includes('built-in default "always ask"'));
 
 			// --- 2. idempotent ---------------------------------------------------
