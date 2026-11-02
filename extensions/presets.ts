@@ -48,6 +48,11 @@ export function packageRoot(): string {
 	return path.resolve(extensionDir(), "..");
 }
 
+/** Absolute path to the searcher role's retrieval script (bin/topo-search.mjs). */
+export function searchScriptPath(): string {
+	return path.join(packageRoot(), "bin", "topo-search.mjs");
+}
+
 export function presetsDir(): string {
 	return path.join(packageRoot(), "agents");
 }

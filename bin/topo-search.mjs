@@ -54,7 +54,9 @@ function envInt(name, fallback) {
  *   1. the per-kind key the leader injects from `[stepcodeAgentTeam.searcher]`
  *      (`STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_TOPO_FETCH_KEY`) — this is the
  *      documented, vendor-neutral path and the one the config file drives;
- *   2. `DEEPSEEK_API_KEY`, a convenience for the DEFAULT endpoint only. It is
+ *   2. `STEPCODE_SEARCH_API_KEY`, the other name the leader injects the same
+ *      configured key under (it is the host search tool's own variable);
+ *   3. `DEEPSEEK_API_KEY`, a convenience for the DEFAULT endpoint only. It is
  *      a fallback, never a requirement: point `searchUrl`/`fetchUrl` at any
  *      provider that speaks this script's JSON contract and set the matching
  *      key in the config instead.
@@ -62,7 +64,12 @@ function envInt(name, fallback) {
  */
 function resolveKey(kind) {
 	const configured = kind === "fetch" ? env("STEPCODE_TOPO_FETCH_KEY") : env("STEPCODE_TOPO_SEARCH_KEY");
-	return configured || env("DEEPSEEK_API_KEY");
+	// The leader injects the configured search key under BOTH names: the
+	// script's own and the host search tool's. Accept either so the search
+	// path is authenticated whenever the config carries a key, then fall back
+	// to DEEPSEEK_API_KEY for the default endpoint.
+	const searchAlias = kind === "fetch" ? "" : env("STEPCODE_SEARCH_API_KEY");
+	return configured || searchAlias || env("DEEPSEEK_API_KEY");
 }
 
 function resolveBase(kind) {
@@ -152,7 +159,7 @@ async function callApi(kind, payload, opts) {
 	if (!key) {
 		// A missing credential is the caller's setup problem, not a failed
 		// request — it must not be mistaken for (or retried like) an API error.
-		return { ok: false, kind, fatal: true, error: "no API key: set DEEPSEEK_API_KEY (or STEPCODE_TOPO_FETCH_KEY / STEPCODE_TOPO_SEARCH_KEY)", retryable: false, meta };
+		return { ok: false, kind, fatal: true, error: "no API key: set STEPCODE_TOPO_SEARCH_KEY / STEPCODE_TOPO_FETCH_KEY (or STEPCODE_SEARCH_API_KEY / DEEPSEEK_API_KEY)", retryable: false, meta };
 	}
 
 	const timeoutMs = opts.timeoutMs ?? envInt("STEPCODE_TOPO_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);

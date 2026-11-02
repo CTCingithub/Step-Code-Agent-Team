@@ -244,7 +244,7 @@ export default function (pi: ExtensionAPI) {
 			// ---- 10. no credential anywhere ----
 			const noKey = await run(["search", "--query", "q"], { STEPCODE_TOPO_SEARCH_URL: "http://127.0.0.1:1", DEEPSEEK_API_KEY: "" });
 			check("usage: a missing key exits 2 (not a request failure)", noKey.code === 2, `code=${noKey.code}`);
-			check("usage: the missing-key message names the env vars", /DEEPSEEK_API_KEY/.test(noKey.stdout));
+			check("usage: the missing-key message names the env vars", /STEPCODE_TOPO_SEARCH_KEY/.test(noKey.stdout) && /STEPCODE_SEARCH_API_KEY/.test(noKey.stdout) && /DEEPSEEK_API_KEY/.test(noKey.stdout), noKey.stdout.slice(0, 160));
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE28 DONE (all passed)" : `SMOKE28 DONE (${failed}/${results.length} failed)`);

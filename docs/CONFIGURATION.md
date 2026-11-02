@@ -89,16 +89,25 @@ reviewer = "high"
 searcher = "medium"                  # the searcher role (added in v0.4.0)
 
 [stepcodeAgentTeam.searcher]           # endpoints/credentials for the searcher role (added in v0.4.0)
-searchUrl = ""                        # empty = the built-in default (DeepSeek's /v1/tools/search)
-searchApiKey = ""                     # empty = DEEPSEEK_API_KEY from the environment
-fetchUrl = ""                         # empty = the built-in default (DeepSeek's /v1/tools/fetch)
-fetchApiKey = ""                      # empty = the search key
+searchUrl = ""                        # empty = the host search_web default
+searchApiKey = ""                     # empty = the login profile / STEPCODE_SEARCH_API_KEY
+fetchUrl = ""                         # empty = a plain unauthenticated request to the target URL
+fetchApiKey = ""                      # empty = no Authorization header
+#
+# What "empty" means depends on which consumer you mean, and the two differ:
+# the ROLE falls back to the host tools (search_web's own credential
+# resolution for search, a plain curl for fetch), while the SCRIPT
+# (bin/topo-search.mjs) falls back to its built-in DeepSeek endpoints and
+# DEEPSEEK_API_KEY. Setting the keys is what makes a non-default provider real
+# for both.
 #
 # These four keys are the whole point: the searcher role is NOT tied to one
 # provider. Point searchUrl/fetchUrl at any endpoint that speaks the script's
 # JSON contract ({query,count,need_content} → {results}; {url} → {title,content})
 # and set the matching key here. The leader injects them into member processes
-# as STEPCODE_TOPO_SEARCH_URL / _SEARCH_KEY / _FETCH_URL / _FETCH_KEY.
+# as STEPCODE_TOPO_SEARCH_URL / _SEARCH_KEY / _FETCH_URL / _FETCH_KEY, plus
+# STEPCODE_SEARCH_API_KEY for the host search tool and
+# STEPCODE_TOPO_SEARCH_SCRIPT pointing at the script itself.
 
 [stepcodeAgentTeam.encryption]         # at-rest encryption of the team registry (added in v0.4.0, on by default)
 enabled = true                        # AES-256-GCM; key in .topo/team.key (0600)
@@ -185,7 +194,7 @@ Whether it is encrypted follows YOUR option: `encryption.enabled` with a key ava
 | `STEPCODE_TEAM_COST_WARN=<usd>` | Overrides `cost.warnThreshold` (invalid values ignored) |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | Overrides `members.maxRecursionDepth` (1–4; invalid values ignored); the leader injects the effective value into sub-member processes |
 | `STEPCODE_TEAM_SOCK` | Injected automatically by the leader into member processes, pointing at the team service socket (no manual setup needed) |
-| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` / `STEPCODE_TOPO_SEARCH_KEY` | Injected automatically by the leader into member processes from `[stepcodeAgentTeam.searcher]` (the searcher role reads them by name; see `docs/ROLES.md`). Set them by hand only to test `bin/topo-search.mjs` directly |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` / `STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_SEARCH_API_KEY` / `STEPCODE_TOPO_SEARCH_SCRIPT` | Injected automatically by the leader into member processes from `[stepcodeAgentTeam.searcher]` (the searcher role reads them by name; see `docs/ROLES.md`). The configured key arrives under both `STEPCODE_TOPO_SEARCH_KEY` (the script's own name) and `STEPCODE_SEARCH_API_KEY` (the host `search_web` tool's name), and the script's path is only injected when the searcher config is actually configured. Set them by hand only to test `bin/topo-search.mjs` directly |
 | `STEPCODE_SEARCH_API_KEY` | Injected by the leader when the searcher `searchApiKey` is set; also the host `search_web` tool's own credential key |
 
 ## Notes

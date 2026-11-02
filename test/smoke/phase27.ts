@@ -114,19 +114,21 @@ export default function (pi: ExtensionAPI) {
 			);
 			const createTool = registered.find((t) => t.name === "team_create_member");
 			check("tools: team_create_member is registered (needed to spawn a searcher)", Boolean(createTool));
-			const envProbe = (cfg: ReturnType<typeof defaultConfig>): Record<string, string> => {
-				// Mirrors buildSpawnArgs' searcher injection without spawning a process.
-				const env: Record<string, string> = {};
-				if (cfg.searcher.searchApiKey) env.STEPCODE_SEARCH_API_KEY = cfg.searcher.searchApiKey;
-				if (cfg.searcher.searchUrl) env.STEPCODE_TOPO_SEARCH_URL = cfg.searcher.searchUrl;
-				if (cfg.searcher.fetchUrl) env.STEPCODE_TOPO_FETCH_URL = cfg.searcher.fetchUrl;
-				if (cfg.searcher.fetchApiKey) env.STEPCODE_TOPO_FETCH_KEY = cfg.searcher.fetchApiKey;
-				return env;
-			};
-			const injected = envProbe(c1);
-			check("env: all four keys are injected when configured", Object.keys(injected).length === 4, Object.keys(injected).join(","));
-			check("env: the host search key name is reused", injected.STEPCODE_SEARCH_API_KEY === "k");
-			check("env: nothing is injected when unconfigured", Object.keys(envProbe(d)).length === 0, Object.keys(envProbe(d)).join(","));
+			// Asserts the real mapping function, not a hand copy of it. The copy
+			// this replaces mirrored buildSpawnArgs' four lines, so it inherited
+			// the original's blind spot: the missing STEPCODE_TOPO_SEARCH_KEY
+			// passed the gate while the script's search path had no credential.
+			const { searcherSpawnEnv } = await import("../../extensions/config.ts");
+			const injected = searcherSpawnEnv(c1.searcher);
+			check("env: all five keys are injected when configured", Object.keys(injected).length === 5, Object.keys(injected).join(","));
+			check("env: the script's own search key name is injected", injected.STEPCODE_TOPO_SEARCH_KEY === "k", String(injected.STEPCODE_TOPO_SEARCH_KEY));
+			check("env: the host search key name carries the same configured key", injected.STEPCODE_SEARCH_API_KEY === "k", String(injected.STEPCODE_SEARCH_API_KEY));
+			check("env: the fetch key keeps its own name", injected.STEPCODE_TOPO_FETCH_KEY === "f", String(injected.STEPCODE_TOPO_FETCH_KEY));
+			check("env: both endpoints are injected", injected.STEPCODE_TOPO_SEARCH_URL === "https://s.example/search" && injected.STEPCODE_TOPO_FETCH_URL === "https://f.example", `${injected.STEPCODE_TOPO_SEARCH_URL} / ${injected.STEPCODE_TOPO_FETCH_URL}`);
+			check("env: nothing is injected when unconfigured", Object.keys(searcherSpawnEnv(d.searcher)).length === 0, Object.keys(searcherSpawnEnv(d.searcher)).join(","));
+			check("env: a search key alone still reaches the script", searcherSpawnEnv({ ...d.searcher, searchApiKey: "only" }).STEPCODE_TOPO_SEARCH_KEY === "only");
+			check("env: empty strings never become variables", Object.keys(searcherSpawnEnv({ searchUrl: "", searchApiKey: "", fetchUrl: "", fetchApiKey: "" })).length === 0);
+			check("env: the script path rides along only when configured", searcherSpawnEnv(c1.searcher, "/pkg/bin/topo-search.mjs").STEPCODE_TOPO_SEARCH_SCRIPT === "/pkg/bin/topo-search.mjs" && !("STEPCODE_TOPO_SEARCH_SCRIPT" in searcherSpawnEnv(d.searcher, "/pkg/bin/topo-search.mjs")));
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE27 DONE (all passed)" : `SMOKE27 DONE (${failed}/${results.length} failed)`);

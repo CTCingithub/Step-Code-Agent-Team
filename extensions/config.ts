@@ -190,7 +190,38 @@ export interface SearcherConfig {
 	fetchApiKey: string;
 }
 
-/** At-rest encryption of the team registry (on by default). */
+/**
+ * The member-spawn environment for the searcher config. Exported so the probe
+ * asserts this function rather than a hand-copied mirror of it: a mirror
+ * carries the original's gaps silently, which is exactly how a missing
+ * `STEPCODE_TOPO_SEARCH_KEY` once passed the gate while the script's search
+ * path had no credential at all.
+ *
+ * Both key names are injected on purpose. `STEPCODE_SEARCH_API_KEY` is the
+ * host `search_web` tool's own credential name; `STEPCODE_TOPO_SEARCH_KEY` is
+ * what `bin/topo-search.mjs` reads. Injecting only the former left the script
+ * unauthenticated on the search path while fetch worked — the same config
+ * field, two consumers, one of them starved.
+ *
+ * The script's own path is injected alongside, because a member cannot guess
+ * where the package lives and the role prompt refers to it by variable rather
+ * than by a hard-coded path. It is only set when the searcher config is
+ * actually configured, so an unconfigured team still leaves the environment
+ * untouched.
+ */
+export function searcherSpawnEnv(cfg: SearcherConfig, searchScript = ""): Record<string, string> {
+	const env: Record<string, string> = {};
+	if (cfg.searchApiKey) {
+		env.STEPCODE_SEARCH_API_KEY = cfg.searchApiKey;
+		env.STEPCODE_TOPO_SEARCH_KEY = cfg.searchApiKey;
+	}
+	if (cfg.searchUrl) env.STEPCODE_TOPO_SEARCH_URL = cfg.searchUrl;
+	if (cfg.fetchUrl) env.STEPCODE_TOPO_FETCH_URL = cfg.fetchUrl;
+	if (cfg.fetchApiKey) env.STEPCODE_TOPO_FETCH_KEY = cfg.fetchApiKey;
+	const configured = Boolean(cfg.searchUrl || cfg.searchApiKey || cfg.fetchUrl || cfg.fetchApiKey);
+	if (configured && searchScript) env.STEPCODE_TOPO_SEARCH_SCRIPT = searchScript;
+	return env;
+}/** At-rest encryption of the team registry (on by default). */
 export interface EncryptionConfig {
 	enabled: boolean;
 }
