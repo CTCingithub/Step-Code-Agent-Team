@@ -3,7 +3,7 @@
 [简体中文 →](./ROLES_CN.md)
 
 Custom roles are reusable member configurations that behave exactly like the
-bundled presets (`scout` / `planner` / `worker` / `reviewer`): drop a Markdown
+bundled presets (`scout` / `planner` / `worker` / `reviewer` / `searcher`): drop a Markdown
 file with frontmatter into a preset directory and `team_create_member` can
 spawn members with it via `role="<name>"`.
 

@@ -2,7 +2,7 @@
 
 [English →](./ROLES.md)
 
-自定义角色是与内置预设（`scout` / `planner` / `worker` / `reviewer`）行为完全一致的
+自定义角色是与内置预设（`scout` / `planner` / `worker` / `reviewer` / `searcher`）行为完全一致的
 可复用成员配置：把一个带 frontmatter 的 Markdown 文件放进预设目录，即可通过
 `team_create_member(role="<角色名>")` 用它创建成员。
 
@@ -44,7 +44,7 @@ anything.
 `team_create_member` 显式传 `effort` 时始终优先。否则按序：
 
 1. `[stepcodeAgentTeam.presets.effort]` 配置覆盖——仅对随配置内置的四个角色名
-   （`scout` / `planner` / `worker` / `reviewer`）生效；
+   （`scout` / `planner` / `worker` / `reviewer` / `searcher`）生效；
 2. 角色自己的 frontmatter `effort`；
 3. 默认值（`high`）。
 

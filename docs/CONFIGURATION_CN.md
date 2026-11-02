@@ -86,6 +86,16 @@ scout = "low"                        # 按角色覆盖 effort（自定义角色�
 planner = "medium"                   # models.autonomousEffort 开启时一律不生效（由队长选择）
 worker = "medium"
 reviewer = "high"
+searcher = "medium"                  # searcher 角色（v0.4.0 新增）
+
+[stepcodeAgentTeam.searcher]           # searcher 角色的检索/抓取端点与凭证（v0.4.0 新增）
+searchUrl = ""                        # 空 = stepfun 自带（宿主 search_web 的凭证解析）
+searchApiKey = ""                     # 空 = STEPCODE_SEARCH_API_KEY 或 step login
+fetchUrl = ""                         # 空 = 直连目标 URL 的普通 HTTP（无认证）
+fetchApiKey = ""                      # 空 = 不带 Authorization 头
+
+[stepcodeAgentTeam.encryption]         # 团队注册表的落盘加密（v0.4.0 新增，默认开）
+enabled = true                        # AES-256-GCM；密钥在 .topo/team.key（0600）
 
 [stepcodeAgentTeam]
 debug = false                        # 调试日志
@@ -121,6 +131,21 @@ debug = false                        # 调试日志
 
 成员动态获知可通知的邻居：`topo_team_msg` 被拒时会列出可用队友（server 按发送方身份返回 `mayMessage` 列表），`stepcode-team status` 亦可从 shell 查询。
 
+## `.topo/` 与落盘加密（v0.4.0）
+
+**`.topo/` 是什么**：插件在你**当前工作目录**下的工作目录。首次激活时自动创建（插件默认关闭，因此未激活的会话不会在你目录里留任何东西），并把 `.topo/` 追加进**已存在的** `.gitignore`——若没有 `.gitignore` 则**不会替你创建**。目前里面只放一个文件：`team.key`（加密密钥，32 字节 base64，权限 0600）。
+
+**加密什么**：团队注册表 `registry.json`——它的 `tasks[].title/detail/result` 承载成员完整报告，是最敏感的载荷。算法 AES-256-GCM，信封带 `iv/tag/data` 与明文头 `teamId`/`cwd`（cwd 不敏感，读回时用它定位密钥文件）。`encryption.enabled = false` 时写明文。
+
+**必须知道的边界（不要夸大）**：
+- 防的是**其他用户读取**该文件，以及它被**误提交/误备份**；
+- **不防同 uid 的攻击者**——他能连 `.topo/team.key` 一起读；
+- **不覆盖宿主写出的成员会话 JSONL**（权限 0644，插件无权改写）——那仍是最大的真实暴露面，加密不解决它；
+- **丢密钥 = 数据不可恢复**；
+- 旧版本写的明文 `registry.json` **仍可正常读取**（读到信封走解密，否则按明文）。
+
+**降级路径**：`.topo` 已存在但是文件、是符号链接（不跟随——避免把密钥写到链接指向的任意路径）、父目录只读、路径过长——全部降级：插件照常运行，只是不做落盘加密，并在 stderr 留一行说明。
+
 ## 环境变量覆盖
 
 | 变量 | 作用 |
@@ -129,6 +154,8 @@ debug = false                        # 调试日志
 | `STEPCODE_TEAM_COST_WARN=<usd>` | 覆盖 `cost.warnThreshold`（非法值忽略） |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | 覆盖 `members.maxRecursionDepth`（1–4，非法值忽略）；队长按生效值注入子成员进程 |
 | `STEPCODE_TEAM_SOCK` | 由队长自动注入成员进程，指向团队服务 socket（无需手动设置） |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` | 由队长在 searcher 配置非空时注入成员进程（searcher 角色按名取用；见 `docs/ROLES_CN.md`） |
+| `STEPCODE_SEARCH_API_KEY` | searcher 的 `searchApiKey` 非空时由队长注入；也是宿主 `search_web` 自带的凭证键 |
 
 ## 说明
 

@@ -86,6 +86,16 @@ scout = "low"                        # per-role effort overrides (custom roles: 
 planner = "medium"                   # ignored while models.autonomousEffort is on (the leader picks)
 worker = "medium"
 reviewer = "high"
+searcher = "medium"                  # the searcher role (added in v0.4.0)
+
+[stepcodeAgentTeam.searcher]           # endpoints/credentials for the searcher role (added in v0.4.0)
+searchUrl = ""                        # empty = the stepfun default (host search_web credential resolution)
+searchApiKey = ""                     # empty = STEPCODE_SEARCH_API_KEY / step login
+fetchUrl = ""                         # empty = plain unauthenticated request to the target URL
+fetchApiKey = ""                      # empty = no Authorization header
+
+[stepcodeAgentTeam.encryption]         # at-rest encryption of the team registry (added in v0.4.0, on by default)
+enabled = true                        # AES-256-GCM; key in .topo/team.key (0600)
 
 [stepcodeAgentTeam]
 debug = false                        # debug logging
@@ -121,6 +131,36 @@ Topology shapes (declared with `team_set_topology` after creating members, befor
 
 Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejection lists the allowed teammates (the server returns the `mayMessage` list for the sender's identity), and `stepcode-team status` reports the same from a shell.
 
+## `.topo/` and at-rest encryption (v0.4.0)
+
+**What `.topo/` is**: the plugin's working directory inside your current
+workspace. It is created on first activation (the plugin is default-off, so an
+inactive session leaves nothing in your tree) and registered in an **existing**
+`.gitignore` — if there is no `.gitignore`, none is invented. It currently holds
+one file: `team.key` (the encryption key, 32 bytes base64, mode 0600).
+
+**What is encrypted**: the team registry `registry.json` — its
+`tasks[].title/detail/result` carries full member reports and is the most
+sensitive payload the plugin owns. AES-256-GCM, with an envelope carrying
+`iv/tag/data` plus a plaintext `teamId`/`cwd` header (cwd is not sensitive and
+is what lets a reader locate the key). `encryption.enabled = false` writes
+plaintext.
+
+**The boundaries (do not oversell this)**:
+- it protects against OTHER USERS reading the file, and against the file being
+  committed or backed up in the clear;
+- it does NOT protect against a same-uid attacker, who reads the key file too;
+- it does NOT cover the host-written member session JSONL (mode 0644, outside
+  the plugin's reach) — that remains the largest real exposure;
+- losing the key means the data is unrecoverable;
+- plaintext registries written by older versions still load (an envelope is
+  decrypted, anything else is read as-is).
+
+**Degrade paths**: `.topo` already exists as a file, is a symlink (not followed
+— writing key material through a link we did not create would leak it to an
+arbitrary path), a read-only parent, or an over-long path. All of them degrade:
+the team keeps running without at-rest encryption and one line is logged.
+
 ## Environment Overrides
 
 | Variable | Purpose |
@@ -129,6 +169,8 @@ Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejectio
 | `STEPCODE_TEAM_COST_WARN=<usd>` | Overrides `cost.warnThreshold` (invalid values ignored) |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | Overrides `members.maxRecursionDepth` (1–4; invalid values ignored); the leader injects the effective value into sub-member processes |
 | `STEPCODE_TEAM_SOCK` | Injected automatically by the leader into member processes, pointing at the team service socket (no manual setup needed) |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` | Injected automatically by the leader into member processes when the searcher config is non-empty (the searcher role reads them by name; see `docs/ROLES.md`) |
+| `STEPCODE_SEARCH_API_KEY` | Injected by the leader when the searcher `searchApiKey` is set; also the host `search_web` tool's own credential key |
 
 ## Notes
 

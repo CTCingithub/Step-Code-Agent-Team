@@ -809,3 +809,23 @@
 **发布后状态**：`main` = `latest` = `develop` = 发布提交 `8bcdf44`（`chore: release v0.3.0`，package.json `0.3.0`）；附注 tag `v0.3.0` = `a4baac8`；`v0.3.0-preview`（73fdb81）保留为历史预览线；npm 从未发布（git-only 分发）。**hermetic 实测**：脚本内在推送后立即执行时撞上瞬时竞态失败（与 v0.3.0-preview 同一现象），手动重跑成立——一次性 agentDir 安装 `@v0.3.0` 成功，RPC 会话返回 `Topology Agent Team activated (/topo command). Team tools are now available.`。**环境注记**：本轮 SSH 到 github.com:22 被本地代理（198.18.0.8）拦截超时，`git push origin` 全部失败；HTTPS 读写正常但非交互推送缺凭据。改用 `gh auth setup-git` 让 gh 的 token 充当 credential helper 后推送成功——后续会话若遇同类网络问题可按此处理。
 
 **留给下一版**：① 六项纯人工测试（M1 真实 install/remove、M2 信任弹窗 + K6 项目级角色层、M3/M4 TUI 像素与按键、M5 英文审阅、M6 可选 8 成员性能）；② ring 巡游上限的演示目标需在同一次派发内连续嵌套中继才能触发（MANUAL-TESTING 场景 4 已写明）；③ deferred：P2-8e/9 测试加固、settle 超时自动 harvest（评估后不做）、宿主 select 倒计时不响应按键（上游缺口）、派发机制间歇性退化（根因未定位，队长接管可兜底）。
+### 73. v0.4.0 功能轮：`.topo/` 初始化、默认落盘加密、searcher 角色（plan-111）
+
+**用户 prompt**：确认性能档实际方案（Lead_Architect / Dev_Init_A / Dev_Init_B / Dev_Search / Dev_Docs，custom 拓扑，T1 接口规范→T2/T3 初始化竞速→T5 searcher→T4 择优集成→T6 文档→T7 联调）后「1.我需要让用户在工作空间中，首次使用本插件时，agent自动在目录下创建.topo/路径，并将该路径加入 .gitignore中（如果有），该路径用于辅助本插件的工作；2.添加默认打开的加密选项，加密保证安全性；3.添加一个默认角色searcher，专门用于search和fetch，配置文件中可设置使用的Search和Fetch的url和API key，若用户不填写则默认使用stepfun自带的。请创建合理的计划后执行，并同步修改或更新文档」。
+
+**思路**：三项功能一个共同底座——`.topo/` 既是工作目录也是密钥归宿，因此先定接口契约再动代码。**派发机制本轮每次尝试都 settle 超时**（架构 + 两个初始化竞速 + searcher 开发，共 4 次），按既定模式由队长单写全程；成员唯一落成物是 `phase25` 探针（49 断言，测试先行），被直接用作实现 A 的验收测试——这是本轮"先契约"决策的直接收益。
+
+**关键设计决策（均附读码依据）**：
+- **`.topo/` 创建时机 = 激活时**，不是 session_start：插件默认关闭，未激活会话不该在用户目录留东西（`index.ts` `tryActivate` 成功路径）。
+- **`.gitignore` 只追加不创建**：忠实于用户原话"如果有"；接受 `.topo/`/`.topo`/`/.topo`/`/.topo/` 四种拼写；保留 CRLF 与用户原有字节（appendFileSync，不读全量写回）。
+- **符号链接不跟随**：把我们没创建的链接当写入目标，会把 0600 密钥泄到任意路径——报错交由调用方决策。
+- **加密范围只说真话**：只加密插件自己的 `registry.json`（其 `tasks[].result` 承载成员完整报告）。文档明写**不防**同 uid 攻击者（能连密钥一起读）、**不覆盖**宿主写出的会话 JSONL（0644，插件无权改——上一轮安全评估确认的最大暴露面）、丢密钥不可恢复。**没有虚构能力**。
+- **信封带明文 `cwd` 头**：读回方要靠它定位 `.topo/team.key`；cwd 不敏感。最初设计引用了一个并不存在的 `cwd` 标记文件，自查发现后立即改正——这是本轮唯一的设计返工。
+- **searcher 给 `run_command`**：生态内无专用 fetch 工具（grep `fetchUrl|webfetch` 零命中），这是真实抓取能力的代价，写进文档而非隐瞒；`searchUrl` **不能**改宿主 `search_web` 的端点（只能经 options/login profile），故只作提示词指引值注入——同样如实写明。
+- **`searcher` 加进默认 `presets.effort`**：合并只认默认键集合里的键，不加则该角色 effort 无法配置（探针当场抓到）。
+
+**测试**：phase25（49 断言：目录/密钥 0600/幂等/四种拼写/CRLF/空文件/无换行/文件型/符号链接/超长路径）、phase26（信封往返、篡改与错钥拒绝、**明文 registry 仍可读**、enabled=false 写明文、缺密钥降级）、phase27（预设五字段、effort 覆盖、配置面+种子块、四个 env 键）。**门禁抓到真实回归**：phase24 报 `paths[0] must be of type string`——脚本化 ctx 无 `cwd`；加守卫后复跑全绿。
+
+**验证**：零 token 全量门全绿（23 phase + manifest + 7 live + orphan-check）；tsc 全导入图零错误。
+
+**遗留**：① 竞速对比未实际发生（派发故障），实现 B 未写——`.topo/` 初始化目前只有实现 A，其健壮性已由 49 条断言覆盖，但"性能与健壮性"维度的竞速择优仍是一个未完成的计划项；② searcher 的 fetch 只能经 curl，若后续要一等公民能力需在 member-messaging.ts 注册 `topo_fetch` 工具（成员默认只加载该扩展，注册在 index.ts 的工具成员拿不到）；③ 加密未覆盖宿主会话 JSONL（需宿主侧改 mode 或 umask，已在上一轮安全评估中立项）。

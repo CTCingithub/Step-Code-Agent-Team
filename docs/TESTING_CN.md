@@ -97,6 +97,9 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议）+ `planConfirmDialogOpts`（TUI 无倒计时） | 零 token |
 | phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
 | phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
+| phase25 | `.topo/` 初始化契约：目录创建、0600 密钥材料、幂等、`.gitignore` 四种可接受拼写、CRLF 保留，以及全部降级路径（`.topo` 是文件、符号链接不跟随、超长路径）——全部对 hermetic mktemp cwd 执行 | 零 token（独立运行） |
+| phase26 | 落盘加密：AES-256-GCM 信封往返、篡改与错钥拒绝、**明文** registry 仍可读（向后兼容）、`enabled = false` 写明文、缺密钥时降级不抛 | 零 token（独立运行） |
+| phase27 | `searcher` 角色：预设 frontmatter 五字段（含钉住的 `model:`）、`presets.effort` 覆盖、searcher/encryption 配置面与种子块、四个文档化的 env 键 | 零 token（独立运行） |
 | phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言选项顺序恰为 `Accept / Cancel / Other`、Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、空提交按原样接受、**输入被关闭**（Esc/超时→undefined）与 Cancel 完全同果、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
 
 **runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**类型门**：`sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`（paths 把四个 `@step-harness` 包映射到 `dist/*.d.ts` + typebox）对 `extensions/` 与 `test/smoke/` 必须**零错误**——自 R16（2026-10-29）补全 phase15 的 Theme 桩与 phase24 的 contextHandler 守卫后已归零。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。仓库的类型检查同样算门禁的一部分：tsc 全导入图零错误（R16 轮前为 17——phase15 的 Theme 桩与 phase24 的 context hook 读取；复现命令 `sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`）。
