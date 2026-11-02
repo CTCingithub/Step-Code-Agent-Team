@@ -9,7 +9,7 @@
 >
 > **Historical archive (as of 2026-10-30).** This was the plan that built the
 > four-layer testing system, and its four layers now exist and run: the
-> zero-token layer is `test/smoke/phase*.ts` (25 phases, discovered on disk by
+> zero-token layer is `test/smoke/phase*.ts` (26 phases, discovered on disk by
 > the runner), the LLM layer lives in `sandbox/`, and the operational reference
 > is [docs/TESTING.md](TESTING.md) with the execution log in
 > [docs/TEST-PLAN.md](TEST-PLAN.md). Read this document for the reasoning

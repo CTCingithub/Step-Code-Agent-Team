@@ -4,7 +4,7 @@
 > 来源：2026-10-17 对 Step-Code-Agent-Team 全量代码的走查（extensions/ 10 个模块 + bin shim + 预设 + 文档）。
 > 本文档分四部分：**① 发现汇总（按严重度分级）② 测试计划（四层）③ 优化计划（里程碑）④ 执行顺序**。
 >
-> **历史存档（截至 2026-10-30）**。本文档是当年搭建四层测试体系的计划，如今四层都已存在并常态运行：零 token 层是 `test/smoke/phase*.ts`（25 个 phase，由 runner 磁盘派生），LLM 层在 `sandbox/`，运维参考是 [docs/TESTING_CN.md](TESTING_CN.md)，执行记录在 [docs/TEST-PLAN_CN.md](TEST-PLAN_CN.md)。读本文档是为了理解四层的由来与最初的那些发现，**不是**为了查当前 phase 清单或里程碑状态——那些已经搬走了。下文提到的模块数同样是历史数字（现在 extensions/ 有 18 个模块，另有 `bin/topo-search.mjs`）。
+> **历史存档（截至 2026-10-30）**。本文档是当年搭建四层测试体系的计划，如今四层都已存在并常态运行：零 token 层是 `test/smoke/phase*.ts`（26 个 phase，由 runner 磁盘派生），LLM 层在 `sandbox/`，运维参考是 [docs/TESTING_CN.md](TESTING_CN.md)，执行记录在 [docs/TEST-PLAN_CN.md](TEST-PLAN_CN.md)。读本文档是为了理解四层的由来与最初的那些发现，**不是**为了查当前 phase 清单或里程碑状态——那些已经搬走了。下文提到的模块数同样是历史数字（现在 extensions/ 有 18 个模块，另有 `bin/topo-search.mjs`）。
 
 ---
 

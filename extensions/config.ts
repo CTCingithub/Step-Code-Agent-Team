@@ -33,6 +33,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import * as stepCore from "@step-harness/coding-agent";
 import { VALID_TOPOLOGY_SHAPES, type TopologyShape } from "./topology.ts";
 import { DEFAULT_TIER_MODE, PLAN_TIER_MODES } from "./plan.ts";
@@ -319,27 +320,44 @@ function unifiedConfigFileName(): string {
 }
 
 /**
- * Seeds the global unified config with a commented defaults block on first
- * activation, so a fresh install has discoverable configuration. Additive
- * only: the existing file is preserved verbatim (appended to, never
+ * Seeds the global unified config with a commented reference block, so a fresh
+ * install has discoverable configuration and — the point of the version
+ * markers — an UPGRADE gets the options the new version added.
+ *
+ * Additive only: the existing file is preserved verbatim (appended to, never
  * rewritten — a rewrite through step's own writer would drop the user's
- * comments), the block is entirely comments so defaults keep applying, and
- * the write is idempotent (skipped once the section name appears). Returns
- * true when the block was appended.
+ * comments and, worse, any line they uncommented). Every section is tagged with
+ * the plugin version that documented it, so a later version appends exactly the
+ * sections that are new or changed and leaves the rest alone. The block is
+ * entirely comments, so defaults keep applying until something is uncommented.
+ *
+ * Returns true when anything was appended.
  */
 export function seedGlobalConfigExample(agentDirPath: string): boolean {
 	const file = unifiedConfigFilePath(agentDirPath);
 	try {
-		if (fs.existsSync(file)) {
-			if (fs.readFileSync(file, "utf8").includes(CONFIG_SECTION)) return false;
-			fs.appendFileSync(file, seedBlock(), { encoding: "utf8", mode: 0o600 });
-			return true;
+		if (!fs.existsSync(file)) {
+			// No config file yet: create it with step's own header, then seed.
+			const ensure = stepConfigExports.ensureStepConfigFile;
+			if (typeof ensure !== "function") return false;
+			ensure(file);
 		}
-		// No config file yet: create it with step's own header, then seed.
-		const ensure = stepConfigExports.ensureStepConfigFile;
-		if (typeof ensure !== "function") return false;
-		ensure(file);
-		fs.appendFileSync(file, seedBlock(), { encoding: "utf8", mode: 0o600 });
+		const current = fs.readFileSync(file, "utf8");
+		// A section counts as documented when its header is present; the version
+		// in that header decides whether it is stale. A legacy block with no
+		// markers at all is treated as current for the sections it names (so an
+		// old install does not get a duplicate of everything) and as absent for
+		// the ones it does not (so genuinely new options still appear).
+		const documented = readDocumentedSections(current);
+		const version = pluginVersion();
+		const stale = seedSections().filter((section) => {
+			const at = documented.get(section.name);
+			return typeof at === "string" && compareVersions(at, version) < 0;
+		});
+		const fresh = seedSections().filter((section) => !documented.has(section.name));
+		const missing = [...fresh, ...stale];
+		if (missing.length === 0) return false;
+		fs.appendFileSync(file, renderSeed(missing, version, documented.size === 0), { encoding: "utf8", mode: 0o600 });
 		return true;
 	} catch (err) {
 		configNote(`cannot seed ${file}: ${err instanceof Error ? err.message : String(err)}`);
@@ -347,94 +365,222 @@ export function seedGlobalConfigExample(agentDirPath: string): boolean {
 	}
 }
 
-function seedBlock(): string {
+/** The plugin's own version, read from its package.json (never throws). */
+function pluginVersion(): string {
+	try {
+		const here = path.dirname(fileURLToPath(import.meta.url));
+		const pkg = JSON.parse(fs.readFileSync(path.resolve(here, "..", "package.json"), "utf8")) as { version?: unknown };
+		return typeof pkg.version === "string" && pkg.version ? pkg.version : "0.0.0";
+	} catch {
+		return "0.0.0";
+	}
+}
+
+/** Numeric dotted-version compare; a missing part reads as 0. */
+function compareVersions(a: string, b: string): number {
+	const pa = a.split(".").map((n) => Number.parseInt(n, 10) || 0);
+	const pb = b.split(".").map((n) => Number.parseInt(n, 10) || 0);
+	for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+		const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+		if (diff !== 0) return diff < 0 ? -1 : 1;
+	}
+	return 0;
+}
+
+/**
+ * Maps each documented section name to the version its header claims, or null
+ * when the section is present but carries no marker.
+ *
+ * The null case is what keeps a pre-versioning install from getting a duplicate
+ * of everything: a section the user already has — commented without a version,
+ * or an active table they wrote themselves — is treated as documented at an
+ * unknown version and left alone. Only a marker older than the current version
+ * triggers a refresh, so new keys inside an existing section still appear.
+ */
+function readDocumentedSections(text: string): Map<string, string | null> {
+	const found = new Map<string, string | null>();
+	const marked = /^#\s*\[stepcodeAgentTeam\.([\w.]+)\]\s*\(v([^)]+)\)/gm;
+	let m: RegExpExecArray | null;
+	while ((m = marked.exec(text))) found.set(m[1], m[2].trim());
+	const anyMention = /^#?\s*\[stepcodeAgentTeam(?:\.([\w.]+))?\]/gm;
+	while ((m = anyMention.exec(text))) {
+		const name = m[1] ?? "";
+		if (!found.has(name)) found.set(name, null);
+	}
+	return found;
+}
+
+/** Renders the appended block: a short header, then the given sections. */
+function renderSeed(sections: SeedSection[], version: string, first: boolean): string {
+	const lines = [
+		"",
+		first
+			? "# ---- stepcode-agent-team configuration (uncomment to override) ----"
+			: `# ---- stepcode-agent-team: options added or changed in v${version} ----`,
+		"# Full reference: docs/CONFIGURATION.md",
+		`# "${DEFAULT_SENTINEL}" means "use the built-in default" — such a key keeps following the`,
+		"# default even when a newer version changes it. Omitting a key does the same.",
+		"# Null-defaulted keys (members.defaultTools, storage.dir) show an example; omit for null.",
+	];
+	for (const section of sections) {
+		const header = section.name ? `# [stepcodeAgentTeam.${section.name}] (v${version})` : `# [stepcodeAgentTeam] (v${version})`;
+		lines.push("#", header, ...section.lines);
+	}
+	lines.push("#", "");
+	return lines.join("\n");
+}
+
+interface SeedSection {
+	name: string;
+	lines: string[];
+}
+
+/**
+ * The reference block, one entry per config table. Each section carries the
+ * version that documented it, so a later version can append just what changed.
+ *
+ * Default-valued keys are written as `DEFAULT` (see DEFAULT_SENTINEL) with the
+ * actual value in the trailing comment — the comment keeps the block
+ * informative, the sentinel keeps it upgrade-proof. Null-defaulted keys show an
+ * example instead, because there is no default to point at.
+ */
+function seedSections(): SeedSection[] {
 	const d = defaultConfig();
+	// padEnd alone abuts the comment when the key is longer than the column
+	// (the searcher examples are), so keep at least one space before the "#".
+	const line = (kv: string, comment: string): string => `# ${kv.padEnd(Math.max(34, kv.length + 1))}# ${comment}`;
 	const kw = d.activation.keywords.map((k) => `"${k}"`).join(", ");
 	const models = d.models.available.map((m) => `"${m}"`).join(", ");
-	const line = (kv: string, comment: string): string => `# ${kv.padEnd(36)}# ${comment}`;
+	const effort = (role: string, value: string): string => line(`${role} = "${DEFAULT_SENTINEL}"`, `built-in default "${value}"`);
 	return [
-		"",
-		"# ---- stepcode-agent-team configuration (uncomment to override) ----",
-		"# Full reference: docs/CONFIGURATION.md · delete this block to restore defaults",
-		"# Every key is optional; an omitted key keeps its built-in default. Values",
-		"# shown are the defaults; null-defaulted keys (members.defaultTools,",
-		"# storage.dir) show an example — omit them for null.",
-		"#",
-		"# [stepcodeAgentTeam.activation]",
-		line(`enabled = ${d.activation.enabled}`, "master switch; false disables both triggers"),
-		line(`keywords = [${kw}]`, "the full default list; [] disables keyword activation"),
-		line(`notifyOnActivate = ${d.activation.notifyOnActivate}`, "notify on activation"),
-		line(`guardEnabled = ${d.activation.guardEnabled}`, "suppress negation / meta-discussion / code-reference keyword hits"),
-		line(`confirmBeforeActivate = ${d.activation.confirmBeforeActivate}`, "TUI: confirm before a keyword activation (headless ignores it)"),
-		line(`headlessAutoActivate = ${d.activation.headlessAutoActivate}`, "headless/RPC: activate on keyword hits without a dialog"),
-		"#",
-		"# [stepcodeAgentTeam.models]",
-		line(`available = [${models}]`, "member model pool"),
-		line(`autonomousSelection = ${d.models.autonomousSelection}`, "the leader picks a model per member"),
-		line(`autonomousEffort = ${d.models.autonomousEffort}`, "the leader picks the effort per member"),
-		"#",
-		"# [stepcodeAgentTeam.members]",
-		line(`max = ${d.members.max}`, "live-member cap (1-64)"),
-		line(`defaultRole = "${d.members.defaultRole}"`, "default role for new members"),
-		line('defaultTools = ["read", "bash"]', "member tool allowlist; omit for null (preset or all tools)"),
-		line(`maxRecursionDepth = ${d.members.maxRecursionDepth}`, "team-tree depth bound (1-4)"),
-		"#",
-		"# [stepcodeAgentTeam.dispatch]",
-		line(`maxConcurrent = ${d.dispatch.maxConcurrent}`, "parallel member cap (1-16); extra dispatches queue"),
-		line(`timeoutMs = ${d.dispatch.timeoutMs}`, "per-dispatch timeout (ms) — covers the member's whole turn, nested relays included"),
-		line(`handshakeTimeoutMs = ${d.dispatch.handshakeTimeoutMs}`, "member spawn handshake timeout (ms)"),
-		line(`retries = ${d.dispatch.retries}`, "task retry count (0-5)"),
-		"#",
-		"# [stepcodeAgentTeam.oneshot]",
-		line(`timeoutMs = ${d.oneshot.timeoutMs}`, "stateless oneshot dispatch timeout (ms)"),
-		"#",
-		"# [stepcodeAgentTeam.cost]",
-		line(`warnThreshold = ${d.cost.warnThreshold}`, "cumulative spend warning (USD); 0 = off"),
-		"#",
-		"# [stepcodeAgentTeam.idle]",
-		line(`reapAfterMs = ${d.idle.reapAfterMs}`, "idle reaping threshold (ms; 30 min)"),
-		line(`reapIntervalMs = ${d.idle.reapIntervalMs}`, "reaping check interval (ms; 5 min)"),
-		"#",
-		"# [stepcodeAgentTeam.storage]",
-		line('dir = "/path/to/teams"', "team data root; omit for null (<agentDir>/teams)"),
-
-		"#",
-		"# [stepcodeAgentTeam.searcher]",
-		'searchUrl = ""                   # empty = the stepfun default (host search_web credential resolution)',
-		'searchApiKey = ""                # empty = STEPCODE_SEARCH_API_KEY / step login',
-		'fetchUrl = ""                    # empty = plain unauthenticated request to the target URL',
-		'fetchApiKey = ""                 # empty = no Authorization header',
-		"#",
-		"# [stepcodeAgentTeam.encryption]",
-		line(`enabled = ${d.encryption.enabled}`, "encrypt the team registry at rest (AES-256-GCM, key in .topo/team.key)"),
-		"#",
-		"# [stepcodeAgentTeam.records]",
-		line(`enabled = ${d.records.enabled}`, "write a collaboration record to .topo/records after every team task"),
-		line(`dir = "${d.records.dir}"`, "sub-directory of .topo/ for those records"),
-		"#",
-		"# [stepcodeAgentTeam.tasks]",
-		line(`max = ${d.tasks.max}`, "task-board capacity (ids T1..T<max>; 1-10000)"),
-		line(`outputCapBytes = ${d.tasks.outputCapBytes}`, "per-task output truncation (bytes); the full text stays in details.fullText"),
-		"#",
-		"# [stepcodeAgentTeam.topology]",
-		line(`default = "${d.topology.default}"`, "star/pipeline/mesh/ring/custom"),
-		line(`requireDeclaration = ${d.topology.requireDeclaration}`, "true = no dispatch before the topology is declared"),
-		line(`maxLoopCount = ${d.topology.maxLoopCount}`, "ring message-chain bound (0 = unlimited, 0-64)"),
-		"#",
-		"# [stepcodeAgentTeam.plan]",
-		line(`enabled = ${d.plan.enabled}`, "team-plan picker: economic/fast/balanced/performance + custom on activation"),
-		line(`tier = "${d.plan.tier}"`, "always ask = picker every time; a pinned tier applies directly"),
-		"#",
-		"# [stepcodeAgentTeam.presets.effort]",
-		'# scout = "low"       # per-role effort overrides (custom roles: set effort in their own frontmatter)',
-		'# planner = "medium"  # ignored while models.autonomousEffort is on (the leader picks)',
-		'# worker = "medium"',
-		'# reviewer = "high"',
-		"#",
-		"# [stepcodeAgentTeam]",
-		line(`debug = ${d.debug}`, "diagnostic logging to stderr"),
-		"",
-	].join("\n");
+		{
+			name: "activation",
+			lines: [
+				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.enabled}; master switch, false disables both triggers`),
+				line(`keywords = "${DEFAULT_SENTINEL}"`, `built-in default [${kw}]`),
+				line("keywords = []", "disable keyword activation entirely"),
+				line(`notifyOnActivate = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.notifyOnActivate}; notify on activation`),
+				line(`guardEnabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.guardEnabled}; suppress negation / meta-discussion / code-reference hits`),
+				line(`confirmBeforeActivate = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.confirmBeforeActivate}; TUI confirm before a keyword activation (headless ignores it)`),
+				line(`headlessAutoActivate = "${DEFAULT_SENTINEL}"`, `built-in default ${d.activation.headlessAutoActivate}; headless/RPC activate on keyword hits without a dialog`),
+			],
+		},
+		{
+			name: "models",
+			lines: [
+				line(`available = "${DEFAULT_SENTINEL}"`, `built-in default [${models}]; member model pool`),
+				line(`autonomousSelection = "${DEFAULT_SENTINEL}"`, `built-in default ${d.models.autonomousSelection}; the leader picks a model per member`),
+				line(`autonomousEffort = "${DEFAULT_SENTINEL}"`, `built-in default ${d.models.autonomousEffort}; the leader picks the effort per member`),
+			],
+		},
+		{
+			name: "members",
+			lines: [
+				line(`max = "${DEFAULT_SENTINEL}"`, `built-in default ${d.members.max}; live-member cap (1-64)`),
+				line(`defaultRole = "${DEFAULT_SENTINEL}"`, `built-in default "${d.members.defaultRole}"; default role for new members`),
+				line('defaultTools = ["read", "bash"]', "member tool allowlist; omit for null (preset or all tools)"),
+				line(`maxRecursionDepth = "${DEFAULT_SENTINEL}"`, `built-in default ${d.members.maxRecursionDepth}; team-tree depth bound (1-4)`),
+			],
+		},
+		{
+			name: "dispatch",
+			lines: [
+				line(`maxConcurrent = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.maxConcurrent}; parallel member cap (1-16), extra dispatches queue`),
+				line(`timeoutMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.timeoutMs}; per-dispatch timeout (ms), covers the member's whole turn`),
+				line(`handshakeTimeoutMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.handshakeTimeoutMs}; member spawn handshake timeout (ms)`),
+				line(`retries = "${DEFAULT_SENTINEL}"`, `built-in default ${d.dispatch.retries}; task retry count (0-5)`),
+			],
+		},
+		{
+			name: "oneshot",
+			lines: [line(`timeoutMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.oneshot.timeoutMs}; stateless oneshot dispatch timeout (ms)`)],
+		},
+		{
+			name: "cost",
+			lines: [line(`warnThreshold = "${DEFAULT_SENTINEL}"`, `built-in default ${d.cost.warnThreshold}; cumulative spend warning (USD), 0 = off`)],
+		},
+		{
+			name: "idle",
+			lines: [
+				line(`reapAfterMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.idle.reapAfterMs}; idle reaping threshold (ms)`),
+				line(`reapIntervalMs = "${DEFAULT_SENTINEL}"`, `built-in default ${d.idle.reapIntervalMs}; reaping check interval (ms)`),
+			],
+		},
+		{
+			name: "storage",
+			lines: [line('dir = "/path/to/teams"', "team data root; omit for null (<agentDir>/teams)")],
+		},
+		{
+			// The one table whose defaults are the empty string, so DEFAULT and an
+			// explicit "" would read the same; spell out what empty means for each
+			// consumer instead of leaving the reader to guess.
+			name: "searcher",
+			lines: [
+				line(`searchUrl = "${DEFAULT_SENTINEL}"`, "the role falls back to the host search_web endpoint, the script to its built-in one"),
+				line(`searchApiKey = "${DEFAULT_SENTINEL}"`, "the role to the login profile / STEPCODE_SEARCH_API_KEY, the script to DEEPSEEK_API_KEY"),
+				line(`fetchUrl = "${DEFAULT_SENTINEL}"`, "the role to a plain curl of the target URL, the script to its built-in one"),
+				line(`fetchApiKey = "${DEFAULT_SENTINEL}"`, "no Authorization header"),
+				"#",
+				line('searchUrl = "https://api.deepseek.com"', "any provider speaking the script's JSON contract works — see docs/ROLES.md"),
+				line('searchApiKey = "<your key>"', "injected as STEPCODE_TOPO_SEARCH_KEY and STEPCODE_SEARCH_API_KEY"),
+				line('fetchUrl = "https://api.deepseek.com"', "injected as STEPCODE_TOPO_FETCH_URL"),
+				line('fetchApiKey = "<your key>"', "injected as STEPCODE_TOPO_FETCH_KEY"),
+			],
+		},
+		{
+			name: "encryption",
+			lines: [
+				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.encryption.enabled}; encrypt the team registry at rest (AES-256-GCM, key in .topo/team.key)`),
+			],
+		},
+		{
+			name: "records",
+			lines: [
+				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.records.enabled}; write a collaboration record to .topo/records after every team task`),
+				line(`dir = "${DEFAULT_SENTINEL}"`, `built-in default "${d.records.dir}"; sub-directory of .topo/ for those records`),
+			],
+		},
+		{
+			name: "tasks",
+			lines: [
+				line(`max = "${DEFAULT_SENTINEL}"`, `built-in default ${d.tasks.max}; task-board capacity (ids T1..T<max>; 1-10000)`),
+				line(`outputCapBytes = "${DEFAULT_SENTINEL}"`, `built-in default ${d.tasks.outputCapBytes}; per-task output truncation (bytes), full text stays in details.fullText`),
+			],
+		},
+		{
+			name: "topology",
+			lines: [
+				line(`default = "${DEFAULT_SENTINEL}"`, `built-in default "${d.topology.default}"; star/pipeline/mesh/ring/custom`),
+				line(`requireDeclaration = "${DEFAULT_SENTINEL}"`, `built-in default ${d.topology.requireDeclaration}; true = no dispatch before the topology is declared`),
+				line(`maxLoopCount = "${DEFAULT_SENTINEL}"`, `built-in default ${d.topology.maxLoopCount}; ring message-chain bound (0 = unlimited, 0-64)`),
+			],
+		},
+		{
+			name: "plan",
+			lines: [
+				line(`enabled = "${DEFAULT_SENTINEL}"`, `built-in default ${d.plan.enabled}; team-plan picker: economic/fast/balanced/performance + custom on activation`),
+				line(`tier = "${DEFAULT_SENTINEL}"`, `built-in default "${d.plan.tier}"; always ask = picker every time, a pinned tier applies directly`),
+			],
+		},
+		{
+			name: "presets.effort",
+			lines: [
+				effort("scout", d.presets.effort.scout),
+				effort("planner", d.presets.effort.planner),
+				effort("worker", d.presets.effort.worker),
+				effort("reviewer", d.presets.effort.reviewer),
+				effort("searcher", d.presets.effort.searcher),
+				"# ignored while models.autonomousEffort is on (the leader picks)",
+				"# custom roles set effort in their own frontmatter instead",
+			],
+		},
+		{
+			// The root table itself: `debug` sits directly under
+			// [stepcodeAgentTeam], so this section has no sub-name.
+			name: "",
+			lines: [line(`debug = "${DEFAULT_SENTINEL}"`, `built-in default ${d.debug}; diagnostic logging to stderr`)],
+		},
+	];
 }
 
 /**
@@ -639,6 +785,20 @@ function configNote(message: string): void {
 	console.error(`[stepcode-agent-team] config: ${message}`);
 }
 
+/**
+ * The explicit "use the built-in default" marker. The seed block writes it for
+ * every default-valued key, so a config that says `DEFAULT` keeps following the
+ * default when a newer version changes it — which is the whole point of
+ * seeding defaults rather than literals: a literal would pin the old value
+ * forever and silently outrank the new one.
+ *
+ * It works for every type at once because the merge starts from
+ * `defaultConfig()`: skipping the key leaves the default in place. A literal
+ * `DEFAULT` value is therefore not expressible for these keys (there is no
+ * realistic collision — no role, path or tier is named DEFAULT).
+ */
+export const DEFAULT_SENTINEL = "DEFAULT";
+
 /** Recursive merge limited to keys present in the defaults (unknown keys ignored). */
 function mergeSection(target: Record<string, unknown>, source: Record<string, unknown>): void {
 	for (const key of Object.keys(source)) {
@@ -646,6 +806,7 @@ function mergeSection(target: Record<string, unknown>, source: Record<string, un
 		// Object.prototype keys ("constructor", "toString", …).
 		if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
 		const value = source[key];
+		if (value === DEFAULT_SENTINEL) continue; // keep the built-in default
 		const current = target[key];
 		if (
 			typeof current === "object" &&

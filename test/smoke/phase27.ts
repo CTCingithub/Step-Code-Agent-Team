@@ -102,7 +102,10 @@ export default function (pi: ExtensionAPI) {
 			const seeded = fs.readFileSync(seedCfg, "utf8");
 			check("seed: appended block carries [stepcodeAgentTeam.searcher]", seeded.includes("[stepcodeAgentTeam.searcher]"));
 			check("seed: appended block carries [stepcodeAgentTeam.encryption]", seeded.includes("[stepcodeAgentTeam.encryption]"));
-			check("seed: block documents the empty-means-default semantics", seeded.includes("empty = the stepfun default"));
+			// The searcher defaults are the empty string, so DEFAULT and "" would
+			// read the same; the block spells out what empty means for each of the
+			// two consumers instead of leaving the reader to guess.
+			check("seed: block documents what the empty searcher values mean", seeded.includes("the role falls back to the host search_web endpoint") && seeded.includes("no Authorization header"));
 			check("seed: block is additive (the user's line survives)", seeded.startsWith("# StepCode configuration\n"));
 
 			// ---- 4. the spawn environment ----

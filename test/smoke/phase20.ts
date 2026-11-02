@@ -63,21 +63,30 @@ export default function (pi: ExtensionAPI) {
 			const missingSections = seedSections.filter((s) => !afterSeed.includes(s));
 			check("seed: every config section is listed", missingSections.length === 0, `missing: ${missingSections.join(", ")}`);
 			check("seed: keywords line carries the full default list", afterSeed.includes("组小队") && afterSeed.includes("topo team"), "keywords show examples only");
-			check("seed: plan tier defaults to always ask", afterSeed.includes('tier = "always ask"'), "tier shows the default only");
+			// Default-valued keys are the DEFAULT marker with the real value in the
+			// comment: the block stays informative and the config stays
+			// upgrade-proof (a literal would pin the value forever).
+			check("seed: plan tier uses the DEFAULT marker", afterSeed.includes('tier = "DEFAULT"'), "tier shows the default only");
+			check("seed: the real default is still documented in the comment", afterSeed.includes('built-in default "always ask"'));
 
 			// --- 2. idempotent ---------------------------------------------------
 			const seededAgain = seedGlobalConfigExample(agentDir);
 			check("seed: second call is a no-op", seededAgain === false && fs.readFileSync(file, "utf8") === afterSeed);
 
-			// --- 3. an active section suppresses the seed ------------------------
+			// --- 3. a configured section is not duplicated ------------------------
+			// The old behaviour was "any stepcodeAgentTeam table suppresses the
+			// seed entirely", which is exactly why a new version's options never
+			// appeared for anyone who had already configured the plugin. Now a
+			// section the user already has counts as documented, and only the
+			// ones they do not have are offered.
 			const active = mkAgentRoot();
 			const activeFile = path.join(active.root, "config.toml");
 			fs.writeFileSync(activeFile, 'packages = []\n\n[stepcodeAgentTeam.members]\nmax = 3\n');
 			const seededActive = seedGlobalConfigExample(active.agentDir);
-			check(
-				"seed: skipped when a stepcodeAgentTeam table exists",
-				seededActive === false && fs.readFileSync(activeFile, "utf8") === 'packages = []\n\n[stepcodeAgentTeam.members]\nmax = 3\n',
-			);
+			const activeText = fs.readFileSync(activeFile, "utf8");
+			check("seed: a configured section is not duplicated", (activeText.match(/\[stepcodeAgentTeam\.members\]/g) ?? []).length === 1, String((activeText.match(/\[stepcodeAgentTeam\.members\]/g) ?? []).length));
+			check("seed: the sections they do not have are still offered", seededActive === true && activeText.includes("[stepcodeAgentTeam.searcher] (v"));
+			check("seed: their own line survives verbatim", activeText.includes("max = 3") && activeText.startsWith("packages = []"));
 
 			// --- 4. missing config.toml is created (step header) and seeded ------
 			const bare = mkAgentRoot();

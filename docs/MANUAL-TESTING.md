@@ -68,7 +68,7 @@ required; without one those steps fail.
 ### Step 1 — automated gate (must be green before any manual work)
 
 ```bash
-npm run smoke   # 25 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
+npm run smoke   # 26 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
 ```
 
 ### Step 2 — interactive scenarios (in order, one prompt at a time)

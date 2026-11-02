@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30（plan-115，全量文档检查与更新轮：测试线对齐与中英成对；此前为 plan-114）。
+> 最近更新：2026-10-30（plan-116，config.toml 初始化轮：DEFAULT 标记与升级增量；此前为 plan-115）。
 
 ## 总览
 
@@ -920,5 +920,26 @@
 **未改动项及理由**：DEVELOPMENT-HISTORY 与 TEST-PLAN 的 R9–R19 历史行、MANUAL-TESTING 的 2026-10-29 基线中的"20 phase"——那是当时的准确记录，改写历史会破坏执行日志的可信度；已在 R20 行与当期基线中说明现为 25。
 
 **验证**：本回合**纯文档改动**（16 份入库文档 + 2 份 gitignored），代码零改动；无探针读取 `docs/` 内容（仅 phase5/phase15 注释提及路径）；manifest 检查只校验 package.json。仍按惯例实跑全量门禁取证。另做了三轮机械核查：25 个 phase 在中英 TESTING 中逐一对上无缺失；文档声明的 12 个 `STEPCODE_*` 与代码注入完全一致；中英关键词计数对称性扫描（差异经逐条核实均为翻译措辞，非内容缺失）。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
+### 78. config.toml 初始化轮：DEFAULT 标记与升级增量（plan-116）
+
+**用户 prompt**：「请初始化config.toml，并保证安装新版本插件后也会出现新的选项。如果是默认选项，请使用DEFAULT字段」。
+
+**先修一个既有缺陷（阻塞）**：`seedBlock()` 里 searcher 四行是整块中**唯一没有 `# ` 前缀**的行——它们以真实 TOML 键落在**根表**，而段头是注释。后果：用户一旦按块首说明取消段头注释，就得到重复键错误（`searchUrl` 等在根表已存在）。**这个块正是在诱导用户做出那个会损坏文件的编辑。**已改为与其他行一致的注释行。
+
+**三项需求的实现**：
+
+1. **初始化 config.toml**：种子块重写为分节结构（`seedSections()`），17 个段覆盖全部配置表（含 v0.4.0/v0.4.1 新增的 searcher/encryption/records）。根级 `debug` 键单独一段，段名为空串以免渲染成 `[stepcodeAgentTeam.stepcodeAgentTeam]`。
+
+2. **DEFAULT 字段**：新增导出常量 `DEFAULT_SENTINEL = "DEFAULT"`；`mergeSection()` 见到该值即**跳过该键**——由于合并从 `defaultConfig()` 起步，"跳过"就是"用内置默认值"，于是对数字、布尔、数组、字符串**一律生效**，无需按类型特判。种子块中所有默认值键都写成 `"DEFAULT"`，实际值移进行尾注释（块仍可读，标记仍可升级）。省略该键效果相同，所以 DEFAULT 是"可以放心取消注释"的文档。
+
+3. **升级后出现新选项**：每个段头带版本标记 `# [stepcodeAgentTeam.<name>] (v<pluginVersion>)`。`readDocumentedSections()` 区分三种情况——**无标记**（旧安装或用户自己写的活动表）→ 视为已文档化，跳过，避免整块复制；**标记版本旧于当前** → 追加刷新，使段内新增的键出现；**缺失** → 追加。版本从包自身 `package.json` 读取。全程只追加、不改写，用户的任何行都不会被覆盖。
+
+**测试中发现的关键陷阱**：裸 `DEFAULT`（不加引号）**不是合法 TOML 标量**，step 的读取器会**静默丢弃整表**——连同用户在该表里的真实设置一起（对照组 `max = hello` 表现相同）。因此哨兵必须加引号，并新增 phase31 断言「把每条 DEFAULT 行取消注释后仍得默认值」，正是这类 bug 的守门测试。这一条是调试过程中抓到的：探针自建的 fixture 一开始也写了裸 `DEFAULT`，于是整表被忽略、显式值全部失效。
+
+**新增 `test/smoke/phase31.ts`**（独立运行、零 token，26 条断言）：块全为注释、无根表污染、每个配置表都有文档、DEFAULT 对四类类型一致、取消注释全部 DEFAULT 行仍得默认值、旧标记触发刷新且不重复、无标记旧块不复制、活动表不复制、显式值压过 DEFAULT、幂等。
+
+**验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误。门禁规模声明已从 25 同步到 26（8 处，含 standalone 清单补 31）。
 
 **仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
