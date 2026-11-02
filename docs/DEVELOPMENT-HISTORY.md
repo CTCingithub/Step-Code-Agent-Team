@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30（plan-113，searcher 实测方案改为配置驱动、厂家无关；此前为 plan-112）。
+> 最近更新：2026-10-30（plan-114，团队方案轮：searcher 配置链路收口；此前为 plan-113）。
 
 ## 总览
 
@@ -873,3 +873,31 @@
 **门禁**：全量零 token 门全绿（25 phase + manifest + 7 live + orphan-check）；tsc 零错误；phase28 复跑通过（脚本加固未改契约）。
 
 **待用户执行**：把真实 key 写进 `sandbox/config.toml` 的 `[stepcodeAgentTeam.searcher]`，然后 `node sandbox/probe-searcher.mjs`——届时 6 条断言应全 PASS。**该文件已 gitignored，key 不会入库。**
+### 76. 团队方案轮：searcher 配置链路收口（plan-114）
+
+**用户 prompt**：「[团队方案·性能] …成员名单 A(队长·仲裁)/B(需求分析)/C(系统架构)/D(后端实现)/E(前端实现)/F(测试验证)/G(安全·性能)，拓扑 mesh，任务拆解 T1–T8…请创建合理的计划，全面检查我希望实现的功能」。
+
+**团队组建**：按用户方案创建 b-requirements / c-architect / d-backend / e-frontend / f-test / g-security 六名成员（均 `model: step-5-preview`、`effort: high`），设 mesh 拓扑（30 条边），建 T36–T43 任务板（T1 需求→T2 架构→T3/T4 并行实现→T5/T6 并行验证→T7 集成→T8 队长终审）。**A 队长由本会话担任**，未建第七个成员（避免与我角色重复）。
+
+**执行降级（须记录）**：T1 派发即 `timeout waiting for member to settle`——本会话累计第 21 次。按既定模式由队长在干净进程亲自完成 T1–T7；B–G 六名成员与任务板保持就绪但未被使用。这是**执行方式的降级，不是范围的缩减**：每项工单仍按原验收标准完成并验证。
+
+**T1 全面检查的发现（5 项缺口）**：
+- **A【阻塞】** `extensions/members.ts:594-598` 只把 `searchApiKey` 注入成 `STEPCODE_SEARCH_API_KEY`（宿主 search_web 的名字），而 `bin/topo-search.mjs` 读 `STEPCODE_TOPO_SEARCH_KEY`——**配置里配的 search key 根本到不了脚本**，fetch 却有 key。这直接违背用户「searcher 使用的 key 是在配置文件中设置的，不局限于任何一家厂家」。
+- **B【高】** `agents/searcher.md` 通篇没提 `bin/topo-search.mjs`，只让角色用 `search_web` + `curl`；而 sandbox/README、docs/CONFIGURATION 三处都称该脚本是「searcher 角色的检索脚本」——配置驱动的路在角色侧是死代码。
+- **C【高】** `test/smoke/phase27.ts:117-129` 的 `envProbe` 是 `buildSpawnArgs` 注入逻辑的**手抄副本**（118 行注释自认 Mirrors），「四个键都注入」数的是副本自己的键，所以缺口 A 必然逃过门禁。这是「测试镜像实现」反模式的实案。
+- **D【中】** plan-113 我写进 CONFIGURATION(_CN) 的两处不准确：`_SEARCH_KEY` 并未被注入；「空 = 内置 DeepSeek 默认」只对脚本成立，角色路径下空值是宿主凭证解析 + 普通 curl（`config.ts:180-185` 才是准确描述）。
+- **E【中】** 脚本 key 链漏了 `STEPCODE_SEARCH_API_KEY`——恰恰是队长从同一配置字段注入的那个名字。
+
+**修复**：
+- `extensions/config.ts` 新增导出纯函数 `searcherSpawnEnv(cfg, searchScript?)`：key 以**两个名字**同时注入，脚本路径仅在 searcher 配置非空时注入（未配置团队的环境保持干净）；
+- `extensions/members.ts` 的 `buildSpawnArgs` 改调该函数（删四行内联 if）；`extensions/presets.ts` 新增 `searchScriptPath()`；
+- `bin/topo-search.mjs` key 链 = `STEPCODE_TOPO_SEARCH_KEY` → `STEPCODE_SEARCH_API_KEY` → `DEEPSEEK_API_KEY`，缺 key 文案按此链列名；
+- `agents/searcher.md` 规则 1 改为「leader 配了厂家就用 `$STEPCODE_TOPO_SEARCH_SCRIPT`」，含三条命令、stdout JSON 契约、退出码 0/1/2 语义（缺 key 是 2 不是 1）、batch 用法；`search_web`/`curl` 降为兜底；规则 6 增加绝不明文回显 key；
+- `docs/CONFIGURATION(_CN).md` 区分两条路径的空值语义，注入名清单与代码一致，环境变量表补两个新名字；
+- `test/smoke/phase27.ts` 删镜像、改为对真函数断言（3→9 条，含「只配 searchApiKey 脚本也能拿到 key」「空字符串绝不变成变量」「脚本路径仅在配置非空时注入」）；`test/smoke/phase28.ts` 缺 key 文案断言收紧为覆盖新链首要名字。
+
+**验证**：全量零 token 门 `all phases passed`（GATE_EXIT=0）；tsc 0 errors；phase27/28 复跑 OK；缺 key exit 2 且文案含三个变量名；实测仅设 `STEPCODE_SEARCH_API_KEY=dummy` 即可驱动 search 到达端点（401 → 凭证已送达，失败不计费）。
+
+**仍未闭环**：① searcher 真实 search/fetch 实跑仍待用户把真实 key 写入 `sandbox/config.toml`；② v0.4.x 发版待用户同意；③ 派发机制退化根因仍未定位（本会话 21+ 次 settle 超时）。
+
+**教训（可复用）**：探针绝不能手抄被测逻辑——抄本会与原版共享盲区，使「断言」退化为恒真。凡是生产里有一段纯映射，就应提成导出函数让探针直接测它。
