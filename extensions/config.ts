@@ -177,6 +177,24 @@ export interface StorageConfig {
 	dir: string | null;
 }
 
+/**
+ * Endpoints and credentials for the `searcher` role. An empty string means
+ * "use the stepfun default" — search falls back to the host `search_web`
+ * credential resolution (login profile / STEPCODE_SEARCH_API_KEY), and fetch
+ * falls back to a plain unauthenticated request to the target URL.
+ */
+export interface SearcherConfig {
+	searchUrl: string;
+	searchApiKey: string;
+	fetchUrl: string;
+	fetchApiKey: string;
+}
+
+/** At-rest encryption of the team registry (on by default). */
+export interface EncryptionConfig {
+	enabled: boolean;
+}
+
 export interface TasksConfig {
 	/** Task-board capacity: ids are allocated in the T1..T<max> sequence. */
 	max: number;
@@ -209,6 +227,8 @@ export interface PluginConfig {
 	cost: CostConfig;
 	idle: IdleConfig;
 	storage: StorageConfig;
+	searcher: SearcherConfig;
+	encryption: EncryptionConfig;
 	tasks: TasksConfig;
 	topology: TopologyConfig;
 	plan: PlanConfig;
@@ -339,6 +359,16 @@ function seedBlock(): string {
 		"#",
 		"# [stepcodeAgentTeam.storage]",
 		line('dir = "/path/to/teams"', "team data root; omit for null (<agentDir>/teams)"),
+
+		"#",
+		"# [stepcodeAgentTeam.searcher]",
+		'searchUrl = ""                   # empty = the stepfun default (host search_web credential resolution)',
+		'searchApiKey = ""                # empty = STEPCODE_SEARCH_API_KEY / step login',
+		'fetchUrl = ""                    # empty = plain unauthenticated request to the target URL',
+		'fetchApiKey = ""                 # empty = no Authorization header',
+		"#",
+		"# [stepcodeAgentTeam.encryption]",
+		line(`enabled = ${d.encryption.enabled}`, "encrypt the team registry at rest (AES-256-GCM, key in .topo/team.key)"),
 		"#",
 		"# [stepcodeAgentTeam.tasks]",
 		line(`max = ${d.tasks.max}`, "task-board capacity (ids T1..T<max>; 1-10000)"),
@@ -435,10 +465,12 @@ export function defaultConfig(): PluginConfig {
 		cost: { warnThreshold: 1 },
 		idle: { reapAfterMs: 30 * 60 * 1000, reapIntervalMs: 5 * 60 * 1000 },
 		storage: { dir: null },
+		searcher: { searchUrl: "", searchApiKey: "", fetchUrl: "", fetchApiKey: "" },
+		encryption: { enabled: true },
 		tasks: { max: 999, outputCapBytes: 50 * 1024 },
 		topology: { default: "star", requireDeclaration: false, maxLoopCount: 2 },
 		plan: { enabled: false, tier: DEFAULT_TIER_MODE },
-		presets: { effort: { scout: "low", planner: "medium", worker: "medium", reviewer: "high" } },
+		presets: { effort: { scout: "low", planner: "medium", worker: "medium", reviewer: "high", searcher: "medium" } },
 		debug: false,
 	};
 }
@@ -732,6 +764,13 @@ function validate(config: PluginConfig): string[] {
 		config.storage.dir = d.storage.dir;
 		warnings.push("storage.dir");
 	}
+	for (const key of ["searchUrl", "searchApiKey", "fetchUrl", "fetchApiKey"] as const) {
+		if (typeof config.searcher[key] !== "string") {
+			config.searcher[key] = d.searcher[key];
+			warnings.push(`searcher.${key}`);
+		}
+	}
+	expectBoolean(asRecord(config.encryption), "enabled", d.encryption.enabled, warnings);
 	if (!VALID_TOPOLOGY_SHAPES.includes(config.topology.default as TopologyShape)) {
 		config.topology.default = d.topology.default;
 		warnings.push("topology.default");

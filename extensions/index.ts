@@ -31,6 +31,7 @@ import * as fs from "node:fs";
 import type { ContextEvent, ExtensionAPI, ExtensionContext } from "@step-harness/coding-agent";
 import { currentDepth, TeamManager, teamIdForSession } from "./members.ts";
 import { registryPath } from "./registry.ts";
+import { ensureTopoDir } from "./topo-init.ts";
 import { registerTeamTools } from "./tools.ts";
 import { TeamServer } from "./team-server.ts";
 import { getConfig, applyProjectConfig, agentDir, seedGlobalConfigExample, consumeKeywordMigration, unifiedConfigFilePath } from "./config.ts";
@@ -173,6 +174,25 @@ export default function (pi: ExtensionAPI) {
 		// block so a fresh install has discoverable configuration (idempotent,
 		// additive — comments only, defaults keep applying).
 		seedGlobalConfigExample(agentDir());
+		// First activation in this workspace: create `.topo/` (the plugin's
+		// working directory, home of the at-rest encryption key) and register it
+		// in an existing `.gitignore`. Runs here rather than at session_start
+		// because the plugin is default-off — an inactive session must leave no
+		// trace in the user's tree. Failures degrade into a debug note: a
+		// workspace that cannot host the directory still gets a working team.
+		// `cwd` is guarded because a scripted context (the phase24 probe, and any
+		// host that does not surface one) omits it.
+		if (typeof ctx.cwd === "string" && ctx.cwd.trim()) {
+			const topo = ensureTopoDir(ctx.cwd);
+			if (topo.error) {
+				console.error(`[stepcode-agent-team] ${topo.error} — continuing without at-rest encryption`);
+			} else if (config.debug) {
+				console.error(
+					`[stepcode-agent-team] topo: ${topo.created ? "created" : "reused"} ${topo.keyPath}` +
+						`; .gitignore ${topo.gitignoreUpdated ? "updated" : topo.gitignorePath ? "already ignores it" : "absent"}`,
+				);
+			}
+		}
 		const activated = activate(reason); // the initActivation callback runs startBackend
 		if (activated) {
 			// Debug-only provenance line: which config file was read and what the

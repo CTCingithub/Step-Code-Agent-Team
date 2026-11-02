@@ -251,7 +251,7 @@ if (scenario === "5a") {
 // explored the repo and produced a full review plan, so no tool call
 // landed). The probe verifies the activation path, not the model's
 // willingness, so say what to do and forbid the detour.
-			{ message: "立即执行：调用 team_create_member 创建一个 scout 角色的成员，名字叫 probe7。不要先探索仓库、不要输出方案，直接调用工具。", waitMs: 150000 },
+			{ message: "现在只做一件事：调用 team_create_member 创建一个名为 probe7 的 scout 成员，然后把该工具的返回文本原样报告。不要探索仓库、不要输出方案、不要做其他任何事。", waitMs: 150000 },
 		],
 		(msg) => (msg.method === "confirm" ? { confirmed: true } : null),
 	);

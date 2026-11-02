@@ -10,6 +10,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { agentDir, getConfig } from "./config.ts";
+import { decryptJson, encryptJson, isEncryptedEnvelope, loadTeamKey } from "./crypto.ts";
 import { parseTopology, starTopology, type TopologyData } from "./topology.ts";
 
 export { agentDir };
@@ -127,7 +128,11 @@ export function saveRegistry(reg: TeamRegistry): void {
 	fs.mkdirSync(dir, { recursive: true });
 	const target = registryPath(reg.teamId);
 	const tmp = `${target}.tmp-${process.pid}`;
-	fs.writeFileSync(tmp, `${JSON.stringify(reg, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
+	// Encrypt at rest when enabled AND a key is available. A missing key is not
+	// a failure: the team keeps running, the registry just stays plaintext.
+	const key = getConfig().encryption.enabled ? loadTeamKey(reg.cwd) : null;
+	const body = key ? encryptJson(reg, reg.teamId, reg.cwd, key) : `${JSON.stringify(reg, null, 2)}\n`;
+	fs.writeFileSync(tmp, body, { encoding: "utf-8", mode: 0o600 });
 	fs.renameSync(tmp, target);
 }
 
@@ -135,7 +140,18 @@ export function loadRegistry(teamId: string): TeamRegistry | null {
 	const file = registryPath(teamId);
 	try {
 		const raw = fs.readFileSync(file, "utf-8");
-		const reg = JSON.parse(raw) as TeamRegistry;
+		// An envelope is decrypted with the key from that team's workspace;
+		// anything else (including every registry written before encryption
+		// existed) is read as plaintext, so old teams keep loading.
+		const parsed: unknown = JSON.parse(raw);
+		let reg: TeamRegistry;
+		if (isEncryptedEnvelope(parsed)) {
+			const key = loadTeamKey(parsed.cwd);
+			if (!key) return null; // encrypted but the key is gone — unrecoverable
+			reg = decryptJson(raw, key) as TeamRegistry;
+		} else {
+			reg = parsed as TeamRegistry;
+		}
 		if (reg.schemaVersion !== 1) return null;
 		if (!Array.isArray(reg.members) || !Array.isArray(reg.tasks)) return null;
 		// Registries written before the topology field degrade to star.

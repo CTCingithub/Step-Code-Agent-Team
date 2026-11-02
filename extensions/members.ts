@@ -588,6 +588,14 @@ export class TeamManager {
 			// "timeout waiting for member to settle" loop).
 			STEPCODE_TEAM_REPLY_TIMEOUT_MS: String(getConfig().dispatch.timeoutMs),
 		};
+		// Searcher endpoints/credentials. Only non-empty values are injected, so
+		// an unconfigured team leaves the member's environment untouched and the
+		// stepfun defaults apply (the host resolves its own credential).
+		const searcher = getConfig().searcher;
+		if (searcher.searchApiKey) env.STEPCODE_SEARCH_API_KEY = searcher.searchApiKey;
+		if (searcher.searchUrl) env.STEPCODE_TOPO_SEARCH_URL = searcher.searchUrl;
+		if (searcher.fetchUrl) env.STEPCODE_TOPO_FETCH_URL = searcher.fetchUrl;
+		if (searcher.fetchApiKey) env.STEPCODE_TOPO_FETCH_KEY = searcher.fetchApiKey;
 		if (canOrchestrate) {
 			args.push("-e", extensionEntryPath(), "-e", memberMessagingEntryPath());
 			env.STEPCODE_TEAM_AUTOACTIVATE = "1";
