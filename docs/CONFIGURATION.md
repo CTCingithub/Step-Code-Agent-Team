@@ -97,6 +97,10 @@ fetchApiKey = ""                      # empty = no Authorization header
 [stepcodeAgentTeam.encryption]         # at-rest encryption of the team registry (added in v0.4.0, on by default)
 enabled = true                        # AES-256-GCM; key in .topo/team.key (0600)
 
+[stepcodeAgentTeam.records]            # collaboration records (added in v0.4.1)
+enabled = true                        # write one record to .topo/records after every team task
+dir = "records"                       # sub-directory of .topo/
+
 [stepcodeAgentTeam]
 debug = false                        # debug logging
 ```
@@ -160,6 +164,12 @@ plaintext.
 — writing key material through a link we did not create would leak it to an
 arbitrary path), a read-only parent, or an over-long path. All of them degrade:
 the team keeps running without at-rest encryption and one line is logged.
+
+### Collaboration records (`.topo/records/`)
+
+After every team task ends — a whole-team `team_disband`, a `/topo off` deactivation, or a shutdown fallback when the session ends with the team still live — the plugin writes one record to `.topo/records/<teamId>-<UTC stamp>.json` plus a same-named Markdown summary. Contents: the member roster (role/model/effort/tools/status/turns/cost), the whole task board (status/assignee/dependencies), the topology in force at close, cumulative spend and summary counts. **Idempotent**: a team never gets a second record.
+
+Whether it is encrypted follows YOUR option: `encryption.enabled` with a key available means the same AES-256-GCM envelope as the registry; anything else is plaintext. `records.enabled = false` turns records off entirely. Same degrade rule: an unwritable record is logged and forgotten — it never blocks a disband or a deactivation.
 
 ## Environment Overrides
 

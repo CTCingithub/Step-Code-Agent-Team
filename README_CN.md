@@ -231,7 +231,7 @@ flowchart LR
 | `planner` | 只读 | 制定实施计划 |
 | `worker` | 全量 | 执行计划、运行检查 |
 | `reviewer` | 只读 | 对抗式审查（正确性 / 风格 / 安全） |
-| `searcher` | 只读 + `search_web`/`run_command` | 外部检索：网页搜索与 URL 抓取，结论附来源 |
+| `searcher` | 只读 + `search_web`/`run_command` | 外部检索：网页搜索与 URL 抓取，结论附来源——经 `bin/topo-search.mjs` 调用 |
 
 预设 effort 默认值：`scout`=low、`planner`=medium、`worker`=medium、`searcher`=medium、
 `reviewer`=high。解析顺序：`team_create_member` 显式 `effort` 参数 →
@@ -252,7 +252,7 @@ frontmatter `effort` → `high`。`models.autonomousEffort = true` 时由队长
 归宿——并把 `.topo/` 追加进**已存在的** `.gitignore`（没有则不会替你创建）。
 激活之前什么都不会建：插件默认关闭，空闲会话不会在你的目录里留任何东西。
 
-团队注册表默认落盘加密（AES-256-GCM，密钥在 `.topo/team.key`，权限 0600）。
+团队注册表默认落盘加密（AES-256-GCM，密钥在 `.topo/team.key`，权限 0600）；每次协作任务结束后还会向 `.topo/records/` 追加一份协作记录（成员、任务、拓扑、花费）——是否加密遵循同一选项。
 它覆盖的是插件自己的那个文件——承载成员报告的那个。它**不**覆盖宿主写出的
 成员会话文件，也挡不住能连密钥一起读的同 uid 攻击者；诚实边界与降级路径见
 [CONFIGURATION_CN.md](docs/CONFIGURATION_CN.md)。

@@ -829,3 +829,27 @@
 **验证**：零 token 全量门全绿（23 phase + manifest + 7 live + orphan-check）；tsc 全导入图零错误。
 
 **遗留**：① 竞速对比未实际发生（派发故障），实现 B 未写——`.topo/` 初始化目前只有实现 A，其健壮性已由 49 条断言覆盖，但"性能与健壮性"维度的竞速择优仍是一个未完成的计划项；② searcher 的 fetch 只能经 curl，若后续要一等公民能力需在 member-messaging.ts 注册 `topo_fetch` 工具（成员默认只加载该扩展，注册在 index.ts 的工具成员拿不到）；③ 加密未覆盖宿主会话 JSONL（需宿主侧改 mode 或 umask，已在上一轮安全评估中立项）。
+### 74. v0.4.1 轮：searcher 脚本、协作记录、测试流程刷新（plan-112）
+
+**用户 prompt**：确认性能档实际方案（Planner 架构择优 / ScripterA·B 脚本竞速 / Recorder 记录加密 / QA 测试优化，star 拓扑，T1 接口规范→T2/T3 竞速→T5 searcher→T4 记录→T6 文档→T7 联调）后「1.给searcher角色写一个配套的脚本，让它直接调用脚本去search或fetch，请参考deepseek的search和fetch接口的使用方式；2.在每次使用插件团队协作任务后，在.topo/路径内生成协作工作的记录，这个记录是否加密要根据使用者的加密选项；3.检查工作空间，优化更新测试流程」。
+
+**思路**：先检索 DeepSeek Search/Fetch 的真实接口（本地无此资料，`search_web` 检索得：端点、参数、鉴权、计费、限速五类事实），再定接口契约，后落实现。**派发机制本轮 5 次 settle 超时**（Planner + 两个 Scripter + Recorder + QA），按既定模式由队长单写全程；竞速因此未实际发生（实现 B 未写），已在遗留中记录。
+
+**DeepSeek 接口事实（检索所得，非臆测）**：`POST https://api.deepseek.com/v1/tools/search` 收 `{query,count,need_content}`；`POST /v1/tools/fetch` 收 `{url}` 返 `{title,content}`（Markdown）；Bearer 复用 DeepSeek key；query ≤128 字符且支持 `site:`/`-site:`/`"phrase"`/`-word`/`lang:`/`after:`/`before:` 操作符；**仅成功请求计费**（Search 非空结果 / Fetch 200 且有正文），失败、空结果、超时不计费；Search 与 Fetch 各 5 QPS **独立计数**，Fetch 另有按域名限制，超限 429。
+
+**实现要点与取舍**：
+- **计费诚实是硬约束**：脚本只对 429/5xx/超时退避重试，**其他 4xx 一律不重试**——重试一个坏请求会花用户额度却什么也得不到。phase28 用假端点把这条钉死（429 重试后成功；400 只发一次）。
+- **退出码把"缺 key"归为用法错误（2）而非请求失败（1）**：这是调用方的配置问题，不该被误读成 API 故障，也不该被重试逻辑碰。
+- **为什么给 searcher `run_command`**：生态内无 fetch 工具（已 grep 实证），把抓取收拢到一个可审计的脚本，比让成员各自拼 curl 更安全也更好 review。
+- **记录钩子选在两处**：整队 `team_disband`（tools.ts）与 `/topo off`（index.ts）——前者是正常结束，后者是误激活的出口，两者都是"一次协作任务"的边界；会话结束仍活跃则由 shutdown 兜底。**幂等按 teamId 前缀判断**，同一团队不重复生成。
+- **拓扑只记终态**：完整声明时间线需要在每次 set_topology 记账，审计价值有限，故记录取 registry 快照里的终态——不做无用抽象。
+
+**两个设计级发现（都有实证）**：
+1. **探针不能用 `spawnSync`**：假端点在本进程内，同步 spawn 会阻塞事件循环，子进程的连接堆在 listen backlog 里直到超时——表现是"每个请求都超时"而脚本本身完全正常（用独立 node 脚本复现确认）。改为异步 `spawn` 后 32 条断言全过。
+2. **`process.execPath` 在 step RPC 会话里是 bun 编译的 `step` 二进制，不是 node**：用它 spawn 并传 `--query` 会让宿主解析我们的参数（报 `Unknown options: --query, --count`）。探针改为显式解析真实 node（env 覆写 → PATH → 常见路径）。
+
+**测试流程优化**：`STANDALONE_PHASES` 增加 28 与 30；phase 清单磁盘派生故新探针自动入库；TESTING(_CN) 补 phase28/30 两行；sandbox/README(_CN) 探针清单补 `bin/topo-search.mjs`。**工作空间检查**（QA 范围，队长执行）：演示项目 11/12 种子基线、submodule 干净、`.topo/` 700 且 `team.key` 600 且被 ignore、沙箱残留仅限 gitignore 路径（cfg-conc/cfg-deadlock/cfg-deep2 与 sandbox/agent 的 sessions/teams/live-context，不影响版本库，未清理）。
+
+**验证**：零 token 全量门全绿（25 phase + manifest + 7 live + orphan-check）；tsc 全导入图零错误；live 探针 5a/5b/5c/7/8/9 全部 PASS（5a 抖动一次、复跑通过）。
+
+**遗留**：① 脚本竞速未实际发生（派发故障），`bin/topo-search-b.mjs` 未写——契约中 B 的差异化项（批量已有、`--stdin-jsonl` 已实现；令牌桶与退避已在 A 中实现）大部分已被 A 覆盖，剩余差异是 stderr 可观测细节，价值有限；② 协作记录的拓扑只记终态（见上）；③ 宿主会话 JSONL 仍未覆盖加密（需宿主侧 mode/umask，已在安全评估中立项）；④ 派发机制间歇性退化根因仍未定位。

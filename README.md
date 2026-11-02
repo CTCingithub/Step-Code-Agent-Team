@@ -277,7 +277,7 @@ Enforcement lives in the team server: every message carries its sender (injected
 | `planner` | read-only | Implementation plans |
 | `worker` | full | Executes plans, runs checks |
 | `reviewer` | read-only | Adversarial review (correctness / style / security) |
-| `searcher` | read-only + `search_web`/`run_command` | External retrieval: web search and URL fetching, with sources cited |
+| `searcher` | read-only + `search_web`/`run_command` | External retrieval: web search and URL fetching, with sources cited — via `bin/topo-search.mjs` |
 
 Preset effort defaults: `scout`=low, `planner`=medium, `worker`=medium, `searcher`=medium,
 `reviewer`=high. Resolution order: an explicit `effort` argument to
@@ -303,7 +303,9 @@ before activation: the plugin is default-off, so an idle session leaves your
 tree untouched.
 
 The team registry is encrypted at rest by default (AES-256-GCM, key in
-`.topo/team.key`, mode 0600). That covers the file the plugin owns — the one
+`.topo/team.key`, mode 0600), and every team task appends a collaboration
+record to `.topo/records/` (members, tasks, topology, spend) — sealed or
+plaintext according to the same option. That covers the file the plugin owns — the one
 holding member reports. It does **not** cover the member session files the host
 writes, and it does not stop a same-uid attacker who can read the key next to
 the ciphertext; see [CONFIGURATION.md](docs/CONFIGURATION.md) for the honest

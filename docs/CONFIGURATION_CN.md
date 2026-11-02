@@ -97,6 +97,10 @@ fetchApiKey = ""                      # 空 = 不带 Authorization 头
 [stepcodeAgentTeam.encryption]         # 团队注册表的落盘加密（v0.4.0 新增，默认开）
 enabled = true                        # AES-256-GCM；密钥在 .topo/team.key（0600）
 
+[stepcodeAgentTeam.records]            # 团队协作记录（v0.4.1 新增）
+enabled = true                        # 每次协作任务结束后向 .topo/records 写一份记录
+dir = "records"                       # .topo/ 下的子目录名
+
 [stepcodeAgentTeam]
 debug = false                        # 调试日志
 ```
@@ -145,6 +149,12 @@ debug = false                        # 调试日志
 - 旧版本写的明文 `registry.json` **仍可正常读取**（读到信封走解密，否则按明文）。
 
 **降级路径**：`.topo` 已存在但是文件、是符号链接（不跟随——避免把密钥写到链接指向的任意路径）、父目录只读、路径过长——全部降级：插件照常运行，只是不做落盘加密，并在 stderr 留一行说明。
+
+### 协作记录（`.topo/records/`）
+
+每次团队协作任务结束后（整队解散 `team_disband`、或 `/topo off` 停用；会话结束时团队仍活跃则补一份），插件向 `.topo/records/<teamId>-<UTC时间戳>.json` 写一份记录，并附同名 `.md` 人读摘要。内容：成员名册（角色/模型/effort/工具/状态/轮次/花费）、任务板全量（状态/负责人/依赖）、拓扑终态、累计花费与汇总计数。**幂等**：同一 teamId 不重复生成。
+
+是否加密**按你的加密选项**：`encryption.enabled` 开启且有密钥 → 与 registry 同一套 AES-256-GCM 信封；否则明文。`records.enabled = false` 可完全关闭。降级原则与上面相同：记录写不进去只在 stderr 留一行，**绝不阻断解散或停用**。
 
 ## 环境变量覆盖
 
