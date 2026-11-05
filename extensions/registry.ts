@@ -167,17 +167,3 @@ export function loadRegistry(teamId: string): TeamRegistry | null {
 		return null;
 	}
 }
-
-/** List known teams (most recent first) for diagnostics. */
-export function listTeamIds(): string[] {
-	try {
-		return fs
-			.readdirSync(teamsRoot(), { withFileTypes: true })
-			.filter((e) => e.isDirectory())
-			.map((e) => e.name)
-			.sort()
-			.reverse();
-	} catch {
-		return [];
-	}
-}

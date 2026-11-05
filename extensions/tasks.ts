@@ -61,10 +61,6 @@ export function recomputeReady(tasks: TaskRecord[]): void {
 	}
 }
 
-export function readyTasks(tasks: TaskRecord[]): TaskRecord[] {
-	return tasks.filter((t) => t.status === "ready");
-}
-
 /** First free id in the T1..T<max> sequence (capacity from config). */
 export function nextTaskId(tasks: TaskRecord[]): string {
 	const max = getConfig().tasks.max;
