@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-31（plan-121，项目全面检查与优化轮；此前为 plan-120）。
+> 最近更新：2026-10-31（plan-122，死代码删除轮：并纠正上一轮的错误结论；此前为 plan-121）。
 
 ## 总览
 
@@ -1078,3 +1078,28 @@
 **留给用户决策的四项**（成本 > 收益故未做）：拆分三个超大文件、删除 13 个零引用导出、消除 `cached` 隐式单例、runner 防本地 config.toml shadow fixture（**此项风险在用户机器上当前活跃**）。另：`sandbox/TEST-KEY.md` 权限 664 建议改 600，但属用户资产操作，需用户确认。
 
 **验证**：全量零 token 门 26 phase 全绿（71s）、tsc 0 错误、phase28 含新断言通过。
+### 84. 死代码删除轮：并纠正上一轮的错误结论（plan-122）
+
+**用户 prompt**：「我同意删除多余的死代码死功能，请给我解释要决策的124事项」。
+
+**先纠正自己的错误结论**：上一轮（plan-121）的 T2 架构审查报告称发现"14 个零引用导出（疑死代码）"，**这是我误读了自己的 grep 输出**。当时对每个函数跑 `grep -rn "\b<name>\b"` 得到"总命中=2"，我把它读成"只有定义处、无调用"；实际那 2 次是**定义 + 本模块内调用**。逐个复核后：
+
+| 函数 | 实际命中 | 真实情况 |
+|---|---|---|
+| `configFilePath`/`projectConfigFilePath`/`settingsFilePath`/`projectSettingsFilePath`/`projectUnifiedConfigFilePath`/`keywordMentionSuppressed`/`hasCjk`/`isSettleTimeoutError`/`extensionDir`/`packageRoot`/`presetsDir`/`meshTopology`/`customTopology` | 各 2–4 次 | **在本模块内被调用，不是死代码**——删了会直接破坏构建 |
+| `listTeamIds`、`readyTasks` | 各 **1 次** | **真正死代码**（只有定义行） |
+
+**教训（可复用）**：判断"是否死代码"不能看命中数，必须看**命中的位置**——`grep -c` 的数字要把定义行本身扣掉，且要确认其余命中不在同一模块内。本次若按错误结论执行，会在 tsc 阶段炸出十几个错误。
+
+**已删除（用户同意后）**：
+- `extensions/registry.ts` 的 `listTeamIds()`——注释称"List known teams (most recent first) for diagnostics"，无任何调用者；
+- `extensions/tasks.ts` 的 `readyTasks()`——只是个 `status === "ready"` 的 filter；真正的就绪计算是 `recomputeReady()`（它会 mutate 状态，是所有调用方实际用的那个）。
+
+**未动的 13 个**：它们是另一个轻得多的问题——**被 export 但模块外无人 import**（过度导出，非死代码）。收窄成非导出是纯 cosmetic 且安全，但我不擅自塞进这次删除（用户同意删除的前提是我的错误结论）。已列为待用户决策。
+
+**留给用户决策的三项**（已在回复中逐条解释）：
+1. `sandbox/TEST-KEY.md` 权限 **664** → 600（含真实 step CLI key，组/其他用户可读；另两处密钥均 600）。属用户资产操作，未擅动。
+2. runner 防本地 `config.toml` shadow 探针 fixture。用户机器上 `sandbox/config.toml` **当前已存在**，故该风险**活跃**（2026-10-25 实测过一次假绿：phase10 走了 Branch A 而非 B）。方案 A 根治（临时空 agentDir）/ 方案 B 告警。
+3. 三个超大文件是否拆分（`members.ts` 1288、`config.ts` 1012、`index.ts` 817）。建议不拆或只拆 `members.ts`。
+
+**验证**：tsc 0 错误；全量零 token 门 26 phase 全绿。提交 `a4ee34b` 已推送 develop。
