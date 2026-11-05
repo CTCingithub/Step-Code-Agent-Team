@@ -131,10 +131,11 @@ than retrying). Without a configured provider the role falls back to
 Nothing here is tied to one provider: point `searchUrl` / `fetchUrl` at any
 endpoint that speaks the script's JSON contract and set the matching key. The
 DeepSeek endpoints are only the defaults. Note that the host `search_web`
-Either spelling works — the **base** (`https://api.deepseek.com`) or the **full endpoint**
-(`https://api.deepseek.com/v1/tools/search`); the script strips a duplicate
-`/v1/tools/<kind>` suffix, so neither can produce a doubled path (which would
-surface as a bare 404 that reads like an outage).
+A configured URL is used **verbatim**: write the full endpoint
+(`https://api.deepseek.com/v1/tools/search`) and that exact URL is posted to.
+A bare base (`https://api.deepseek.com`) also works — the suffix is appended
+only then, because appending it to a URL that already carries it is what
+produced a doubled path and a bare 404 that reads like an outage.
 endpoint itself cannot be redirected from the environment — a configured
 `searchUrl` is guidance for the role, not an override of that tool.
 

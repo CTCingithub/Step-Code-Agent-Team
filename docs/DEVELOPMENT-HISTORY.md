@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30/31（plan-119，searcher 首次真实运行轮：阻塞级 URL 契约缺陷；此前为 plan-118）。
+> 最近更新：2026-10-31（plan-120，URL 原样使用轮；此前为 plan-119）。
 
 ## 总览
 
@@ -1024,3 +1024,27 @@
 **一个值得记录的方法论错误**：首轮测试看似两处违约——超限报错与 batch 进度行"污染 stdout"。实为探针用 `2>&1` 把 **stderr** 并进了 stdout。脚本的 stdout 确实是单行 JSON，诊断确实走 stderr。**测 stdout 契约时绝不可合并流**，否则会把正确的分流误判成违约（反之亦然）。
 
 **验证**：全量零 token 门 26 phase 全绿；tsc 0 错误；phase28 复跑含新断言全绿。
+### 82. URL 原样使用轮（plan-120）
+
+**用户 prompt**：「url不要改动，直接用config.toml里面的，然后给我解释--need-content选项是干什么的」。
+
+**背景**：上一轮（plan-119）为修复"完整端点被双拼成 `.../v1/tools/search/v1/tools/search` → 裸 404"，把 `resolveBase()` 改成"已带后缀则剥掉再拼回"。功能正确，但代码确实**改写了配置里的 URL 字符串**（先剥后拼），用户明确要求不要改动。
+
+**修正**：删掉 `resolveBase`，改为单一的 `resolveEndpoint(kind)`——配置值**已是以 `/v1/tools/<kind>` 结尾的完整端点时就原样返回**；只有裸 base 才追加后缀。调用处从 `resolveBase` + 三元拼接两行收敛为一行 `const endpoint = resolveEndpoint(kind)`。
+
+**实测确认**（stderr 的 attempt 行会打印实际请求 URL）：配置的 `https://api.deepseek.com/v1/tools/search` 与 `.../v1/tools/fetch` 被**逐字符原样**用于请求；两种子命令均 `ok:true`。`phase28` 的断言名同步改为"a configured endpoint URL is used verbatim"，语义未变（完整端点不得双后缀、仍成功、尾部斜杠不双分隔符）。
+
+**文档**：ROLES(_CN) 改写为"配置的 URL 原样使用；填完整端点就按该地址请求，填 base 也可以——只有这时才追加后缀"；`config.ts` 种子块的 searcher 示例行同步。
+
+**验证**：全量零 token 门 26 phase 全绿；tsc 0 错误；phase28 复跑通过。
+
+**关于 `--need-content` 的实证解释**（同 query、两种模式各 1 次真实调用，字段逐个对比）：
+
+| 字段 | 基础模式 | `--need-content` |
+|---|---|---|
+| `content`（网页正文） | **0 字符（空）** | **1442 字符** |
+| `snippet`（短摘录） | 69 字符 | 69 字符（**不变**） |
+| `summary`（AI 摘要） | 1373 字符 | 1373 字符（**不变**） |
+| 其余字段 | authority/date/rerank_score/site_icon/site_name/title/url | 完全相同 |
+
+结论：**`--need-content` 只控制一件事——是否把目标网页的完整正文抓下来填进 `content` 字段**。不加该选项时 `content` 为空字符串，但你仍有 `snippet` 与 `summary` 可读。两种模式的字段集合完全一致，不会因缺少该选项而丢字段。计费上按成功请求计费，故单次调用价格相同；差别只在响应体更大（调用方要处理更多 token）。

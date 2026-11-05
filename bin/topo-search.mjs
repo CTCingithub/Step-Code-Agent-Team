@@ -73,19 +73,19 @@ function resolveKey(kind) {
 }
 
 /**
- * The endpoint base, or the built-in default.
+ * The URL to POST to.
  *
- * A configured URL may be either the base (`https://api.deepseek.com`) or the
- * full endpoint (`https://api.deepseek.com/v1/tools/search`). Both are
- * accepted: appending `/v1/tools/<kind>` to an already-complete endpoint is
- * what produced `.../v1/tools/search/v1/tools/search` and a bare 404, which
- * reads as "the provider is down" rather than "the URL was wrong". The suffix
- * is stripped when it is already there, so neither spelling can break.
+ * The configured URL is used **verbatim** when it already names the endpoint
+ * (`https://api.deepseek.com/v1/tools/search`); a bare base
+ * (`https://api.deepseek.com`) gets the suffix appended. Nothing is rewritten
+ * in either case — appending a suffix to a URL that already carries it is what
+ * produced `.../v1/tools/search/v1/tools/search` and a bare 404, which reads as
+ * "the provider is down" rather than "the URL was wrong".
  */
-function resolveBase(kind) {
+function resolveEndpoint(kind) {
 	const raw = env(kind === "fetch" ? "STEPCODE_TOPO_FETCH_URL" : "STEPCODE_TOPO_SEARCH_URL") || DEFAULT_BASE;
 	const suffix = `/v1/tools/${kind}`;
-	return raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw.replace(/\/+$/, "");
+	return raw.endsWith(suffix) ? raw : `${raw.replace(/\/+$/, "")}${suffix}`;
 }
 
 /** A minimal token bucket: `qps` tokens, refilled continuously. */
@@ -164,9 +164,8 @@ function validate(args) {
 
 /** One request, with the billing-honest retry policy. */
 async function callApi(kind, payload, opts) {
-	const base = resolveBase(kind);
 	const key = resolveKey(kind);
-	const endpoint = kind === "search" ? `${base}/v1/tools/search` : `${base}/v1/tools/fetch`;
+	const endpoint = resolveEndpoint(kind);
 	const meta = { endpoint: process.env[kind === "fetch" ? "STEPCODE_TOPO_FETCH_URL" : "STEPCODE_TOPO_SEARCH_URL"] ? "configured" : "default", attempts: 0, ms: 0, truncated: false };
 	if (!key) {
 		// A missing credential is the caller's setup problem, not a failed

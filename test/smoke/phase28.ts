@@ -135,19 +135,20 @@ export default function (pi: ExtensionAPI) {
 			check("search: the key never reaches stdout or stderr", !s.stdout.includes(KEY) && !s.stderr.includes(KEY));
 			fake.server.close();
 
-			// ---- 1b. a FULL endpoint URL is accepted as well as a base ----
+			// ---- 1b. the configured URL is used VERBATIM when it is already the endpoint ----
 			// The config doc never said which one to write, and a user who wrote
 			// the full endpoint got `.../v1/tools/search/v1/tools/search` and a
 			// bare 404 — which reads as "the provider is down" rather than "your
-			// URL was wrong". Both spellings must reach the same path.
+			// URL was wrong". A configured URL that already names the endpoint must
+			// be posted to exactly as written; only a bare base gets the suffix.
 			fake = await startFake((req, res) => {
 				res.writeHead(200, { "content-type": "application/json" });
 				res.end(JSON.stringify({ results: [{ title: "t", url: "https://example.com", snippet: "s" }] }));
 			});
 			const fullEndpoint = `http://127.0.0.1:${fake.port}/v1/tools/search`;
 			const sf = await run(["search", "--query", "deepseek api", "--count", "2"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: fullEndpoint });
-			check("search: a full endpoint URL is not double-suffixed", fake.seen[0]?.url === "/v1/tools/search", String(fake.seen[0]?.url));
-			check("search: a full endpoint URL still succeeds", sf.code === 0 && lastStdoutJson(sf.stdout)?.ok === true, `code=${sf.code}`);
+			check("search: a configured endpoint URL is used verbatim", fake.seen[0]?.url === "/v1/tools/search", String(fake.seen[0]?.url));
+			check("search: a configured endpoint URL still succeeds", sf.code === 0 && lastStdoutJson(sf.stdout)?.ok === true, `code=${sf.code}`);
 			const trailingSlash = `http://127.0.0.1:${fake.port}/`;
 			await run(["search", "--query", "q", "--count", "1"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: trailingSlash });
 			check("search: a trailing slash does not double the separator", fake.seen[1]?.url === "/v1/tools/search", String(fake.seen[1]?.url));

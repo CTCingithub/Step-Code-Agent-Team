@@ -110,10 +110,10 @@ smallest change that satisfies the task and report it briefly.
 端点与凭证来自 `[stepcodeAgentTeam.searcher]` 配置表，以 `STEPCODE_TOPO_SEARCH_URL`、`STEPCODE_TOPO_SEARCH_KEY`、`STEPCODE_TOPO_FETCH_URL`、`STEPCODE_TOPO_FETCH_KEY` 和 `STEPCODE_SEARCH_API_KEY`（宿主 search 工具自己的名字——配置的 key 会以两个名字到达）进入成员环境。searcher 配置非空时，队长还会注入 `STEPCODE_TOPO_SEARCH_SCRIPT`，即 `bin/topo-search.mjs` 的路径，角色优先使用该脚本：它输出单行 JSON（`ok` / `kind` / `data` / `error` / `retryable` / `meta`），自带限流，退出码 0 成功 / 1 请求失败 / 2 用法错误（缺 key 是 2 不是 1——那是配置问题，应上报而非重试）。未配置厂家时，角色回落到 `search_web` 加 `curl`。
 
 这里不绑定任何厂家：把 `searchUrl` / `fetchUrl` 指向任何遵循该脚本 JSON 契约的端点并配上对应密钥即可，DeepSeek 端点只是默认值。注意宿主 `search_web` 端点本身无法从环境变量改向——配置的 `searchUrl` 是给角色的指引，不是对该工具的覆盖。
-**两种填法都行**——填 base（`https://api.deepseek.com`）或填完整端点
-（`https://api.deepseek.com/v1/tools/search`）均可；脚本会剥掉重复的
-`/v1/tools/<kind>` 后缀，因此任何一种都不会拼出双路径（那会表现为一个
-像是服务故障的裸 404）。
+配置的 URL **原样使用**：写成完整端点（`https://api.deepseek.com/v1/tools/search`）
+就按该地址原样请求。填 base（`https://api.deepseek.com`）也可以——只有这时才追加
+后缀，因为给已带后缀的 URL 再拼一次正是此前出现双路径与裸 404（看起来像服务故障）
+的原因。
 
 ## 注意事项
 
