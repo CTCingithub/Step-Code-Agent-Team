@@ -72,8 +72,20 @@ function resolveKey(kind) {
 	return configured || searchAlias || env("DEEPSEEK_API_KEY");
 }
 
+/**
+ * The endpoint base, or the built-in default.
+ *
+ * A configured URL may be either the base (`https://api.deepseek.com`) or the
+ * full endpoint (`https://api.deepseek.com/v1/tools/search`). Both are
+ * accepted: appending `/v1/tools/<kind>` to an already-complete endpoint is
+ * what produced `.../v1/tools/search/v1/tools/search` and a bare 404, which
+ * reads as "the provider is down" rather than "the URL was wrong". The suffix
+ * is stripped when it is already there, so neither spelling can break.
+ */
 function resolveBase(kind) {
-	return env(kind === "fetch" ? "STEPCODE_TOPO_FETCH_URL" : "STEPCODE_TOPO_SEARCH_URL") || DEFAULT_BASE;
+	const raw = env(kind === "fetch" ? "STEPCODE_TOPO_FETCH_URL" : "STEPCODE_TOPO_SEARCH_URL") || DEFAULT_BASE;
+	const suffix = `/v1/tools/${kind}`;
+	return raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw.replace(/\/+$/, "");
 }
 
 /** A minimal token bucket: `qps` tokens, refilled continuously. */

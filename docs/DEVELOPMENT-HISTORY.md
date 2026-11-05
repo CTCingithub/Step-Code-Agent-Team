@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-30（plan-118，标记改名轮：DEFAULT → "default" 合法 TOML 标量；此前为 plan-117）。
+> 最近更新：2026-10-30/31（plan-119，searcher 首次真实运行轮：阻塞级 URL 契约缺陷；此前为 plan-118）。
 
 ## 总览
 
@@ -1003,3 +1003,24 @@
 **验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误；phase20/30/31 复跑全绿。
 
 **仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
+### 81. searcher 首次真实运行轮：阻塞级 URL 契约缺陷（plan-119）
+
+**用户 prompt**：「[团队方案·性能] …成员：队长(Coordinator·high)、安全审计(Security·high)、配置工程(Config·high)、测试A(TestA·high)、测试B(TestB·high)、测试分析(Analyst·high)；拓扑 star，理由：集中管控 api key 与测试中间产物，杜绝成员直连造成密钥扩散…我已经修改了 sandbox/config.toml，使用deepseek的search和fetch服务，并粘帖了api key（注意只调用别暴露），请给我创建合理的计划，做功能测试以及其他工作」。
+
+**组建**：建 security / config-eng / test-a / test-b / analyst 五成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T57–T62（T1 安全审计、T2 配置校验 → T3/T4 并行测试 → T5 队长竞速择优 → T6 分析出报告）。**队长由本会话担任**——这正好兑现了用户选 star 的理由：key 全程只在队长进程。
+
+**执行降级**：T1 派发即 settle 超时（本会话第 25 次），T1–T6 由队长亲自执行，范围未缩。
+
+**阻塞级缺陷 D1（本轮核心产出）**：用户把 `searchUrl` 填成**完整端点** `https://api.deepseek.com/v1/tools/search`，而 `bin/topo-search.mjs` 的 `resolveBase()` 把它当 base 又拼一次 `/v1/tools/search`，实际请求 `.../v1/tools/search/v1/tools/search` → 裸 **404**。阻塞性在于：404 的表象是"服务端故障"，用户不可能联想到是自己 URL 的填法；而文档从未说明该填 base 还是完整端点，两种填法都看似合理——**首次使用必然撞上**。修复为两种填法都接受（剥掉重复后缀与尾部斜杠），并给 phase28 补 3 条零成本回归断言。
+
+**安全审计结论：零泄漏，必须修无**。文件 0600、`.gitignore:8`、git 历史从未跟踪；以配置 key 为模式扫描 git 跟踪文件 / `.topo/` / `sandbox/logs/` / `sandbox/archive/` **四路命中均为 0**。脚本无任何 `console.*`，key 只进 `Authorization` 头；`collab-record.ts` 只写任务快照不含环境变量。唯一有条件风险是"成员若把 key 回显进任务结果会被写进 `.topo/records/`"，已由 `agents/searcher.md` 规则 6 禁止。
+
+**功能测试**：search 13/13、fetch 8/8。覆盖操作符矩阵（`"phrase"`/`-word`/`lang:`）、count 边界、128 字符 query 上限（exit 2 且 **stdout 0 字节**）、batch、假 key→401 且 attempts=1、缺 key→exit 2、404→retryable=false、退出码 0/1/2。三个 ⚠️ 均非缺陷：`raw.githubusercontent.com` 本机网络被重置（curl 直连亦 `HTTP 000`）、`example.com/index.html` 确不存在、未找到 >2MB 页面触发截断（该逻辑已由 phase28 零成本覆盖）。
+
+**计费**：18 次成功请求，约 ¥0.09。失败/401/404/缺 key 均不计费。
+
+**竞速择优**：同 query 下 `--need-content` 正文 4398 字符 vs 基础 208 字符（**~21 倍**），延迟反从 0.74s 降至 0.58s。结论：需要引用具体内容时默认加 `--need-content`，仅需 URL 列表时用基础模式省 token。
+
+**一个值得记录的方法论错误**：首轮测试看似两处违约——超限报错与 batch 进度行"污染 stdout"。实为探针用 `2>&1` 把 **stderr** 并进了 stdout。脚本的 stdout 确实是单行 JSON，诊断确实走 stderr。**测 stdout 契约时绝不可合并流**，否则会把正确的分流误判成违约（反之亦然）。
+
+**验证**：全量零 token 门 26 phase 全绿；tsc 0 错误；phase28 复跑含新断言全绿。
