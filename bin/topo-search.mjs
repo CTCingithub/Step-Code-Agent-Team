@@ -25,6 +25,26 @@
  *
  * stdout: exactly one JSON object per request. stderr: human progress, never a key.
  * Exit codes: 0 ok · 1 request failed · 2 usage error / missing key.
+ *
+ * Environment (all optional):
+ *   STEPCODE_TOPO_SEARCH_URL / _FETCH_URL   endpoint; used VERBATIM when it
+ *                                           already names one, suffix appended
+ *                                           to a bare base. Empty = built-in
+ *                                           default.
+ *   STEPCODE_TOPO_SEARCH_KEY / _FETCH_KEY   Bearer credential. The search key is
+ *                                           also accepted as
+ *                                           STEPCODE_SEARCH_API_KEY (the name
+ *                                           the leader injects it under), then
+ *                                           DEEPSEEK_API_KEY.
+ *   STEPCODE_TOPO_ATTEMPTS       max attempts per request (default 3).
+ *   STEPCODE_TOPO_TIMEOUT_MS     per-request timeout (default 10000).
+ *   STEPCODE_TOPO_QPS            token-bucket rate per kind (default 5).
+ *   STEPCODE_TOPO_MAX_BYTES      response cap before truncation (default 2 MiB).
+ *   STEPCODE_TOPO_BACKOFF_CAP_MS ceiling on the retry wait, in ms. 0 means "do
+ *                                not wait at all". This changes only HOW LONG a
+ *                                retry waits, never WHICH requests are retried,
+ *                                so it is safe to set to 0 when probing the
+ *                                retry path. Unset = the natural 2s/4s ladder.
  */
 
 import { setTimeout as delay } from "node:timers/promises";
@@ -44,9 +64,36 @@ function env(name, fallback = "") {
 	return typeof v === "string" && v.trim() ? v.trim() : fallback;
 }
 
+/**
+ * The retry backoff for one attempt, capped by STEPCODE_TOPO_BACKOFF_CAP_MS.
+ *
+ * The cap is configurable because the fixed 2s/4s ladder is right for a real
+ * provider but makes any caller that wants to probe the retry path wait seconds
+ * per attempt. Capping it does not change WHICH requests are retried — the
+ * billing-honest policy (429 and 5xx yes, other 4xx no) is untouched.
+ */
+function backoffMs(attempt, base, ceiling) {
+	const natural = Math.min(base * 2 ** (attempt - 1), ceiling);
+	const cap = envIntAllowZero("STEPCODE_TOPO_BACKOFF_CAP_MS", natural);
+	return Math.max(0, Math.min(natural, cap));
+}
+
 function envInt(name, fallback) {
 	const parsed = Number.parseInt(env(name), 10);
 	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * An integer setting where 0 is a MEANINGFUL value, not "unset".
+ *
+ * `envInt` rejects 0 (it treats it as absent), which is right for caps like
+ * maxAttempts but wrong for a backoff cap: `STEPCODE_TOPO_BACKOFF_CAP_MS=0`
+ * means "do not wait at all", and falling back to the natural ladder would
+ * silently ignore the one value a caller is most likely to set to zero.
+ */
+function envIntAllowZero(name, fallback) {
+	const parsed = Number.parseInt(env(name), 10);
+	return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 /**
@@ -197,7 +244,7 @@ async function callApi(kind, payload, opts) {
 			if (res.status === 429) {
 				// Rate-limited: the one 4xx worth retrying, because nothing was billed.
 				if (attempt < maxAttempts) {
-					const backoff = Math.min(2000 * 2 ** (attempt - 1), 8000) + Math.floor(performance.now() % 250);
+					const backoff = backoffMs(attempt, 2000, 8000) + Math.floor(performance.now() % 250);
 					process.stderr.write(`topo-search: 429 rate-limited; backing off ${backoff}ms\n`);
 					await delay(backoff);
 					continue;
@@ -206,7 +253,7 @@ async function callApi(kind, payload, opts) {
 			}
 			if (res.status >= 500) {
 				if (attempt < maxAttempts) {
-					const backoff = Math.min(500 * 2 ** (attempt - 1), 4000);
+					const backoff = backoffMs(attempt, 500, 4000);
 					process.stderr.write(`topo-search: ${res.status}; backing off ${backoff}ms\n`);
 					await delay(backoff);
 					continue;
@@ -245,7 +292,7 @@ async function callApi(kind, payload, opts) {
 			const aborted = err instanceof Error && err.name === "AbortError";
 			const message = aborted ? `timeout after ${timeoutMs}ms` : err instanceof Error ? err.message : String(err);
 			if (attempt < maxAttempts && (aborted || !(err instanceof Error && err.name === "AbortError"))) {
-				const backoff = Math.min(500 * 2 ** (attempt - 1), 4000);
+				const backoff = backoffMs(attempt, 500, 4000);
 				process.stderr.write(`topo-search: ${message}; backing off ${backoff}ms\n`);
 				await delay(backoff);
 				continue;

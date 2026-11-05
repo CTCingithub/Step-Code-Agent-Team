@@ -154,40 +154,55 @@ export default function (pi: ExtensionAPI) {
 			check("search: a trailing slash does not double the separator", fake.seen[1]?.url === "/v1/tools/search", String(fake.seen[1]?.url));
 			fake.server.close();
 
-			// ---- 2. need_content is passed through ----
-			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ results: [] }));
-			});
-			const nc = await run(["search", "--query", "q", "--need-content"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}` });
-			check("search: --need-content reaches the body", fake.seen[0]?.body?.need_content === true, JSON.stringify(fake.seen[0]?.body));
-			check("search: an empty result list is still ok:true", lastStdoutJson(nc.stdout)?.ok === true && (dataOf(lastStdoutJson(nc.stdout)).results as unknown[] | undefined)?.length === 0);
-			check("search: default count is 5", fake.seen[0]?.body?.count === 5);
-			fake.server.close();
-
-			// ---- 3. fetch: endpoint, body, and the title/content shape ----
-			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ title: "Page", content: "# Markdown body" }));
-			});
-			const f = await run(["fetch", "--url", "https://example.com/a"], { ...baseEnv, STEPCODE_TOPO_FETCH_URL: `http://127.0.0.1:${fake.port}` });
-			check("fetch: exit 0", f.code === 0, `code=${f.code}`);
-			const fJson = lastStdoutJson(f.stdout);
-			check("fetch: endpoint is /v1/tools/fetch", fake.seen[0]?.url === "/v1/tools/fetch", String(fake.seen[0]?.url));
-			check("fetch: body carries the url", fake.seen[0]?.body?.url === "https://example.com/a", JSON.stringify(fake.seen[0]?.body));
-			check("fetch: title and content surface", dataOf(fJson).title === "Page" && dataOf(fJson).content === "# Markdown body");
-			fake.server.close();
-
-			// ---- 4. a configured fetch key overrides the shared one ----
-			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ title: "t", content: "c" }));
-			});
-			await run(["fetch", "--url", "https://example.com"], { ...baseEnv, STEPCODE_TOPO_FETCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_FETCH_KEY: "fetch-specific-key" });
-			check("fetch: STEPCODE_TOPO_FETCH_KEY overrides the shared key", fake.seen[0]?.auth === "Bearer fetch-specific-key", String(fake.seen[0]?.auth));
-			fake.server.close();
+			// ---- 2-4. need_content, the fetch shape, and the fetch key override ----
+			// These three groups are independent (each starts its own fake endpoint
+			// and reads only its own seen[0]), so they run concurrently. Serially
+			// they cost three sequential node spawns (~860ms each), which is what
+			// made this probe the slowest in the gate at 19.2s against ~8s for a
+			// spawn-free standalone phase.
+			const [nc, f] = await Promise.all([
+				(async () => {
+					const local = await startFake((req, res) => {
+						res.writeHead(200, { "content-type": "application/json" });
+						res.end(JSON.stringify({ results: [] }));
+					});
+					const out = await run(["search", "--query", "q", "--need-content"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${local.port}` });
+					check("search: --need-content reaches the body", local.seen[0]?.body?.need_content === true, JSON.stringify(local.seen[0]?.body));
+					check("search: an empty result list is still ok:true", lastStdoutJson(out.stdout)?.ok === true && (dataOf(lastStdoutJson(out.stdout)).results as unknown[] | undefined)?.length === 0);
+					check("search: default count is 5", local.seen[0]?.body?.count === 5);
+					local.server.close();
+					return out;
+				})(),
+				(async () => {
+					const local = await startFake((req, res) => {
+						res.writeHead(200, { "content-type": "application/json" });
+						res.end(JSON.stringify({ title: "Page", content: "# Markdown body" }));
+					});
+					const out = await run(["fetch", "--url", "https://example.com/a"], { ...baseEnv, STEPCODE_TOPO_FETCH_URL: `http://127.0.0.1:${local.port}` });
+					const fJson = lastStdoutJson(out.stdout);
+					check("fetch: exit 0", out.code === 0, `code=${out.code}`);
+					check("fetch: endpoint is /v1/tools/fetch", local.seen[0]?.url === "/v1/tools/fetch", String(local.seen[0]?.url));
+					check("fetch: body carries the url", local.seen[0]?.body?.url === "https://example.com/a", JSON.stringify(local.seen[0]?.body));
+					check("fetch: title and content surface", dataOf(fJson).title === "Page" && dataOf(fJson).content === "# Markdown body");
+					local.server.close();
+					return out;
+				})(),
+				(async () => {
+					const local = await startFake((req, res) => {
+						res.writeHead(200, { "content-type": "application/json" });
+						res.end(JSON.stringify({ title: "t", content: "c" }));
+					});
+					await run(["fetch", "--url", "https://example.com"], { ...baseEnv, STEPCODE_TOPO_FETCH_URL: `http://127.0.0.1:${local.port}`, STEPCODE_TOPO_FETCH_KEY: "fetch-specific-key" });
+					check("fetch: STEPCODE_TOPO_FETCH_KEY overrides the shared key", local.seen[0]?.auth === "Bearer fetch-specific-key", String(local.seen[0]?.auth));
+					local.server.close();
+				})(),
+			]);
 
 			// ---- 5. the billing-honest retry policy ----
+			// BACKOFF_CAP_MS=0 collapses the real 2s/4s ladder to nothing. The
+			// assertions below still pin WHICH statuses are retried and how many
+			// times, so nothing about the policy under test is weakened — only the
+			// waiting between attempts is removed.
 			// Bound after the await: the handler only runs once a request arrives,
 			// which is after startFake has resolved.
 			let seen5: SeenEntry[] = [];
@@ -201,9 +216,13 @@ export default function (pi: ExtensionAPI) {
 				}
 			});
 			seen5 = fake.seen; // bound BEFORE the run: the handler reads it live
-			const rl = await run(["search", "--query", "q"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_QPS: "50" });
+			const rl = await run(["search", "--query", "q"], { ...baseEnv, STEPCODE_TOPO_BACKOFF_CAP_MS: "0", STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_QPS: "50" });
 			check("retry: a 429 IS retried and then succeeds", lastStdoutJson(rl.stdout)?.ok === true && fake.seen.length === 3, `attempts=${fake.seen.length}`);
 			check("retry: attempts recorded in meta", metaOf(lastStdoutJson(rl.stdout)).attempts === 3);
+			// The cap collapses the WAITING, never the policy: same status retried,
+			// same attempt count. Without this, a cap of 0 would be indistinguishable
+			// from "retrying was disabled".
+			check("retry: a zero backoff cap does not disable retrying", fake.seen.length === 3 && metaOf(lastStdoutJson(rl.stdout)).attempts === 3, `attempts=${metaOf(lastStdoutJson(rl.stdout)).attempts}`);
 			fake.server.close();
 
 			fake = await startFake((req, res) => {
@@ -221,7 +240,7 @@ export default function (pi: ExtensionAPI) {
 				res.writeHead(503);
 				res.end("unavailable");
 			});
-			const s5 = await run(["search", "--query", "q"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_QPS: "50" });
+			const s5 = await run(["search", "--query", "q"], { ...baseEnv, STEPCODE_TOPO_BACKOFF_CAP_MS: "0", STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_QPS: "50" });
 			check("retry: a 5xx IS retried up to the attempt cap", fake.seen.length === 3, `attempts=${fake.seen.length}`);
 			check("retry: exhausting retries reports retryable:true", lastStdoutJson(s5.stdout)?.retryable === true);
 			fake.server.close();

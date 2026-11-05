@@ -79,7 +79,12 @@ run_phase_attempt() {
     echo "phase$p: FAILED (timed out after 240s — the probe hung before DONE)"
     echo "$probe_log" | tail -20
     return 1
-  elif [ "$done" -ge 1 ] && [ "$fails" -eq 0 ]; then
+  elif [ "$done" -ge 1 ] && [ "$fails" -eq 0 ] && [ "$skips" -eq 0 ]; then
+    # skips counts too: a probe that SKIPs its cases and still logs DONE used to
+    # pass here, which is the false green docs/TESTING.md:164 records for phase11
+    # run against the default agentDir. No probe emits "SKIP " on its normal path
+    # (grep-verified), and the runner's own key-gated skip happens outside this
+    # function, so requiring zero is safe.
     echo "phase$p: OK (fails=0, skips=$skips)"
     return 0
   else

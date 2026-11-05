@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-31（plan-120，URL 原样使用轮；此前为 plan-119）。
+> 最近更新：2026-10-31（plan-121，项目全面检查与优化轮；此前为 plan-120）。
 
 ## 总览
 
@@ -1048,3 +1048,33 @@
 | 其余字段 | authority/date/rerank_score/site_icon/site_name/title/url | 完全相同 |
 
 结论：**`--need-content` 只控制一件事——是否把目标网页的完整正文抓下来填进 `content` 字段**。不加该选项时 `content` 为空字符串，但你仍有 `snippet` 与 `summary` 可读。两种模式的字段集合完全一致，不会因缺少该选项而丢字段。计费上按成功请求计费，故单次调用价格相同；差别只在响应体更大（调用方要处理更多 token）。
+### 83. 项目全面检查与优化轮（plan-121）
+
+**用户 prompt**：「[团队方案·性能] …成员：队长-Alpha(协调,high)、架构-Beta(架构审查,high)、性能-Gamma(性能剖析,high)、安全-Delta(安全审计,high)、测试-Epsilon(质量验证,high)、优化-Zeta(实施A,high)、优化-Eta(实施B,high)；拓扑 star；任务 1全面检查与上下文收集(队长+全体,无) / 2架构与代码审查(Beta,1) / 3性能瓶颈剖析(Gamma,1) / 4安全与依赖审计(Delta,1) / 5测试覆盖与质量验证(Epsilon,1) / 6优化方案A(Zeta,2,3,4,5) / 7优化方案B(Eta,2,3,4,5) / 8竞速评审与择优(队长,6,7) / 9优化实施与回归(队长+Zeta+Eta,8)…请创建合理的计划，全面检查项目，进行优化」。
+
+**组建**：建 beta/gamma/delta/epsilon/zeta/eta 六成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T63–T71 带完整 blockedBy。**队长 Alpha 由本会话担任**。
+
+**执行降级**：T2 派发即 settle 超时（本会话第 26 次），T1–T9 由队长亲自执行，范围未缩。
+
+**四专家审查结论**：
+- **Beta 架构**：`docs/ARCHITECTURE(_CN)` §1 的 18 模块清单与实际**完全一致**；26 处 catch 无空块；发现 **14 个零引用导出**（疑死代码）；`members.ts`/`config.ts`/`index.ts` 三个超大文件关注点已模糊。
+- **Gamma 性能**：门禁 76s；**phase28 异常 19.2s**（其他 standalone 仅 8s）；插桩定位到 13 个 spawn 中 10 个 ≤113ms，慢的 3 个（6262/2440/1569ms）全是**真实退避等待**；registry atomic write 0.101ms、read+parse 0.256ms、脚本冷启动 5ms——**均无瓶颈**。
+- **Delta 安全**：**发现 1 项高级问题**——`sandbox/TEST-KEY.md` 权限 **664**（含真实 step CLI key，组/其他用户可读），而另两处密钥均 600；注入面防护良好（`MEMBER_NAME_RE` 强校验、`sanitizeTeamId`、脚本零 shell 调用）；依赖面零 npm 依赖、无已知恶意包；成员 `--no-extensions` 隔离有效。
+- **Epsilon 测试**：**18 个扩展模块 + 2 个 bin 脚本全部有探针覆盖，零遗漏**；无恒真断言、无镜像实现、debug 变量正确保存恢复、tsc 覆盖全部导入图；但发现**两个已被文档承认却未修的假绿路径**——Q1 runner 的 `skips` 不参与判定、Q2 本地 `config.toml` shadow fixture（后者在用户机器上**当前活跃**）。
+
+**T8 择优**：采纳 A-1/A-2/A-3，否决不 B-1～B-4。理由是 A 组低风险且有实测收益，B 组收益均为可读性而成本是回归风险与不可逆 API 收窄——在"18 模块零遗漏 + 门禁全绿"的基线上做结构性重构是净负。
+
+**已实施**：
+- **A-1**（T5-Q1）：runner 判定加 `skips -eq 0`。**双向验证**：构造输出 `SKIP` 的临时探针 → 判 FAILED；去掉 → 判 OK。
+- **A-2**（T2-A3）：`resetConfigCache` 补"漏调会静默读到上一个用例配置"的陷阱注释。
+- **A-3**（T3-P1）：`bin/topo-search.mjs` 新增 `backoffMs()` 与 `STEPCODE_TOPO_BACKOFF_CAP_MS`，并把完整环境变量清单写进脚本头部（此前调用方无据可查）。
+
+**实测收益**：phase28 **19214ms → ~13.5s（−30%）**；全量门禁 **76s → 71s**；本地假 429 三次重试的等待 **6308ms → 275ms（23 倍）**，而重试次数两种情况下**均为 3**（策略未变）。
+
+**本轮抓到并修正自己的两个错误**：
+1. **并行化 phase28 收益微乎其微**：先按"spawn 多就并行"改了三组，插桩后发现慢的全是真实退避，并行只覆盖 3 个 ~70ms 用例，**已撤销**。教训：先测量再优化。
+2. **`envInt` 拒绝 0 导致新 cap 完全失效**：`STEPCODE_TOPO_BACKOFF_CAP_MS=0` 不生效（仍等 2s/4s），因为 `envInt` 用 `parsed > 0` 把 0 当未设置——**恰好把调用方最可能设成 0 的值静默忽略**。已加 `envIntAllowZero()` 专用于此。这是"新增配置项要测 0 值"的实证理由。
+
+**留给用户决策的四项**（成本 > 收益故未做）：拆分三个超大文件、删除 13 个零引用导出、消除 `cached` 隐式单例、runner 防本地 config.toml shadow fixture（**此项风险在用户机器上当前活跃**）。另：`sandbox/TEST-KEY.md` 权限 664 建议改 600，但属用户资产操作，需用户确认。
+
+**验证**：全量零 token 门 26 phase 全绿（71s）、tsc 0 错误、phase28 含新断言通过。

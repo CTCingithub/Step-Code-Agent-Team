@@ -725,7 +725,14 @@ export function getConfig(): PluginConfig {
 	return cached;
 }
 
-/** Test hook: drop the process-wide cache. */
+/**
+ * Test hook: drop the process-wide cache.
+ *
+ * A probe that forgets to call this between cases silently reads the PREVIOUS
+ * case's config — `getConfig()` hands back the cached object, so the assertion
+ * still runs and still passes, just against the wrong fixture. Every probe that
+ * writes a config file must call this before `loadConfig`/`getConfig`.
+ */
 export function resetConfigCache(): void {
 	cached = null;
 }
