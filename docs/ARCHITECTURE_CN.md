@@ -30,6 +30,10 @@
 ├── extensions/collab-record.ts 每次团队任务后写 .topo/records/ 协作记录（按 teamId 幂等，按加密配置密封或明文，绝不阻断解散）
 ├── extensions/presets.ts    预设加载（内置 + 用户/项目 agents/ 目录）、扩展入口路径、shim 路径、searcher 脚本路径
 ├── extensions/member-messaging.ts 成员侧 topo_team_msg 工具（直连 socket，无需 bash）
+├── extensions/team/naming.ts   成员命名与会话→团队 ID 规则（MEMBER_NAME_RE、teamIdForSession）
+├── extensions/team/errors.ts   派发错误分类：哪些可重试、为什么
+├── extensions/team/spawn.ts    成员 spawn 的纯函数化：参数、环境、模型与 effort 解析
+├── extensions/members.ts       TeamManager：成员/任务/拓扑编排（re-export team/ 的规则）
 ├── extensions/render.ts     TUI 渲染（renderCall / renderResult）
 │
 ├── bin/stepcode-team.mjs    成员侧 CLI shim（msg / status；手动/外部路径——成员通常用 topo_team_msg 工具）

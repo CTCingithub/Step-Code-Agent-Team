@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-124，两个可选项交付与全量排查轮；此前为 plan-123）。
+> 最近更新：2026-11-06（plan-125，安全加固、架构拆分与派发根因轮；此前为 plan-124）。
 
 ## 总览
 
@@ -1156,3 +1156,42 @@
 **T4 验证**：全量零 token 门 **28 phase 全绿（91s）**；tsc 0 错误；phase32 补 `--no-session` 与继承性断言后全绿；phase33 全绿且反向验证有效。
 
 **留给用户**：HANDOFF §5 的四项待决策仍未拍板（TEST-KEY.md 权限 664、runner 根治 fixture shadow、三个超大文件是否拆、13 个过度导出是否收窄）——本轮只做了低风险的告警版缓解。
+### 87. 安全加固、架构拆分与派发根因轮（plan-125）
+
+**用户 prompt**：「[团队方案·性能] …成员名单：队长（统筹集成，effort=high）、安全审计员（权限与密钥安全，high）、架构师（拆分与机制分析，high）、代码优化员A（代码竞速，high）、代码优化员B（代码竞速，high）、文档工程师（文档优化，high）；通信拓扑：star…任务1 安全加固（chmod 600 并验证）→安全审计员 / 2 架构拆分（按角色拆 members.ts 并统合至单一路径）→架构师 / 3 根因分析（定位派发机制退化原因并收窄非导出）→架构师 / 4 代码竞速A / 5 代码竞速B / 6 文档优化 / 7 汇总集成（blockedBy 1-6）→队长…同意执行 chmod 600，同意按角色拆 members.ts 并放在一个路径下，要根治问题，收窄成非导出，查找优化派发机制退化的原因，全面优化项目的代码和文档」。
+
+**组建与执行降级**：建 sec-auditor / architect / optimizer-a / optimizer-b / doc-engineer 五成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T83–T89 带完整 blockedBy。**队长由本会话担任**。T1 由安全审计员**成功完成**并经队长独立验证；T2 起派发 settle 超时（本会话第 29/30 次），T2–T6 由队长亲自执行，范围未缩。
+
+**T1 安全加固（唯一按方案由成员完成的任务）**：`sandbox/TEST-KEY.md` 664 → **600**。验证：owner 未变、字节数 103、行数 3、sha256 与改前一致（内容未动）、另两处密钥（`sandbox/config.toml`、`.topo/team.key`）本已 600 且未擅动、git 侧干净（status 不出现、`.gitignore:21` 覆盖、历史从未跟踪）。**记录未修**：umask 0002，重建该文件会回到 664——已在报告中给建议，未改系统设置。
+
+**T2 架构拆分**：`extensions/members.ts` **1288 → 1043 行**，规则外移到新建的 `extensions/team/`（单一路径）：
+- `naming.ts`（31 行）：`MEMBER_NAME_RE`、`teamIdForSession`、`sanitizeTeamId`（收窄为非导出）；
+- `errors.ts`（98 行）：`isRetryableSpawnError`、`isSettleTimeoutError`、`augmentDispatchError`、`resumeIgnoredParams`、`currentDepth`、`wouldCycle`；
+- `spawn.ts`（205 行）：`buildSpawnArgs`（原类私有，现为**纯函数**，可直接单测）、`resolveMemberModel`、`spawnableModel`、`resolveEffort`、`writeMemberPrompt`。
+
+**关键技术约束**：TypeScript **无 partial class**，class 不可拆跨文件。故只搬"类之外的自由函数与纯逻辑"，TeamManager 类保留但变薄；四个已委托的私有方法（`resolveMemberModel`/`spawnableModel`/`resolveEffort`/`writeMemberPrompt`）整体删除，调用点改为模块函数。`members.ts` 以**薄桶**形式 re-export 这些符号，使 `tools.ts` 与 `phase18` 的 import 站点**零 churn**——这是"放在一个路径下"与"不炸 14 个引用方"之间的折中，已在文档中写明"新代码应直接从 ./team/* 导入"。
+
+顺带消除一处重复：`forSession()` 里原来手抄了一遍 `teamIdForSession` 的 strip 逻辑，现改为直接调用（两份实现必然漂移）。
+
+**T3 派发退化根因（本轮最有价值产出）**：
+
+链路（全部有代码证据）：
+1. `rpc-mode.ts:429-447`：`prompt` 命令的 `output(success(id,"prompt"))` 在 **preflight 成功时**就发出，远早于回合结束——docs/TESTING.md 早已记载此事实；
+2. `agent-session.ts:1386-1392`：`agent_settled` **只在一次 agent run 真正结束**（或带 failure）时发射；
+3. `rpc-client.ts:223-225` + `promptAndSettle():336-346`：插件**正确地**只等 `agent_settled`（Promise executor 同步执行，`settleDone` 在发 prompt 前已入队，**无注册竞态**——我先前怀疑此处，被代码推翻）。
+
+**结论**：成员进程加载正常、preflight 通过（所以 ack 到达、派发方认为"已受理"），但**从未进入 agent run** → 永不发射 `agent_settled` → 队长等满 `dispatch.timeoutMs`（默认 10 分钟）→ `timeout waiting for member to settle`。而成员"确实活着、确实能写文件"（它完成了启动工作）——与观察完全一致。
+
+**结构性盲区（这才是"根治"的真正对象）**：**没有任何零 token 探针走过 prompt→settle 路径**，因为它需要模型调用（花钱）。门禁的 phase17/18 只验握手与拓扑消息，`live_*` 只发 `/topo` 命令。所以这条路径的退化在门禁里**结构性地不可见**。
+
+**已实施的修复（诊断优先，不改行为）**：`dispatchWithSettleGuard` 在 usage delta 为零的 settle 超时下，现在给出可操作诊断——明说"成员应答了 prompt preflight 但没有回合运行（usage delta 0），因此从未发射 agent_settled"，并指向成员的搭建问题（models.available 之外的模型永不 settle、扩展未绑定），同时警告"用同样设置 respawn 很可能再次超时"。
+
+**留给后续的根治方向**（已写入根因报告）：用本地假模型端点驱动一次真实 prompt→settle，把该路径纳入零 token 门禁（可复用 phase28 的假端点机制）。
+
+**收窄非导出**：仅 members.ts 自用的六个 helper 已模块私有化或移入 team/ 按需导出；`searcherSpawnEnv`/`memberSpawnEnv`/`packageRoot`/`extensionDir` **保持导出**（分别被 phase31/32 与 presets.ts 内部依赖）。
+
+**T4/T5 优化**：phase28 的 fixture 构造消除 6 处重复响应体 + 7 处重复响应头（收敛为 `SEARCH_BODY`/`okJson`/`searchFake` 三个 helper）。另：我怀疑"整队 `disband()` 漏 `save()`"，**读码后证伪**（`save()` 出现 2 次，覆盖两条路径），未改——记录此过程以说明"先查证再改"。
+
+**T6 文档**：ARCHITECTURE(_CN) 补 `team/` 三模块并把模块数 18→21；TESTING(_CN) phase18 行补错误分类器的新位置；HANDOFF §3 文件索引补 team/ 行并记录拆分约束。
+
+**验证**：全量零 token 门 **28 phase 全绿（62s）**；tsc **0 错误**；phase28 去重后复跑通过。

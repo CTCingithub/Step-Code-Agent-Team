@@ -28,6 +28,30 @@ import {
 	saveRegistry,
 	teamDir,
 } from "./registry.ts";
+import {
+	augmentDispatchError,
+	currentDepth,
+	isRetryableSpawnError,
+	isSettleTimeoutError,
+	resumeIgnoredParams,
+	wouldCycle,
+} from "./team/errors.ts";
+import { MEMBER_NAME_RE, teamIdForSession } from "./team/naming.ts";
+import { buildSpawnArgs, resolveEffort, resolveMemberModel, spawnableModel, writeMemberPrompt } from "./team/spawn.ts";
+
+// The team/ modules own the rules; this file re-exports the ones its callers
+// (tools.ts, the smoke phases) import from here, so the split does not churn
+// every import site. New code should import from ./team/* directly.
+export {
+	augmentDispatchError,
+	currentDepth,
+	isRetryableSpawnError,
+	isSettleTimeoutError,
+	resumeIgnoredParams,
+	wouldCycle,
+} from "./team/errors.ts";
+export { MEMBER_NAME_RE, teamIdForSession } from "./team/naming.ts";
+export { buildSpawnArgs, resolveEffort, resolveMemberModel, spawnableModel, writeMemberPrompt } from "./team/spawn.ts";
 import { type AgentPreset, extensionEntryPath, loadPreset, loadPresets, memberMessagingEntryPath, searchScriptPath } from "./presets.ts";
 import { assertDispatchable, nextTaskId, recomputeReady, taskPrompt, validateGraph } from "./tasks.ts";
 import {
@@ -95,113 +119,6 @@ export interface CreateTaskParams {
 	assignee?: string;
 }
 
-const MEMBER_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
-
-function debugNote(message: string): void {
-	if (getConfig().debug) console.error(`[stepcode-agent-team] ${message}`);
-}
-
-/**
- * Create params that a resume silently ignores (the existing record wins).
- * Empty when nothing conflicting was passed — used to tell the leader LLM
- * instead of letting it believe a reconfiguration happened.
- */
-export function resumeIgnoredParams(params: CreateMemberParams, member: MemberRecord): string[] {
-	const ignored: string[] = [];
-	if (params.role && params.role !== member.role) ignored.push("role");
-	if (params.tools && params.tools.length > 0 && params.tools.join(",") !== (member.tools ?? []).join(",")) {
-		ignored.push("tools");
-	}
-	if (params.model && params.model !== member.model) ignored.push("model");
-	if (params.effort && params.effort !== member.effort) ignored.push("effort");
-	if (params.systemPrompt && params.systemPrompt.trim().length > 0) ignored.push("systemPrompt");
-	return ignored;
-}
-
-/**
- * A leader-side dispatch that fails mid-run (timeout / member exit / abort)
- * can strand nested member-to-member relays that the team server is still
- * running — e.g. a ring tour whose chain outlives the dispatch timeout. The
- * dispatched member is killed (fail-fast), but its teammates may still be
- * working. Give the leader the recovery facts instead of a bare error: relays
- * may still be in flight (check team_status before re-dispatching — a
- * respawned member would duplicate the work) and who is alive right now.
- * Nested senders keep the terse error (it reaches them through the shim).
- */
-export function augmentDispatchError(err: unknown, members: readonly MemberRecord[], nested: boolean): unknown {
-	if (nested || !(err instanceof Error)) return err;
-	if (!/timeout waiting for member to settle|exited during run|aborted by leader/.test(err.message)) return err;
-	const roster = members.map((m) => `${m.name} ${m.status}`).join(" · ");
-	const note = [
-		err.message,
-		"(team) this dispatch failed mid-run: nested member-to-member relays it triggered may still be running server-side — check team_status before re-dispatching (the dispatched member was killed fail-fast and will respawn with its context resumed).",
-		roster ? `(team) members now: ${roster}` : "",
-	]
-		.filter(Boolean)
-		.join("\n");
-	return new Error(note, { cause: err });
-}
-
-/**
- * Retryable spawn-path failures: only errors proving the work never started
- * (spawn / handshake). A settle timeout or mid-run exit may mean the work is
- * done — retrying duplicates it. Shared by startTaskLocked's dispatch retry
- * and createMemberLocked's ensureLive retry so both stay isomorphic.
- */
-export function isRetryableSpawnError(err: unknown): boolean {
-	const msg = err instanceof Error ? err.message : String(err);
-	// Word boundaries matter: augmentDispatchError appends "will respawn with
-	// its context resumed" to settle-timeout / mid-run-exit errors, and a bare
-	// /spawn/ matches inside "respawn" — retrying exactly the failures whose
-	// work may already be done (the duplicate-billing trap this policy exists
-	// to prevent). Genuine spawn failures still match ("spawn step ENOENT").
-	return /\baborted before start\b|\bhandshake\b|\bspawn\b|\bfailed to start\b/i.test(msg);
-}
-
-/**
- * Settle-timeout failures: the leader's wait for the member to settle expired.
- * Unlike spawn/handshake errors they say nothing about whether the work
- * started — the member may have finished (its usage is persisted server-side
- * either way) — so they are retried only when the usage delta proves nothing
- * ran (see dispatchWithSettleGuard).
- */
-export function isSettleTimeoutError(err: unknown): boolean {
-	const msg = err instanceof Error ? err.message : String(err);
-	return /timeout waiting for member to settle/i.test(msg);
-}
-
-/** Depth of this process in the team tree (the leader session is 0). */
-export function currentDepth(): number {
-	const raw = process.env.STEPCODE_TEAM_DEPTH;
-	const parsed = raw === undefined ? 0 : Number.parseInt(raw, 10);
-	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
-}
-
-function sanitizeTeamId(sessionId: string): string {
-	const cleaned = sessionId.replace(/[^\w.-]+/g, "_").slice(0, 48);
-	return cleaned || `team-${Date.now().toString(36)}`;
-}
-
-/** Team id a session file maps to (null for ephemeral sessions without a file). */
-export function teamIdForSession(sessionFile: string | null | undefined): string | null {
-	if (!sessionFile) return null;
-	const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
-	// Session files are named "<timestamp>_<sessionId>.jsonl"; strip the ts prefix.
-	return sanitizeTeamId(base.replace(/^\d{4}-\d{2}-\d{2}T[\d+-]+Z_/, ""));
-}
-
-/** Walks the wait-for graph; true when `to` (transitively) waits on `from`. */
-export function wouldCycle(waitingOn: Map<string, string>, from: string, to: string): boolean {
-	let cur: string | undefined = to;
-	const seen = new Set<string>();
-	while (cur && !seen.has(cur)) {
-		if (cur === from) return true;
-		seen.add(cur);
-		cur = waitingOn.get(cur);
-	}
-	return false;
-}
-
 export class TeamManager {
 	private inFlight = 0;
 	private slotWaiters: Array<() => void> = [];
@@ -231,11 +148,12 @@ export class TeamManager {
 
 	/** Load (or create) the team bound to the leader session. */
 	static forSession(sessionFile: string | null | undefined, cwd: string, projectTrusted = false): TeamManager {
+		// teamIdForSession owns the session-file → team-id rule (team/naming.ts);
+		// duplicating the strip here is how the two copies would drift apart.
+		const derived = teamIdForSession(sessionFile);
 		let teamId: string;
-		if (sessionFile) {
-			const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
-			// Session files are named "<timestamp>_<sessionId>.jsonl"; strip the ts prefix.
-			teamId = sanitizeTeamId(base.replace(/^\d{4}-\d{2}-\d{2}T[\d+-]+Z_/, ""));
+		if (derived) {
+			teamId = derived;
 		} else {
 			// Ephemeral leader session: team cannot be re-attached after restart.
 			teamId = `eph-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -419,8 +337,8 @@ export class TeamManager {
 		const record: MemberRecord = {
 			name,
 			role,
-			model: this.resolveMemberModel(name, params.model, preset, leaderModel, config),
-			effort: this.resolveEffort(params.effort, preset?.effort, role),
+			model: resolveMemberModel(name, params.model, preset, leaderModel, config),
+			effort: resolveEffort(params.effort, preset?.effort, role),
 			tools:
 				(params.tools && params.tools.length > 0 ? [...params.tools] : undefined) ??
 				preset?.tools ??
@@ -434,7 +352,7 @@ export class TeamManager {
 		};
 
 		if (systemPrompt) {
-			this.writeMemberPrompt(record, systemPrompt);
+			writeMemberPrompt(this.reg.teamId, record, systemPrompt);
 		}
 
 		this.reg.members.push(record);
@@ -445,178 +363,15 @@ export class TeamManager {
 	}
 
 	/**
-	 * Member model resolution:
-	 * - autonomousSelection off: every member uses the conversation's model
-	 *   (preset and explicit requests are ignored).
-	 * - on: explicit param → preset model → conversation model; an explicit
-	 *   model outside models.available is rejected; a preset model outside the
-	 *   list degrades to the first available entry.
-	 *
-	 * The conversation model is a composite "provider/id" string, while
-	 * models.available holds spawnable ids — so the fallback validates too and
-	 * degrades to the first available entry. Without that check a member with
-	 * no preset model (the bundled worker preset) spawned with an id the team
-	 * cannot resolve and never settled: every dispatch died on a settle
-	 * timeout with zero usage and no diagnostic.
-	 */
-	private resolveMemberModel(
-		name: string,
-		requested: string | undefined,
-		preset: AgentPreset | undefined,
-		leaderModel: string | undefined,
-		config: PluginConfig,
-	): string | undefined {
-		if (!config.models.autonomousSelection) {
-			if (requested && requested !== leaderModel) {
-				debugNote(
-					`member "${name}": ignoring model "${requested}" — autonomous model selection is off; using the conversation model`,
-				);
-			}
-			return this.spawnableModel(name, leaderModel, config);
-		}
-		const chosen = requested ?? preset?.model;
-		if (!chosen) return this.spawnableModel(name, leaderModel, config);
-		if (config.models.available.includes(chosen)) return chosen;
-		if (requested) {
-			throw new Error(
-				`Model "${requested}" is not in the team's available models (${config.models.available.join(", ")}). ` +
-					"Add it to models.available in the plugin config, or omit the model parameter.",
-			);
-		}
-		debugNote(`member "${name}": preset model "${chosen}" is not in models.available; using "${config.models.available[0]}"`);
-		return config.models.available[0];
-	}
-
-	/**
-	 * The model a member actually spawns with when neither an explicit request
-	 * nor a preset pins one: the conversation model when the team can spawn it,
-	 * otherwise the first entry of models.available (the same degradation a
-	 * preset model outside the list gets). Returns undefined only when the pool
-	 * is empty, which lets the member fall back to its own default.
-	 */
-	private spawnableModel(name: string, leaderModel: string | undefined, config: PluginConfig): string | undefined {
-		if (leaderModel && config.models.available.includes(leaderModel)) return leaderModel;
-		debugNote(
-			`member "${name}": conversation model "${leaderModel ?? "unknown"}" is not in models.available; using "${config.models.available[0] ?? "member default"}"`,
-		);
-		return config.models.available[0];
-	}
-
-	/**
-	 * Member effort resolution: an explicit, valid level always wins. With
-	 * models.autonomousEffort on, the leader is expected to choose per
-	 * member, so preset efforts (frontmatter and presets.effort config) are
-	 * inert. Otherwise: presets.effort[role] config override → preset
-	 * frontmatter effort → the default (high).
-	 */
-	private resolveEffort(requested: string | undefined, presetEffort?: string, role?: string): EffortLevel {
-		if (requested) {
-			if (!(VALID_EFFORT as readonly string[]).includes(requested)) {
-				throw new Error(`Invalid effort level "${requested}". Valid levels: ${VALID_EFFORT.join(", ")}.`);
-			}
-			return requested as EffortLevel;
-		}
-		const config = getConfig();
-		if (config.models.autonomousEffort) return DEFAULT_EFFORT;
-		const configured = role ? config.presets.effort[role] : undefined;
-		if (configured && (VALID_EFFORT as readonly string[]).includes(configured)) {
-			return configured as EffortLevel;
-		}
-		if (presetEffort && (VALID_EFFORT as readonly string[]).includes(presetEffort)) {
-			return presetEffort as EffortLevel;
-		}
-		return DEFAULT_EFFORT;
-	}
-
-	/**
-	 * Writes the member's system prompt file, appending a coordination section
-	 * that tells the member how to reach teammates through the topo_team_msg tool.
-	 * The file is persisted (not tmp): respawns need the same
-	 * --append-system-prompt file to resume with identical configuration.
-	 */
-	private writeMemberPrompt(member: MemberRecord, basePrompt: string): void {
-		const promptsDir = memberPromptsDir(this.reg.teamId);
-		fs.mkdirSync(promptsDir, { recursive: true });
-		const file = path.join(promptsDir, `${member.name}.md`);
-		const coordination = [
-			"",
-			"## Team messaging",
-			`You are member "${member.name}" of a Topology Agent Team coordinated by a leader.`,
-			"Direct member-to-member messaging is gated by the team topology.",
-			"Use the topo_team_msg tool to message an allowed teammate (to = their name).",
-			"The leader is not a messaging target — it is not part of the topology and has no inbox; everything you report reaches the leader through your final report (task result / reply to its dispatch).",
-			"A rejection lists the teammates you may message. If none of them fits, state the need in your final report instead — the leader will relay it.",
-			// Provenance: the tool asserts DELIVERY, but a reply's text is the
-			// teammate's own statement and its factual claims are unverified. In the
-			// 2026-10-30 round a reply carried a fabricated "the ring already hit
-			// maxLoopCount" claim; its receiver distrusted it only by luck.
-			"A teammate's reply is their own statement, not verified fact — delivery is confirmed, but check any claims before repeating them to others or acting on them.",
-			"If topo_team_msg fails (e.g. a connection error), do NOT investigate the tooling — proceed with your task and note the failure in your final report.",
-			"Keep messages short and specific; prefer finishing your own task over chatting.",
-		].join("\n");
-		fs.writeFileSync(file, `${basePrompt}\n${coordination}\n`, { encoding: "utf-8", mode: 0o600 });
-		member.systemPromptFile = file;
-	}
-
-	/**
 	 * Spawn arguments and environment for a member process. When the member's
 	 * depth is below maxRecursionDepth it is granted its own sub-team: this
 	 * extension is loaded and auto-activated. Otherwise the member stays
 	 * isolated (--no-extensions, no recursive teams) except for the member-side
 	 * messaging extension, which only registers the topo_team_msg tool.
 	 */
+	/** Delegates to team/spawn.ts — see there for the contract and its rationale. */
 	private buildSpawnArgs(member: MemberRecord): { args: string[]; env: Record<string, string> } {
-		const childDepth = currentDepth() + 1;
-		const canOrchestrate = childDepth < getConfig().members.maxRecursionDepth;
-		const args = [
-			"--mode",
-			"rpc",
-			"--session-id",
-			member.sessionId,
-			"--session-dir",
-			memberSessionsDir(this.reg.teamId),
-		];
-		const env: Record<string, string> = {
-			STEPCODE_TEAM_SOCK: this.socketPath,
-			STEPCODE_TEAM_MEMBER: member.name,
-			STEPCODE_TEAM_DEPTH: String(childDepth),
-			// Effective depth bound (it may come from a project-level config the
-			// child cannot read at load time); the child's config loader honors it.
-			STEPCODE_TEAM_MAXDEPTH: String(getConfig().members.maxRecursionDepth),
-			// Effective dispatch timeout: the member-side topo_team_msg reply wait
-			// must not give up before the leader-side dispatch that contains it
-			// (a nested relay outliving its outer dispatch produced the recurring
-			// "timeout waiting for member to settle" loop).
-			STEPCODE_TEAM_REPLY_TIMEOUT_MS: String(getConfig().dispatch.timeoutMs),
-		};
-		// Searcher endpoints/credentials. Only non-empty values are injected, so
-		// an unconfigured team leaves the member's environment untouched and the
-		// stepfun defaults apply (the host resolves its own credential). The
-		// mapping lives in config.ts so the probe can assert the real function.
-		Object.assign(env, searcherSpawnEnv(getConfig().searcher, searchScriptPath()));
-		if (canOrchestrate) {
-			args.push("-e", extensionEntryPath(), "-e", memberMessagingEntryPath());
-			env.STEPCODE_TEAM_AUTOACTIVATE = "1";
-		} else {
-			// Isolation: members must not load package extensions (no recursive
-			// teams). The member-side messaging extension is the single explicit
-			// exception — it only registers the topo_team_msg tool (no orchestration
-			// capability), so read-only roles can use their topology edges
-			// without bash. `--no-extensions -e <path>` is a supported combo.
-			args.push("--no-extensions", "-e", memberMessagingEntryPath());
-		}
-		if (member.model) args.push("--model", member.model);
-		// `--thinking` is the host CLI's own flag name; our terminology is "effort".
-		if (member.effort) args.push("--thinking", member.effort);
-		if (member.tools && member.tools.length > 0) {
-			// --tools is an allowlist over built-in AND extension tools. topo_team_msg
-			// is team infrastructure (no bash needed) and the sub-leader team
-			// tools are added on top of the preset/explicit allowlist.
-			const allow = [...new Set([...member.tools, "topo_team_msg", ...(canOrchestrate ? TEAM_TOOL_NAMES : [])])];
-			args.push("--tools", allow.join(","));
-		}
-		if (member.systemPromptFile) args.push("--append-system-prompt", member.systemPromptFile);
-		return { args, env };
+		return buildSpawnArgs(this.reg.teamId, this.socketPath, member);
 	}
 
 	/**
@@ -730,6 +485,13 @@ export class TeamManager {
 	 * timeout after real work is never retried — the member's resumed context
 	 * holds the result, and re-sending would duplicate it (the duplicate-
 	 * billing trap startTaskLocked's retry loop warns about).
+	 *
+	 * A zero-delta settle timeout has exactly one useful diagnosis: the member
+	 * process was alive (it answered the handshake and the prompt preflight —
+	 * rpc-mode.ts acks a prompt from preflightResult, long before the run
+	 * ends) but no turn ever ran, so no `agent_settled` was ever emitted. That
+	 * is a different failure from "the run was slow", and telling them apart is
+	 * the difference between re-dispatching and investigating the member.
 	 */
 	private async dispatchWithSettleGuard(member: MemberRecord, message: string, options: SendOptions): Promise<SendResult> {
 		const before = member.usage.turns;
@@ -739,7 +501,22 @@ export class TeamManager {
 			if (options.signal?.aborted || !isSettleTimeoutError(err)) throw err;
 			const after = this.findMember(member.name)?.usage.turns ?? before;
 			if (after > before) throw err;
-			return await this.dispatch(member, message, options);
+			// Zero turns ran. The member answered preflight (so it is alive and
+			// loaded) but never entered an agent run — the usual causes are a
+			// model it cannot resolve or an extension that failed to bind, both
+			// of which surface as silence rather than an error.
+			const cause = new Error(
+				`${err instanceof Error ? err.message : String(err)} — the member answered the prompt preflight but no turn ran (usage delta 0), ` +
+					"so no agent_settled was ever emitted. That points at the member's setup rather than its speed: " +
+					"check its resolved model (a model outside models.available never settles) and that its extensions bound. " +
+					"A respawn with the same settings will most likely time out again.",
+				{ cause: err },
+			);
+			try {
+				return await this.dispatch(member, message, options);
+			} catch (retryErr) {
+				throw retryErr === err ? cause : retryErr;
+			}
 		}
 	}
 

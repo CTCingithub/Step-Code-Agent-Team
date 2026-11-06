@@ -110,7 +110,7 @@ either set, phase5 is part of the regression run.
 | phase15 | TUI render assertions (render.ts, the six tools' call/result, including collapse/expand / usage rows / status icons) | zero token (standalone run) |
 | phase16 | Cost guardrail and output truncation unit tests (costWarning / truncateOutput) + `dispatchPrompt` merge contract + the `assertDispatchable` gate (a failed task stays re-dispatchable) | zero token (standalone run) |
 | phase17 | Orphan processes (a member must not outlive the leader) | zero token |
-| phase18 | Slot counting (disband frees a slot) + resume argument ignored notice + dispatch failure context (the timeout/abort notice relays in-flight messages and the member roster) | zero token |
+| phase18 | Slot counting (disband frees a slot) + resume argument ignored notice + dispatch failure context (the timeout/abort notice relays in-flight messages and the member roster) + the error classifiers that decide what may be retried (`isRetryableSpawnError` / `isSettleTimeoutError` / `augmentDispatchError`, now living in extensions/team/errors.ts and imported through members.ts's re-export) | zero token |
 | phase19 | Unified config tiers (global/project config.toml, trust gating, precedence, invalid-TOML tolerance, env still wins) | zero token |
 | phase20 | Config seeding (commented defaults block appended on first activation; idempotent, additive, content preserved) | zero token |
 | phase21 | Team-request instruction builders + plan-tier data (language selection, tier strategy prompts, picker options, custom flow, review protocol) + `planConfirmDialogOpts` (no countdown in the TUI) | zero token |

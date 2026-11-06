@@ -42,9 +42,23 @@ function safeJson(text: string): Json {
 const dataOf = (j: Json | null): Json => ((j?.data ?? {}) as Json);
 const metaOf = (j: Json | null): Json => ((j?.meta ?? {}) as Json);
 
+/**
+ * The one search response shape this probe uses everywhere: a single result, so
+ * assertions can talk about `seen[0]` and `results[0]` without per-case setup.
+ */
+const SEARCH_BODY = JSON.stringify({ results: [{ title: "t", url: "https://example.com", snippet: "s" }] });
+
+/** Writes a 200 JSON response, so no case repeats the header pair. */
+function okJson(res: ServerResponse, body: unknown): void {
+	res.writeHead(200, { "content-type": "application/json" });
+	res.end(typeof body === "string" ? body : JSON.stringify(body));
+}
+
+/** A fake that answers every search with SEARCH_BODY. */
+const searchFake = () => startFake((_req, res) => okJson(res, SEARCH_BODY));
+
 /** A fake DeepSeek endpoint that records every request it receives. */
-function startFake(handler: (req: IncomingMessage, res: ServerResponse, seen: SeenEntry) => void): Promise<{ server: Server; seen: SeenEntry[]; port: number }> {
-	const seen: SeenEntry[] = [];
+function startFake(handler: (req: IncomingMessage, res: ServerResponse, seen: SeenEntry) => void): Promise<{ server: Server; seen: SeenEntry[]; port: number }> {	const seen: SeenEntry[] = [];
 	const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 		let body = "";
 		req.on("data", (c: Buffer | string) => (body += c));
@@ -118,10 +132,7 @@ export default function (pi: ExtensionAPI) {
 
 		try {
 			// ---- 1. search: endpoint, body, auth, and the DeepSeek defaults ----
-			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ results: [{ title: "t", url: "https://example.com", snippet: "s" }] }));
-			});
+			fake = await searchFake();
 			const searchEnv = { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}` };
 			const s = await run(["search", "--query", "deepseek api", "--count", "3"], searchEnv);
 			check("search: exit 0", s.code === 0, `code=${s.code} err=${s.stderr.slice(0, 120)}`);
@@ -141,10 +152,7 @@ export default function (pi: ExtensionAPI) {
 			// bare 404 — which reads as "the provider is down" rather than "your
 			// URL was wrong". A configured URL that already names the endpoint must
 			// be posted to exactly as written; only a bare base gets the suffix.
-			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ results: [{ title: "t", url: "https://example.com", snippet: "s" }] }));
-			});
+			fake = await searchFake();
 			const fullEndpoint = `http://127.0.0.1:${fake.port}/v1/tools/search`;
 			const sf = await run(["search", "--query", "deepseek api", "--count", "2"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: fullEndpoint });
 			check("search: a configured endpoint URL is used verbatim", fake.seen[0]?.url === "/v1/tools/search", String(fake.seen[0]?.url));
@@ -163,8 +171,7 @@ export default function (pi: ExtensionAPI) {
 			const [nc, f] = await Promise.all([
 				(async () => {
 					const local = await startFake((req, res) => {
-						res.writeHead(200, { "content-type": "application/json" });
-						res.end(JSON.stringify({ results: [] }));
+						okJson(res, { results: [] });
 					});
 					const out = await run(["search", "--query", "q", "--need-content"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${local.port}` });
 					check("search: --need-content reaches the body", local.seen[0]?.body?.need_content === true, JSON.stringify(local.seen[0]?.body));
@@ -175,8 +182,7 @@ export default function (pi: ExtensionAPI) {
 				})(),
 				(async () => {
 					const local = await startFake((req, res) => {
-						res.writeHead(200, { "content-type": "application/json" });
-						res.end(JSON.stringify({ title: "Page", content: "# Markdown body" }));
+						okJson(res, { title: "Page", content: "# Markdown body" });
 					});
 					const out = await run(["fetch", "--url", "https://example.com/a"], { ...baseEnv, STEPCODE_TOPO_FETCH_URL: `http://127.0.0.1:${local.port}` });
 					const fJson = lastStdoutJson(out.stdout);
@@ -189,8 +195,7 @@ export default function (pi: ExtensionAPI) {
 				})(),
 				(async () => {
 					const local = await startFake((req, res) => {
-						res.writeHead(200, { "content-type": "application/json" });
-						res.end(JSON.stringify({ title: "t", content: "c" }));
+						okJson(res, { title: "t", content: "c" });
 					});
 					await run(["fetch", "--url", "https://example.com"], { ...baseEnv, STEPCODE_TOPO_FETCH_URL: `http://127.0.0.1:${local.port}`, STEPCODE_TOPO_FETCH_KEY: "fetch-specific-key" });
 					check("fetch: STEPCODE_TOPO_FETCH_KEY overrides the shared key", local.seen[0]?.auth === "Bearer fetch-specific-key", String(local.seen[0]?.auth));
@@ -211,8 +216,7 @@ export default function (pi: ExtensionAPI) {
 					res.writeHead(429);
 					res.end("rate limited");
 				} else {
-					res.writeHead(200, { "content-type": "application/json" });
-					res.end(JSON.stringify({ results: [{ title: "late", url: "u", snippet: "s" }] }));
+					okJson(res, { results: [{ title: "late", url: "u", snippet: "s" }] });
 				}
 			});
 			seen5 = fake.seen; // bound BEFORE the run: the handler reads it live
@@ -255,8 +259,7 @@ export default function (pi: ExtensionAPI) {
 
 			// ---- 8. the token bucket keeps us under the QPS limit ----
 			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ results: [] }));
+				okJson(res, { results: [] });
 			});
 			const qpsInput = Array.from({ length: 4 }, (_, i) => JSON.stringify({ kind: "search", query: `q${i}` })).join("\n") + "\n";
 			const qps = await run(["batch", "--stdin-jsonl"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_QPS: "5" }, qpsInput);
@@ -266,8 +269,7 @@ export default function (pi: ExtensionAPI) {
 
 			// ---- 9. batch mode: one result line per input line ----
 			fake = await startFake((req, res) => {
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify({ results: [{ title: "b", url: "u", snippet: "s" }] }));
+				okJson(res, { results: [{ title: "b", url: "u", snippet: "s" }] });
 			});
 			const batchInput = `${JSON.stringify({ kind: "search", query: "one", count: 2 })}\n${JSON.stringify({ kind: "search", query: "two" })}\n${JSON.stringify({ kind: "bogus" })}\n`;
 			const b = await run(["batch", "--stdin-jsonl"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${fake.port}`, STEPCODE_TOPO_QPS: "50" }, batchInput);

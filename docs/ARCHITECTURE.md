@@ -30,6 +30,10 @@ Leader session (step, loads this extension)
 ├── extensions/collab-record.ts collaboration records under .topo/records/ after every team task (idempotent per teamId, sealed or plaintext per the encryption config, never blocks a disband)
 ├── extensions/presets.ts    preset loading (bundled + user/project agents/ dirs), extension entry path, shim path, searcher script path
 ├── extensions/member-messaging.ts member-side topo_team_msg tool (direct socket, no bash)
+├── extensions/team/naming.ts   member-name and session→team-id rules (MEMBER_NAME_RE, teamIdForSession)
+├── extensions/team/errors.ts   dispatch error classification: what may be retried, and why
+├── extensions/team/spawn.ts    member spawn as pure functions: args, env, model and effort resolution
+├── extensions/members.ts       TeamManager: member/task/topology orchestration (re-exports the team/ rules)
 ├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │
 ├── bin/stepcode-team.mjs    member-side CLI shim (msg / status; manual/external path — members normally use the topo_team_msg tool)
