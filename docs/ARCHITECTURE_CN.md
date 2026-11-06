@@ -33,7 +33,7 @@
 ├── extensions/team/naming.ts   成员命名与会话→团队 ID 规则（MEMBER_NAME_RE、teamIdForSession）
 ├── extensions/team/errors.ts   派发错误分类：哪些可重试、为什么
 ├── extensions/team/spawn.ts    成员 spawn 的纯函数化：参数、环境、模型与 effort 解析
-├── extensions/members.ts       TeamManager：成员/任务/拓扑编排（re-export team/ 的规则）
+├── extensions/members.ts       TeamManager 本体（见上）；以薄桶 re-export team/ 的规则
 ├── extensions/render.ts     TUI 渲染（renderCall / renderResult）
 │
 ├── bin/stepcode-team.mjs    成员侧 CLI shim（msg / status；手动/外部路径——成员通常用 topo_team_msg 工具）

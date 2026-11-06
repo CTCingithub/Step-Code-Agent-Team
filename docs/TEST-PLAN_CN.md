@@ -21,7 +21,7 @@
 | phase7 | 拓扑真值表 + 越界拒绝 + requireDeclaration 门 | 零 token |
 | phase8 | 递归深度 /proc 实检 + 子团队自举 + 并发默认值 | 零 token |
 
-> 完整的当前 phase 清单（25 个，由 `test/smoke/phase*.ts` 磁盘派生）与逐 phase 覆盖见 [docs/TESTING.md](TESTING_CN.md) 第 2 节；上表为历史基线快照。
+> 完整的当前 phase 清单（32 个，由 `test/smoke/phase*.ts` 磁盘派生）与逐 phase 覆盖见 [docs/TESTING.md](TESTING_CN.md) 第 2 节；上表为历史基线快照。
 ## 二、本次重点覆盖缺口
 
 1. **并发上限 live**：`maxConcurrent` 的排队启动语义从未用真实派活验证（phase5 只测 spawn 互斥）

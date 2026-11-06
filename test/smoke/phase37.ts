@@ -23,11 +23,12 @@
 
 import * as http from "node:http";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@step-harness/coding-agent";
 import { MemberRpc } from "../../extensions/rpc-client.ts";
 import { TeamManager, buildSpawnArgs } from "../../extensions/members.ts";
-import { extensionDir } from "../../extensions/presets.ts";
+import { extensionDir, extensionEntryPath, memberMessagingEntryPath } from "../../extensions/presets.ts";
 import { configFilePath, resetConfigCache } from "../../extensions/config.ts";
 
 function sse(obj: unknown): string {
@@ -114,15 +115,55 @@ export default function (pi: ExtensionAPI) {
 			} as unknown as Parameters<typeof buildSpawnArgs>[2]);
 			const args = plan.args.join(" ");
 			check("spawn: members run in rpc mode with their own session", plan.args.includes("--mode") && plan.args.includes("rpc") && plan.args.includes("--session-id"), args);
-			check("spawn: members do NOT load the project's extensions", plan.args.includes("--no-extensions"), args);
-			const extIndex = plan.args.indexOf("-e");
-			check("spawn: the only extension a member loads is the messaging shim",
-				extIndex >= 0 && plan.args[extIndex + 1]?.endsWith("member-messaging.ts"),
-				extIndex >= 0 ? plan.args[extIndex + 1] : "no -e at all");
+			check("spawn: a non-orchestrating member is isolated from package extensions",
+				plan.args.includes("--no-extensions"), args);
+			// The invariant, stated so it holds for ANY depth setting: a member
+			// always loads the messaging shim, and loads package extensions only
+			// when it may orchestrate. Under the default maxRecursionDepth=1 it
+			// may not, so --no-extensions is present and the shim is the only -e.
+			const extIdx = plan.args.indexOf("-e");
+			check("spawn: a member always loads the messaging shim",
+				extIdx >= 0 && plan.args[extIdx + 1]?.endsWith("member-messaging.ts"),
+				extIdx >= 0 ? plan.args[extIdx + 1] : "no -e at all");
 			check("spawn: the member is told which model to use", plan.args.includes("--model") && plan.args[plan.args.indexOf("--model") + 1] === "step-5-preview", args);
 			check("spawn: the team wiring is injected as env, not argv",
 				plan.env.STEPCODE_TEAM_SOCK === manager.socketPath && plan.env.STEPCODE_TEAM_MEMBER === "spawnchk",
 				`sock=${Boolean(plan.env.STEPCODE_TEAM_SOCK)} member=${plan.env.STEPCODE_TEAM_MEMBER}`);
+
+			// ---- 1b. the orchestrating branch ----
+			// buildSpawnArgs forks on depth: a member that may spawn sub-teams
+			// loads this extension too (and is told to auto-activate), while one
+			// that may not is isolated with --no-extensions. Asserting only the
+			// default branch — which is what an earlier version of this probe did
+			// — makes the gate fail for a correctly configured deeper tree, and
+			// leaves the orchestrating branch entirely uncovered.
+			const deepAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "scat37-deep-"));
+			try {
+				fs.writeFileSync(path.join(deepAgentDir, "stepcode-agent-team.json"), JSON.stringify({ members: { maxRecursionDepth: 4 } }));
+				const savedDir = process.env.STEP_CODING_AGENT_DIR;
+				process.env.STEP_CODING_AGENT_DIR = deepAgentDir;
+				resetConfigCache();
+				const deepPlan = buildSpawnArgs(manager.teamId, manager.socketPath, {
+					name: "spawnchk",
+					sessionId: "smoke37-deep",
+					model: "step-5-preview",
+				} as unknown as Parameters<typeof buildSpawnArgs>[2]);
+				if (savedDir === undefined) delete process.env.STEP_CODING_AGENT_DIR;
+				else process.env.STEP_CODING_AGENT_DIR = savedDir;
+				resetConfigCache();
+				const deepArgs = deepPlan.args.join(" ");
+				check("spawn: an orchestrating member loads the plugin AND the messaging shim",
+					deepArgs.includes(extensionEntryPath()) && deepArgs.includes(memberMessagingEntryPath()),
+					deepArgs);
+				check("spawn: an orchestrating member is told to auto-activate",
+					deepPlan.env.STEPCODE_TEAM_AUTOACTIVATE === "1",
+					String(deepPlan.env.STEPCODE_TEAM_AUTOACTIVATE));
+				check("spawn: an orchestrating member is NOT isolated with --no-extensions",
+					!deepPlan.args.includes("--no-extensions"), deepArgs);
+			} finally {
+				fs.rmSync(deepAgentDir, { recursive: true, force: true });
+				resetConfigCache();
+			}
 
 			// ---- 2. a bare member settles ----
 			const bare = await attempt("bare", []);

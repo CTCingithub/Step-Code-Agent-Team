@@ -486,6 +486,16 @@ sidebar-like UI is ever added, it must be built on Step Code native APIs, or
 sit behind an optional interface that degrades to a no-op when the dependency
 is absent, so the core team functionality always runs.
 
+**Operating systems.** Member-to-member messaging rides a Unix domain socket
+(`extensions/team-server.ts`, `net.createServer`), and the team socket path is
+derived from the agent dir. Unix domain sockets are not available on Windows, so
+the plugin's team features — `create_member`, `send`, `set_topology`,
+`disband`, and the member-side `topo_team_msg` tool — require Linux or macOS.
+Everything else (configuration, seeding, the retrieval script, records,
+rendering) is platform-independent. This is stated here because nothing in the
+code announces it: the failure on Windows surfaces as a socket error rather
+than as an unsupported-platform message.
+
 ## Status
 
 0.3.0 feature set (tagged `v0.3.0` — `@latest` follows it; the earlier `v0.3.0-preview` tag stays on the same code plus the preview-only install line):

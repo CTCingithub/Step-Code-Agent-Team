@@ -43,7 +43,7 @@ anything.
 
 `team_create_member` 显式传 `effort` 时始终优先。否则按序：
 
-1. `[stepcodeAgentTeam.presets.effort]` 配置覆盖——仅对随配置内置的四个角色名
+1. `[stepcodeAgentTeam.presets.effort]` 配置覆盖——仅对随配置内置的五个角色名
    （`scout` / `planner` / `worker` / `reviewer` / `searcher`）生效；
 2. 角色自己的 frontmatter `effort`；
 3. 默认值（`high`）。

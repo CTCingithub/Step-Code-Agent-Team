@@ -395,6 +395,14 @@ MIT — 见 [LICENSE](LICENSE)。
 Step Code 原生 API 实现，或置于可选接口之后：依赖缺失时自动退化为空操作，
 核心团队功能不受影响。
 
+**操作系统。** 成员间通信走 Unix domain socket（`extensions/team-server.ts`
+的 `net.createServer`），团队 socket 路径由 agent dir 派生。Unix domain socket
+在 Windows 上不可用，因此本插件的团队功能——`create_member`、`send`、
+`set_topology`、`disband`，以及成员侧的 `topo_team_msg` 工具——需要 Linux 或
+macOS。其余部分（配置、种子化、检索脚本、协作记录、渲染）与平台无关。此处特别
+说明，是因为代码里没有任何地方会提示它：在 Windows 上失败的表现是一个 socket
+错误，而不是"平台不支持"的明确信息。
+
 ## 状态与验证
 
 0.3.0 功能集（已打 tag `v0.3.0`——`@latest` 随之移动；此前的 `v0.3.0-preview` tag 仍指向同一份代码，仅安装行不同）：

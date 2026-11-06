@@ -66,7 +66,7 @@ reapIntervalMs = 300000              # reaping check interval (5 min)
 
 [stepcodeAgentTeam.storage]
 # dir omitted (null) = <agentDir>/teams
-# dir must be an absolute path: a relative value resolves against the launching process's cwd (registry.ts teamsRoot), not <agentDir>
+# dir must be an absolute path: a relative value resolves against the <agentDir> (registry.ts teamsRoot), not the process cwd
 
 [stepcodeAgentTeam.tasks]
 max = 999                           # task-board capacity (ids T1..T<max>; 1–10000)

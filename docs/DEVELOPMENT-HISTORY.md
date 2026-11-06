@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-129，派发退化定位轮；此前为 plan-128）。
+> 最近更新：2026-11-06（plan-130，全量审查与风险交叉验证轮；此前为 plan-129）。
 
 ## 总览
 
@@ -1386,3 +1386,44 @@ throw retryErr === err ? cause : retryErr;
 | 断言总数 | 653 → **673** |
 | 新增探针反向验证 | phase35 ×2、phase37 ×2、phase36 ×1，均指名失败 |
 | `/tmp/config.toml` | 不存在（hermetic） |
+### 92. 全量审查与风险交叉验证轮（plan-130）
+
+**用户 prompt**：「[团队方案 · 性能] …成员：队长·统筹/汇报(高)、架构师·代码审查(高)、测试专家·测试分析(高)、产品专员·需求梳理(高)、QA·风险验证(高)；拓扑：star…任务1 系统代码与配置全量审查、缺陷及技术债识别（架构师）；任务2 测试覆盖率分析、手动测试项及边界清点（测试专家）；任务3 待决策事项、遗留需求与开放问题梳理（产品专员）；任务4 跨维度遗漏与风险交叉验证（QA）；任务5 汇总汇报及待办/待测清单生成（队长，blockedBy 1,2,3,4）…请给我检查后汇报总结，还有哪些事项待决策或者待完成，是否还有需要我手动测试的内容」。
+
+**组建与执行**：建 lead/arch/tst/prod/qa 五成员（`model: step-5-preview`、effort high，中文角色写入 systemPrompt——成员名只接受 ASCII），star 拓扑，任务板 T102–T106（T5 blockedBy T1–T4）。**prod（产品专员）成功交付完整报告**（`sandbox/logs/review-t3-product.md`，112 行，含三张清单 + 8 处文档矛盾的实证）；arch/tst/qa 三路**派发超时**（本会话第 40/41/42 次），由队长按各自维度亲自执行（`sandbox/logs/review-t1-arch.md`、`review-t2-test.md`、`review-t4-qa.md`）。
+
+## T1 代码审查：未发现阻塞级或高级缺陷
+
+逐项核查均无问题：资源泄漏（extensions/ 内零 `mkdtempSync`；6 处 `setTimeout` 全部正确清理或 `.unref()`）、空 catch（3 处全是有意的安全默认值：读不到=不存在、损坏=不可加载、版本失败=0.0.0）、`settleWaiters` 三条清空路径均无"清空未 resolve"的悬挂、并发（23 处 `reg` 改写全在 `memberLocks`/`spawning` 串行化内）、配置 precedence 链、密钥位置与权限、trust 门禁、命令注入面（无 `shell:true`）、路径穿越（`registry.ts:70` 相对路径锚定 agentDir）。
+
+技术债结论：三个大文件（1085/1023/817 行）**不建议再拆**（TS 无 partial class，类不可跨文件；可拆的已拆到 `team/`）；13 个"过度导出"**不建议收窄**（均在本模块内被调用或被探针导入）。
+
+**本轮自查发现并修掉自身缺陷**：phase37 有一条**过窄断言**——"成员只加载 messaging shim"依赖 `maxRecursionDepth=1`（默认值）。`buildSpawnArgs` 实际有分支：能编排时加载 `extensionEntryPath()` + messaging 并注入 `STEPCODE_TEAM_AUTOACTIVATE=1`，不能时才 `--no-extensions`。后果：用户配 `maxRecursionDepth=2..4` 会让该断言**误报失败**，且编排分支此前**完全无覆盖**。已改为不变量表述并新增编排分支三条断言（phase37 9→**12**），双向反向验证指名失败。
+
+## T2 测试覆盖：无零覆盖模块，手动项只剩 4 项
+
+覆盖矩阵：config 22 / members 18 / registry 9 / presets 7 / team-server 4 / tools 3 / topo-init 3 / rpc-client 3 / 其余 1-2。`team/` 三模块显示 0 是薄桶导致的**误判**——按符号名 grep 会漏掉它们经 `TeamManager` 的行为性覆盖（`isSettleTimeoutError` 由 phase34 Part B 依赖、`MEMBER_NAME_RE` 由 phase2 的 `Bad_Name` 拒绝实证、`resolveEffort`/`spawnableModel` 由 phase18 实证）。CLI 参数全覆盖。恒真断言零命中。
+
+**仍需用户本人执行的手动项只剩 4 个**：M1 真实安装/卸载（写真实 settings）、M2 信任弹窗交互、M3 TUI 像素/按键观感、M5 英文译文审阅。可选：M6 八成员性能。ring 巡游上限演示受 harness 派发退化阻塞（机制已由 phase18/24 覆盖）。
+
+## T3 需求梳理（prod 交付）
+
+三张清单 + **8 处文档矛盾的实证**，全部经队长命令复核后修复：HANDOFF submodule pin `81e79bc`→`29eb4607`、三个大文件行数、模块数 18→21、`ARCHITECTURE_CN` 重复列项、**`CONFIGURATION_CN:69` 说 storage.dir 按 cwd 解析（与 `:134` 和 `registry.ts:70` 的 agentDir 相反，会误导排障）**、`TEST-PLAN_CN:24` 25→32 phase、`MANUAL-TESTING_CN:29` 25→32 phase 且"searcher 未实跑"→已于 plan-119 跑通、`ROLES_CN:46` "四个角色名"→五个。
+
+## T4 风险交叉验证
+
+**发布风险：无破坏性契约变更。** `buildSpawnArgs` 的参数向量在 main 与 develop 上**逐字相同**（`git show main:extensions/members.ts:592-602` 对照 `team/spawn.ts:182-194`），plan-125 的拆分类重构是行为保持的。配置键名未增删改；唯一用户可见行为变更是 `--need-content` 成默认（plan-126，已同意）与缺 key 报错改指配置表（plan-127）。
+
+**QA 发现的新遗漏**：文档从未声明**平台支持范围**。成员间通信走 Unix domain socket，Windows 上不可用——失败表现为一个 socket 错误而非"平台不支持"。已在 README(_CN) 的「平台约束」节补明（团队功能需 Linux/macOS，其余部分平台无关）。
+
+其余遗漏（升级路径无探针、多项目并发、registry 半写状态、卸载残留）已列入清单，未擅自实施。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **32 phase + manifest + 7 live + orphan-check 全绿**（102s） |
+| tsc | **0 错误** |
+| 断言总数 | 673 → **676** |
+| phase37 新断言反向验证 | 2 次（破坏编排分支 → fails=2；去掉 auto-activate → fails=1） |
+| 文档矛盾修复 | 8 处，逐处命令实测取证 |

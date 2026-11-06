@@ -66,7 +66,7 @@ reapIntervalMs = 300000              # 回收检查间隔（5 分钟）
 
 [stepcodeAgentTeam.storage]
 # dir 省略（null）= <agentDir>/teams
-# dir 须为绝对路径：相对路径按启动插件的进程 cwd 解析（registry.ts teamsRoot），而非 <agentDir>
+# dir 须为绝对路径：相对路径按 <agentDir> 解析（registry.ts teamsRoot），不按进程 cwd
 
 [stepcodeAgentTeam.tasks]
 max = 999                           # 任务板容量（id 为 T1..T<max>；1–10000）
