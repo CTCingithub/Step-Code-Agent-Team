@@ -74,7 +74,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -116,6 +116,10 @@ runner 统计这些行并把结果写进 `test/smoke/assertion-counts.txt`：某
 | phase27 | `searcher` 角色：预设 frontmatter 五字段（含钉住的 `model:`）、`presets.effort` 覆盖、searcher/encryption 配置面与种子块，以及成员 spawn 环境——断言对象是生产代码自己调用的**导出函数 `searcherSpawnEnv`**，而不是它的副本。这一区别正是重点：本探针过去携带的副本照抄了 `buildSpawnArgs` 的四行，于是与原版共享盲区——缺失的 `STEPCODE_TOPO_SEARCH_KEY` 顺利过了门禁，而脚本的 search 路径压根没有凭证。现在它钉住五个 env 键（`STEPCODE_TOPO_SEARCH_KEY`、`STEPCODE_SEARCH_API_KEY`、`STEPCODE_TOPO_SEARCH_URL`、`STEPCODE_TOPO_FETCH_URL`、`STEPCODE_TOPO_FETCH_KEY`）外加按需注入的 `STEPCODE_TOPO_SEARCH_SCRIPT`，以及"一个配置 key 以两个名字注入"与"空字符串绝不变成变量"两条规则 | 零 token（独立运行） |
 | phase31 | 配置种子化：首次激活块全为注释（searcher 四行曾是其中唯一未注释的行，于是落进 TOML 根表，取消段头注释即成重复键错误）、每个配置表都有文档、`"default"` 对各类类型一律解析为内置默认值（已对全部 27 个键实证，兄弟键不受影响）、把每条 DEFAULT 行取消注释后仍得默认值、**每条标记行都带引号**（裸 `default` 不是合法 TOML 标量，step 的读取器会在我们的代码看到之前就丢弃整表——既无法检测也无法警告）、旧版本标记触发刷新、无标记旧块不复制、活动表不复制、显式值压过 `DEFAULT` | 零 token（独立运行） |
 | phase34 | prompt→settle 全路径，打在一个本地假模型上——这正是反复出现的 `timeout waiting for member to settle` 背后的盲区。Part A：被指向假 OpenAI-Chat-Completions 端点的成员**真实进入** agent run、真实调用模型、真实结束回合并真实发射 `agent_settled`（45ms、usage delta 1、`/v1/chat/completions` 收到带凭证的请求）。Part B：端点接收请求后永不应答，**复现退化本身**，并断言门禁察觉得到——派发失败、沉默前已进入 run、超时被诊断为「卡住的成员」而非「跑得慢」。零 token、零外网。 |
+| phase34 | prompt→settle 全路径，打在一个本地假模型上——这正是反复出现的 `timeout waiting for member to settle` 背后的盲区。Part A：成员真实进入 agent run、真实调模型、真实结束回合并真实发射 `agent_settled`。Part B：端点接收请求后永不应答，复现退化本身。零 token、零外网。 |
+| phase35 | **多轮回合能 settle**——假模型第一轮返回 tool_call、第二轮返回最终文本，强制 agent loop 走第二轮，并断言工具输出真的回到了第二轮。长回合正是由这些构成的，故此处的回归会在这里失败，而不是以无法解释的 settle 超时出现在 live 轮。 |
+| phase36 | 对**真实提供方**的成员派发（key-gated，计费：两次短提示）。短提示与必须用工具的长提示都能 settle。这是唯一打真实提供方的成员派发探针；它的存在是因为 39 次超时在它证明事实并非如此之前，全被归因于长回合。 |
+| phase37 | 成员 spawn 契约，以及**我们的插件不是成员卡住的原因**：`buildSpawnArgs` 发 `--no-extensions -e <member-messaging.ts>`，成员只加载消息 shim；而加载了整个插件的成员与 bare 成员 settle 得一样快。同时断言 `MemberRpc` 的 stderr 尾部可达——它此前被整体丢弃，这正是 38 次超时查不出原因的原因。 |
 | phase33 | 宿主如何渲染我们工具的输出：工具返回的内容是单行 JSON，而宿主会把它交给 Step Code 0.1.7 重写过的流式 markdown 渲染器（#315/#319）。本探针用我们真实产出的形态驱动该渲染器——单行 search 结果、4000 字符超长单行、含 markdown 敏感字符、多行 batch 流——并断言载荷幸存：不抛错、url/title/状态码等词仍在、超长正文不被吞。比较前先做空白归一化，因为渲染器会按终端宽度折行并填充（这也意味着 `*` `_` `` ` `` `[` `]` 等标记字符会被消费——词与 URL 幸存，断言检查的正是这些） | 零 token（独立运行） |
 | phase32 | Step CLI 契约：`step --help` 记录了 `extensions/members.ts` 建成员时传入的每个参数（`--mode`/`--session-id`/`--session-dir`/`--no-extensions`/`--extension`/`--append-system-prompt`/`--approval-mode`/`--model`/`--thinking`/`--tools`）、解析到的二进制报告版本号、`--approval-mode` 仍拒绝已退役的取值（`strict`）并提示 `confirm, auto`、`-e`/`--extension` 仍是加载扩展的拼写。它堵住的缺口是：上游若静默移除某参数，此前只会在 live 轮才暴露 | 零 token（独立运行） |
 | phase30 | 协作记录：内容与文件布局、幂等、三种落盘形态（加密 / 因关闭而明文 / 因无密钥而明文）、`records.enabled=false`、自定义 `records.dir`、配置面与种子块、`.topo` 损坏时的降级 | 零 token（独立运行） |

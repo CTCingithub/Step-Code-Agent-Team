@@ -71,6 +71,9 @@ usage delta 为零时，它把该超时重新解读为「成员从未运行」�
 （`models.available` 之外的模型、未绑定的扩展），而不是暗示"跑得慢"。
 
 由于这条路径需要模型调用，此前**没有任何零 token 探针走过它**——失效在门禁里不可见，只在花钱时才暴露。
+
+**退化究竟在哪。** 把它探出来之后得知：本插件的派发在所有测过的配置下都正常——假端点（45ms）、真实提供方短提示（2.4s）、真实提供方长提示且真用了工具（10.2s、5 个回合）、bare 成员（864ms）、**加载本整个插件的成员（880ms）**。促成这项工作的本会话 39 次 settle 超时，**全部来自 harness 的团队成员机制**，不是本仓库代码。两个事实钉死这一点：`buildSpawnArgs` 发 `--no-extensions -e <member-messaging.ts>`，成员只加载消息 shim、从不加载完整插件——在成员内激活它从来不是原因；而成员的 stderr 此前被**整体丢弃**，这就是该失效长期无法诊断的原因。`MemberRpc` 现保留有界 stderr 尾部，零 delta 超时会引用它。
+
 `test/smoke/phase34.ts` 补上这个盲区：一个讲 OpenAI Chat Completions SSE 契约的本地 HTTP 服务，
 成员经 `STEP_PROVIDER_API_URL` 被指向它（step provider 的 API 是 `openai-completions`，
 base 派生为 `{apiBaseUrl}/v1`），并经 `memberSpawnEnv` 继承。Part A 证明成员零成本地真实跑完一个回合并 settle；

@@ -58,7 +58,7 @@ fi
 STANDALONE_PHASES="15 16 23 24 28 30 31 32 33"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
-KEY_PHASES="5"
+KEY_PHASES="5 36"
 # Test key: the environment wins; otherwise fall back to sandbox/TEST-KEY.md
 # (gitignored — see that file). Keeps phase5 runnable without exporting.
 if [ -z "${STEP_API_KEY:-}" ] && [ -f "$ROOT/sandbox/TEST-KEY.md" ]; then
@@ -108,7 +108,12 @@ run_phase_attempt() {
     return 0
   else
     echo "phase$p: attempt1 FAILED (fails=$fails) — retrying once with a fresh session id"
-    echo "$probe_log" | grep -E 'FAIL |FAILED' | head -20
+    # The whole tail, not just the FAIL lines. A probe that dies mid-stage (a
+    # hang, a throw before its first check) leaves no FAIL line at all, and
+    # "fails=0" with nothing else printed is the least actionable output the
+    # suite can produce — diagnosing phase34/35/36 each needed a temporary
+    # patch here first.
+    echo "$probe_log" | tail -25
     return 1
   fi
 }

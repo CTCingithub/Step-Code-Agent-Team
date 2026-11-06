@@ -505,11 +505,20 @@ export class TeamManager {
 			// loaded) but never entered an agent run — the usual causes are a
 			// model it cannot resolve or an extension that failed to bind, both
 			// of which surface as silence rather than an error.
+			//
+			// The member's own stderr is the one source that can name the cause
+			// instead of guessing at it. It used to be discarded outright, which
+			// is why this failure was undiagnosable for 38 rounds.
+			const spoken = this.rpcs.get(member.name)?.stderrLines(6) ?? [];
+			const heard = spoken.length > 0
+				? ` The member's own last output: ${spoken.map((l) => `"${l.slice(0, 200)}"`).join(" ")}`
+				: " The member said nothing on stderr at all.";
 			const cause = new Error(
 				`${err instanceof Error ? err.message : String(err)} — the member answered the prompt preflight but no turn ran (usage delta 0), ` +
 					"so no agent_settled was ever emitted. That points at the member's setup rather than its speed: " +
 					"check its resolved model (a model outside models.available never settles) and that its extensions bound. " +
-					"A respawn with the same settings will most likely time out again.",
+					"A respawn with the same settings will most likely time out again." +
+					heard,
 				{ cause: err },
 			);
 			try {

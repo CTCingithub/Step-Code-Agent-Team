@@ -25,5 +25,8 @@ phase28 37
 phase30 25
 phase31 35
 phase32 9
-phase34 10
 phase33 12
+phase34 10
+phase35 5
+phase36 6
+phase37 9

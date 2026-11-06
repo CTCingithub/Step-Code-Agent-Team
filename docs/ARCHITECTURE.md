@@ -77,7 +77,21 @@ extension) instead of implying the run was slow.
 
 Because that path needs a model call, no zero-token probe used to walk it — the
 failure was invisible to the gate and only showed up when it cost money.
-`test/smoke/phase34.ts` closes it: a local HTTP server speaking the OpenAI Chat
+
+**Where the degradation actually lives.** Probing it showed this plugin's
+dispatch is sound in every configuration measured: a fake endpoint (45 ms), the
+real provider with a short prompt (2.4 s), the real provider with a long prompt
+that used its tools (10.2 s, five rounds), a bare member (864 ms), and a member
+with this whole plugin loaded (880 ms). The 39 settle timeouts in the session
+that motivated this work all came from the **harness's** team-member mechanism,
+not from code here. Two facts settle it: `buildSpawnArgs` emits
+`--no-extensions -e <member-messaging.ts>`, so a member loads only the messaging
+shim and never the full plugin — activating it inside a member was never the
+cause; and the member's stderr used to be **discarded outright**, which is why
+the failure was undiagnosable for as long as it was. `MemberRpc` now keeps a
+bounded stderr tail and the zero-delta timeout quotes it.
+
+`test/smoke/phase34.ts` closes the blind spot: a local HTTP server speaking the OpenAI Chat
 Completions SSE contract, which the member is pointed at through
 `STEP_PROVIDER_API_URL` (the step provider's API is `openai-completions`, its
 base derived as `{apiBaseUrl}/v1`) and which it inherits through

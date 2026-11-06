@@ -64,6 +64,9 @@ export function memberSpawnEnv(overrides: Record<string, string>): Record<string
 	return { ...process.env, ...overrides } as Record<string, string>;
 }
 
+/** How much member stderr to retain for diagnostics. */
+const STDERR_TAIL_BYTES = 8_192;
+
 export class MemberRpc {
 	readonly pid: number;
 	private readonly proc: ChildProcess;
@@ -79,6 +82,8 @@ export class MemberRpc {
 	private interimListeners = new Set<(text: string) => void>();
 	private lastAssistantText = "";
 	private usage: MemberUsage = emptyUsage();
+	/** Bounded tail of the member's stderr; see the constructor's note. */
+	private stderrTail = "";
 
 	private constructor(
 		proc: ChildProcess,
@@ -93,8 +98,13 @@ export class MemberRpc {
 		this.handlers = handlers;
 
 		proc.stdout?.on("data", (data: Buffer) => this.onData(data));
-		proc.stderr?.on("data", () => {
-			// Member stderr is diagnostics only; not part of the protocol.
+		// Member stderr is diagnostics only and never part of the protocol — but
+		// discarding it outright is why 38 settle timeouts went undiagnosed: the
+		// member was the only process that knew why it never ran, and we threw
+		// its answer away. Keep a bounded tail instead, so a zero-delta timeout
+		// can quote the member's own last words rather than guessing.
+		proc.stderr?.on("data", (data: Buffer) => {
+			this.stderrTail = `${this.stderrTail}${data.toString()}`.slice(-STDERR_TAIL_BYTES);
 		});
 
 		proc.on("error", (err: Error) => {
@@ -387,6 +397,15 @@ export class MemberRpc {
 	}
 
 	/** Hard shutdown for disband: SIGTERM, then SIGKILL after a grace period. */
+	/**
+	 * The member's recent stderr, trimmed to whole lines. Empty when the member
+	 * said nothing — which is itself informative (a silent member never ran).
+	 */
+	stderrLines(limit = 12): string[] {
+		const lines = this.stderrTail.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+		return lines.slice(-limit);
+	}
+
 	kill(): void {
 		if (this.closed || this.proc.killed) return;
 		this.proc.kill("SIGTERM");
