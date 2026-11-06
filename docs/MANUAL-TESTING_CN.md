@@ -63,7 +63,7 @@ bash sandbox/restore-project.sh
 ### 第 1 步 — 自动化门（任何人工操作前必须全绿）
 
 ```bash
-npm run smoke   # 28 phase + manifest + 7 个 live 检查（+ orphan-check）；任何失败先停下修复
+npm run smoke   # 29 phase + manifest + 7 个 live 检查（+ orphan-check）；任何失败先停下修复
 ```
 
 ### 第 2 步 — 交互场景（按顺序，一次粘贴一条）

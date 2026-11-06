@@ -20,13 +20,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/sandbox/step-bin.sh"
 STEP_BIN="$(resolve_step_bin)" || exit 2
 
-AGENT_DIR="$(mktemp -d)"
+# The agent dir must sit under a throwaway ROOT, not be the mktemp dir itself.
+# The plugin resolves its unified config at dirname(agentDir)/config.toml — the
+# host's own convention (settings-manager.ts) — and seeds it on every
+# activation. With AGENT_DIR as the mktemp dir, that path is /tmp/config.toml:
+# the gate would write into a shared directory and then READ it back on the
+# next run, where it overrides the plugin's own JSON config (it is applied last
+# in the global tier). Nested one level keeps the whole thing inside the tree
+# the EXIT trap removes.
+AGENT_ROOT="$(mktemp -d)"
+AGENT_DIR="$AGENT_ROOT/agent"
 SESSION_DIR="$AGENT_DIR/sessions"
 mkdir -p "$SESSION_DIR"
 COUNTS_NOW="$AGENT_DIR/assertion-counts.txt"
 : > "$COUNTS_NOW"
 COUNTS_BASELINE="$ROOT/test/smoke/assertion-counts.txt"
-trap 'rm -rf "$AGENT_DIR"' EXIT
+trap 'rm -rf "$AGENT_ROOT"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 

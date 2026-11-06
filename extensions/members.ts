@@ -515,7 +515,18 @@ export class TeamManager {
 			try {
 				return await this.dispatch(member, message, options);
 			} catch (retryErr) {
-				throw retryErr === err ? cause : retryErr;
+				// The retry is EXPECTED to fail too: a member that never enters a
+				// run does not start on the second attempt. Throwing whichever
+				// plain timeout arrived last (`retryErr`) discarded the diagnosis
+				// built just above, so the one message written for exactly this
+				// case reached nobody — an identity check on two separately
+				// thrown errors is also never true. Surface the diagnosis, and
+				// keep the retry's own text when it says something different.
+				const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+				const message = isSettleTimeoutError(retryErr)
+					? cause.message
+					: `${cause.message} The retry failed differently: ${retryMsg}`;
+				throw new Error(message, { cause: retryErr });
 			}
 		}
 	}

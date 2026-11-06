@@ -60,6 +60,24 @@
   → releaseSlot
 ```
 
+### prompt→settle 路径，以及为什么要用假模型测它
+
+`promptAndSettle` 只等一个事件：`agent_settled`——上游**只在一agent run 真正结束时**才发射它。
+`prompt` 命令自己的 ack **不是**这个事件：`rpc-mode.ts` 在 `preflightResult` 就应答它，远早于回合结束。
+因此一个**加载正常、preflight 通过、却从未进入 run** 的成员，根本不会产生 settle 事件，
+而队长只能等满 `dispatch.timeoutMs`——成员那边明明活着、还在写文件。这就是反复出现的
+`timeout waiting for member to settle` 退化的全部机理，而 `dispatchWithSettleGuard` 负责区分两者：
+usage delta 为零时，它把该超时重新解读为「成员从未运行」，并点名搭建层面的原因
+（`models.available` 之外的模型、未绑定的扩展），而不是暗示"跑得慢"。
+
+由于这条路径需要模型调用，此前**没有任何零 token 探针走过它**——失效在门禁里不可见，只在花钱时才暴露。
+`test/smoke/phase34.ts` 补上这个盲区：一个讲 OpenAI Chat Completions SSE 契约的本地 HTTP 服务，
+成员经 `STEP_PROVIDER_API_URL` 被指向它（step provider 的 API 是 `openai-completions`，
+base 派生为 `{apiBaseUrl}/v1`），并经 `memberSpawnEnv` 继承。Part A 证明成员零成本地真实跑完一个回合并 settle；
+Part B 复现退化本身（端点接收请求后永不应答）并断言门禁察觉得到。宿主内置的 `faux` provider 不能替代它：
+那是测试 harness 设施，未注册进运行时模型表。
+
+
 任务板：`team_task create`（validateGraph 拒环/未知依赖 → recomputeReady）→
 `start`（仅 `ready` 可派，assignee 必填，`dispatch.retries` 次重试）→
 成功即 `completeTask`（解锁下游），耗尽重试则 `failTask`。

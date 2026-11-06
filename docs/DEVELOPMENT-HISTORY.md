@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-127，门禁绿得虚假修复轮；此前为 plan-126）。
+> 最近更新：2026-11-06（plan-128，派发退化根治轮；此前为 plan-127）。
 
 ## 总览
 
@@ -1262,3 +1262,71 @@ runner 的判定是 `DONE 存在 && fails=0 && skips=0`，**没有断言数下�
 | 断言总数 | 611 → **643** |
 | phase2/3/17 断言数 | 0 → **14 / 15 / 2** |
 | 反向验证 | 棘轮、phase3 信任断言、phase28 文案断言、orphan-check 均实测有效 |
+### 90. 派发退化根治轮（plan-128）
+
+**用户 prompt**：「请把派发退化的问题根治，并修改或更新相关文档」。
+
+## 根治方案：本地假模型端点进零 token 门禁
+
+**为什么这是根治**：退化的结构性盲区是「没有任何零 token 探针走过 prompt→settle 路径」，因为那条路要花模型钱。把模型换成本地假端点，整条路径就能免费真实执行——退化从此在每次门禁里可见，而不是只在花钱的 live 轮暴露。
+
+**机制（全部已证实）**：
+- step provider 的 API 是 `openai-completions`（`step-provider/index.ts`），chat base 派生为 `{apiBaseUrl}/v1`；
+- `STEP_PROVIDER_API_URL` / `STEP_API_URL` / `STEP_BASE_URL` 按此优先级覆写端点（`:153-160`）；
+- 成员经 `memberSpawnEnv` 的 `{...process.env, ...overrides}` **继承队长 env**，故探针改自己的 env 即可把子进程的回合导向假端点——**无需改插件**；
+- 客户端发 `stream: true`，解析 `choices[0].delta.content`、`finish_reason`、`usage`。假端点据此回三段 SSE。
+
+**注意**：宿主虽内置假模型 provider（`providers/faux.ts` 的 `fauxProvider`），但它是**测试 harness 设施**（仅 `compat.ts:143` 与 `agent-core/test/harness/*` 使用），**未注册进运行时模型表**，实测 `--model faux-1` 无输出——**不可用**。故走本地 HTTP 端点。
+
+## 新探针 phase34（10 条断言）
+
+**Part A——happy path 被覆盖**：成员指向正常应答的假端点 → 真实进入 agent run、真实调"模型"、真实结束回合、真实发射 `agent_settled`。断言：settle 成功、usage delta > 0、成员文本是假模型的回复、`/v1/chat/completions` 真被调用、调用带凭证、请求体带成员的 model id。
+
+**Part B——复现并检测退化本身**：端点接收请求后永不应答 → 成员留在永不结束的 run 里 → 无 settle。断言：sendMessage 确实失败、失败前**已进入 run**（证明 preflight 通过却无回合）、超时被诊断为"卡住的成员"而非"跑得慢"、诊断警告 respawn 会重复。
+
+实测：Part A 45ms settle；Part B 在 `dispatch.timeoutMs=1000` 下约 2s 完成。
+
+## 首跑即抓到的真 bug（诊断被丢弃）
+
+`dispatchWithSettleGuard` 为这个场景构造了完整的零 usage delta 诊断，但重试分支是：
+
+```ts
+throw retryErr === err ? cause : retryErr;
+```
+
+两次分别抛出的错误对象**永远不相同**，于是增强诊断**几乎永远不会被抛出**——为这个失效写的唯一一条消息，谁也收不到。已改为：总是透出诊断，并在重试错误不同时附上其文本。
+
+**这个 bug 在 36 次派发失败里每次都发生了**，只是没人看见消息。
+
+## 第二个真 bug：门禁在写 /tmp，并读回它
+
+插件每次激活都调用 `seedGlobalConfigExample(agentDir())`（`index.ts:177`，幂等、只加注释），而统一配置路径是 `dirname(agentDir)/config.toml`（宿主的约定，`settings-manager.ts`）。runner 原来把 `mktemp -d` 的结果**直接当 agentDir**，于是该路径 = `/tmp/config.toml`：
+
+- 门禁**写**进一个共享目录；
+- 下一轮**读**回它，而它在全局层**最后应用**，压过插件自己的 JSON 配置 → 门禁非 hermetic。
+
+**修复**：runner 把 agentDir 嵌在一性根目录下一层（`AGENT_ROOT=$(mktemp -d); AGENT_DIR=$AGENT_ROOT/agent`），EXIT trap 清整个 root。`/tmp/config.toml` 不再产生；既有的那个（16 段、无凭证，删除前已扫描）已清掉。
+
+这正是我此前标记为「runner 根治 fixture shadow 未闭环」的**确切机制**——现在闭环了。
+
+## 第三个发现（实施细节）
+
+`dispatch.timeoutMs` **没有 env 覆写**，且配置在加载时缓存，故 Part B 需要：写真配置文件 + `resetConfigCache()`。且 legacy 专用文件（`<agentDir>/stepcode-agent-team.json`）是**把段本身放在顶层**（`applyFile` 直接 `mergeSection(config, raw)`），不同于 `settings.json` 的 `CONFIG_SECTION` 键——第一版多包了一层，导致超时仍是 600s、探针挂死。
+
+## 反向验证（三种，全过）
+
+| 注入 | 结果 |
+|---|---|
+| 回退 members.ts 的修复 | `FAIL degradation: the timeout is diagnosed as a stuck member, not a slow run` |
+| hang 期间让端点正常应答 | 3 条 Part B 断言失败（含 `a member stuck inside a run never settles`） |
+| 模型端点返回 500 | `FAIL dispatch: the member's text is the fake model's reply` |
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **28 phase + manifest + 7 live + orphan-check 全绿**（87s） |
+| tsc | **0 错误** |
+| 断言总数 | 643 → **653** |
+| `/tmp/config.toml` | 门禁跑完后**不存在**（hermetic） |
+| 反向验证 | 3 种，均指名失败 |

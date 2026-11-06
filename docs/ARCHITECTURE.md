@@ -61,6 +61,33 @@ Leader dispatch (team_send / team_task start)
   → releaseSlot
 ```
 
+### The prompt-to-settle path, and why it is probed with a fake model
+
+`promptAndSettle` waits for exactly one event: `agent_settled`, which upstream
+emits only when an agent run actually ends. The `prompt` command's own ack is
+**not** that event — `rpc-mode.ts` answers it from `preflightResult`, long
+before the run finishes. So a member that loads fine and passes preflight but
+never *enters* a run produces no settle event at all, and the leader waits out
+its full `dispatch.timeoutMs` while the member sits there alive and writing
+files. That is the whole of the recurring `timeout waiting for member to
+settle` degradation, and `dispatchWithSettleGuard` is what tells the two apart:
+when the usage delta is zero it re-reads the timeout as a member that never ran
+and names the setup causes (a model outside `models.available`, an unbound
+extension) instead of implying the run was slow.
+
+Because that path needs a model call, no zero-token probe used to walk it — the
+failure was invisible to the gate and only showed up when it cost money.
+`test/smoke/phase34.ts` closes it: a local HTTP server speaking the OpenAI Chat
+Completions SSE contract, which the member is pointed at through
+`STEP_PROVIDER_API_URL` (the step provider's API is `openai-completions`, its
+base derived as `{apiBaseUrl}/v1`) and which it inherits through
+`memberSpawnEnv`. Part A proves a member really runs a turn and settles for
+free; Part B reproduces the degradation itself — an endpoint that accepts the
+request and never answers — and asserts the gate notices. The host's built-in
+`faux` provider cannot stand in here: it is a test-harness facility and is not
+registered in the runtime model table.
+
+
 Task board: `team_task create` (validateGraph rejects cycles/unknown dependencies → recomputeReady) →
 `start` (only `ready` can be dispatched, assignee required, retries `dispatch.retries` times) →
 on success `completeTask` (unlocks downstream), and on exhausted retries `failTask`.

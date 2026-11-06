@@ -13,7 +13,16 @@
 
 Zero-token layer: `test/run-smoke.sh` builds its own throwaway temporary agentDir
 (mktemp), so no preparation is needed and it is fully isolated from your real
-`~/.stepcode`. The LLM layer runs inside `sandbox/` (`sandbox/` ships with the
+`~/.stepcode`.
+
+The agent dir is nested one level **inside** that throwaway root
+(`AGENT_ROOT=$(mktemp -d); AGENT_DIR=$AGENT_ROOT/agent`), not the mktemp dir
+itself. The plugin resolves its unified config at `dirname(agentDir)/config.toml`
+— the host's own convention — and seeds it on every activation, so a flat agent
+dir made that path `/tmp/config.toml`: the gate wrote into a shared directory and
+then read it back on the next run, where it overrode the plugin's own JSON
+config. Nesting keeps the whole thing inside the tree the EXIT trap removes, and
+`/tmp` stays clean. The LLM layer runs inside `sandbox/` (`sandbox/` ships with the
 repo and already contains the `cfg-*` fixtures; only runtime state such as the
 agent dir, sessions, and teams is gitignored). `step` binary resolution order:
 `$STEPCODE_STEP_BIN` > `sandbox/step-build/step` (built from the `sandbox/step`
@@ -86,7 +95,7 @@ throwaway temporary agentDir (mktemp), so they do not pollute `~/.stepcode` or
 the gitignored `sandbox/`:
 
 ```bash
-npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24)
+npm run smoke                 # the whole zero-token layer (phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34)
 bash test/run-smoke.sh 9 13   # run only the given phases
 ```
 
@@ -131,6 +140,7 @@ a check could be removed and the suite stayed green while testing less.)
 | phase28 | `bin/topo-search.mjs` against a local fake DeepSeek endpoint: request shape and endpoint paths, the Bearer header (and that it never reaches stdout/stderr), the **billing-honest retry policy** (a 429 IS retried, a 400 is NOT), 5xx retry, timeout classification, batch mode, the exit-code contract, the missing-key path (exit 2, and the message naming the whole key chain — `STEPCODE_TOPO_SEARCH_KEY` → `STEPCODE_SEARCH_API_KEY` → `DEEPSEEK_API_KEY`), and the provider-neutral response-shape guard (an unrecognised envelope reports its keys via `meta.shape` instead of silently returning zero results) | zero token (standalone) |
 | phase27 | The `searcher` role: preset frontmatter (all five fields, incl. the pinned `model:`), `presets.effort` override, the searcher/encryption config surface and seed block, and the member-spawn env — asserted against the **exported `searcherSpawnEnv`** the production code itself calls, not a copy of it. That distinction is the point: the copy this probe used to carry mirrored `buildSpawnArgs`' four lines, so it shared the original's blind spot and the missing `STEPCODE_TOPO_SEARCH_KEY` passed the gate while the script's search path had no credential at all. It now pins five env keys (`STEPCODE_TOPO_SEARCH_KEY`, `STEPCODE_SEARCH_API_KEY`, `STEPCODE_TOPO_SEARCH_URL`, `STEPCODE_TOPO_FETCH_URL`, `STEPCODE_TOPO_FETCH_KEY`) plus the on-demand `STEPCODE_TOPO_SEARCH_SCRIPT`, the both-names rule for one configured key, and the empty-string-never-becomes-a-variable rule | zero token (standalone) |
 | phase31 | Config seeding: the first-activation block is comments only (the searcher keys used to be its four uncommented lines, so they landed in the TOML root and uncommenting the header was a duplicate-key error), every config table is documented, `"default"` resolves to the built-in default for every type at once (verified against all 27 keys, siblings untouched), uncommenting every DEFAULT line still yields the defaults, **every marker line is quoted** (a bare `default` is not a TOML scalar, so step's reader drops the whole table before our code can see it — undetectable and unwarnable), an older version marker triggers a refresh, a legacy unmarked block is not duplicated, an active table is not duplicated, and an explicit value still wins over `DEFAULT` | zero token (standalone) |
+| phase34 | The prompt-to-settle path, end to end, against a local fake model — the blind spot behind the recurring `timeout waiting for member to settle`. Part A: a member pointed at a fake OpenAI-Chat-Completions endpoint really enters an agent run, really calls the model, really finishes a turn and really emits `agent_settled` (45 ms, usage delta 1, the request seen at `/v1/chat/completions` with a credential). Part B: an endpoint that accepts the request and never answers reproduces the degradation itself, and the assertions check the gate notices — the send fails, it entered the run before going silent, and the timeout is diagnosed as a stuck member rather than a slow one. Zero token, zero external network. |
 | phase33 | Host rendering of our tool output: the content our tools return is a single line of JSON, and the host feeds it through Step Code 0.1.7's reworked streaming markdown renderer (#315/#319). This drives that renderer with the shapes we actually produce — a single-line search result, a 4000-char single line, markdown-hostile characters, and a multi-line batch stream — and asserts the payload survives: nothing thrown, the url/title/status words present, and a long body not swallowed. Whitespace is normalised first, because the renderer word-wraps and pads at the terminal width (which also means markup characters like `*` `_` `` ` `` `[` `]` are consumed — the words and URLs survive, which is what the assertions check) | zero token (standalone) |
 | phase32 | The Step-CLI contract: `step --help` documents every flag `extensions/members.ts` passes when spawning a member (`--mode`/`--session-id`/`--session-dir`/`--no-extensions`/`--extension`/`--append-system-prompt`/`--approval-mode`/`--model`/`--thinking`/`--tools`), the resolved binary reports a version, `--approval-mode` still rejects a retired value (`strict`) naming `confirm, auto`, and `-e`/`--extension` is still the extension spelling. It closes the gap where an upstream flag removal would only surface in a live round | zero token (standalone) |
 | phase30 | Collaboration records: content and file layout, idempotence, the three at-rest forms (sealed / plaintext-because-disabled / plaintext-because-no-key), `records.enabled=false`, a custom `records.dir`, the config surface and seed block, and the degrade path when `.topo` is broken | zero token (standalone) |
