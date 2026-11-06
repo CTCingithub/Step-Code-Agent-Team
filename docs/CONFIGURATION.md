@@ -150,6 +150,36 @@ Topology shapes (declared with `team_set_topology` after creating members, befor
 
 Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejection lists the allowed teammates (the server returns the `mayMessage` list for the sender's identity), and `stepcode-team status` reports the same from a shell.
 
+## Automatic compaction (`[compaction]`, Step Code 0.1.7)
+
+Step Code compacts a session's context automatically when it approaches the
+model's window. Since 0.1.7 the trigger is a **ratio of the context window**
+rather than a fixed reserve, and it is configurable in Step Code's own unified
+config — **not** in this plugin's table:
+
+```toml
+[compaction]
+triggerPolicy = "v2"            # or "legacy" (the old fixed-reserve behaviour)
+triggerRatio = 0.9              # 0 < ratio <= 0.95; default 0.9
+modelTriggerRatios = { "step/step-5-preview" = 0.8 }   # per provider/model override
+tokenLimit = 120000             # absolute ceiling; can only trigger EARLIER
+```
+
+Invalid values fall back to the defaults and are reported as settings
+diagnostics — they never fail the run.
+
+**Why this matters to a team**: members are spawned with the leader's
+environment (`STEP_CODING_AGENT_DIR` included), so they read the **same** global
+`config.toml` as the leader. Whatever you set here applies to the leader and to
+every member alike — there is no plugin-level key to set, and adding one would
+only create two sources of truth for the same behaviour. A probe pins the
+inheritance so a future refactor cannot quietly break it (phase32, "spawn env").
+
+The old fixed reserve triggered at ~74% of a 64K window but ~98% of a 1M window;
+the ratio default of 0.9 leaves headroom on both. Lower `triggerRatio` (or set
+`tokenLimit`) to compact earlier on long team runs, where a member's report plus
+the task board can fill a window quickly.
+
 ## `.topo/` and at-rest encryption (v0.4.0)
 
 **What `.topo/` is**: the plugin's working directory inside your current

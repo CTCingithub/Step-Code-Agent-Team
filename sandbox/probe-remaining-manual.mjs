@@ -27,6 +27,7 @@ import * as path from "node:path";
 const REPO = path.resolve(import.meta.dirname, "..");
 const STEP = `${REPO}/sandbox/step-build/step`;
 const scenario = process.argv[2];
+warnOnConfigShadow();
 
 function makeAgent(tag, configToml, extra) {
 	const root = fs.mkdtempSync(`/tmp/${tag}-`);
@@ -38,6 +39,24 @@ function makeAgent(tag, configToml, extra) {
 		fs.writeFileSync(path.join(agentDir, rel), text);
 	}
 	return { root, agentDir };
+}
+
+/**
+ * Warns when this machine has a global config that would outrank a fixture.
+ *
+ * The unified config lives at `dirname(agentDir)/config.toml`, which outranks the
+ * fixture's own `settings.json`. A real `sandbox/config.toml` therefore shadows
+ * every `sandbox/cfg-*` fixture: a probe that expects one setting silently reads
+ * another, and passes for the wrong reason (observed once on 2026-10-25, when
+ * phase10 took Branch A instead of B). The fix is to point the agent dir at a
+ * temp root, which this probe already does — so this only fires for a scenario
+ * that does NOT, and says so loudly instead of letting it look green.
+ */
+function warnOnConfigShadow() {
+	const shadow = path.join(REPO, "sandbox", "config.toml");
+	if (!fs.existsSync(shadow)) return;
+	console.error(`[probe] NOTE: ${shadow} exists and outranks any fixture's settings.json.`);
+	console.error("[probe]       Scenarios that set STEP_CODING_AGENT_DIR inside sandbox/ will read it, not their fixture.");
 }
 
 /** Runs one session over `steps`, answering dialogs via `answer`. */

@@ -41,6 +41,9 @@ const REQUIRED_FLAGS = [
 	"--model",
 	"--thinking",
 	"--tools",
+	// Passed by members.ts when it builds a member: the member must not inherit
+	// or resume the leader's session, so it gets a fresh one.
+	"--no-session",
 ];
 
 function runStep(args: string[], timeoutMs = 90_000): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -103,6 +106,26 @@ export default function (pi: ExtensionAPI) {
 
 			// ---- 3. -e / --extension is still how an extension is loaded ----
 			check("cli: -e and --extension are the same flag", helpText.includes("-e,") || /-e,\s*--extension/.test(helpText) || (helpText.includes("--extension") && helpText.includes("-e ")), "spelling check");
+
+			// ---- 4. a member still inherits the leader's environment ----
+			// `STEP_CODING_AGENT_DIR` decides where the global unified config lives
+			// (dirname(agentDir)/config.toml). If the spawn ever stopped inheriting
+			// it, members would silently read a DIFFERENT config: the searcher
+			// endpoints and keys, the `[compaction]` table and the model settings
+			// would all diverge from the leader's with nothing to show for it.
+			const { memberSpawnEnv } = await import("../../extensions/rpc-client.ts");
+			const sentinel = "stepcode-probe-agent-dir";
+			const previous = process.env.STEP_CODING_AGENT_DIR;
+			process.env.STEP_CODING_AGENT_DIR = sentinel;
+			try {
+				const merged = memberSpawnEnv({ STEPCODE_TEAM_MEMBER: "probe1" });
+				check("spawn env: the leader's STEP_CODING_AGENT_DIR is inherited", merged.STEP_CODING_AGENT_DIR === sentinel, String(merged.STEP_CODING_AGENT_DIR));
+				check("spawn env: the per-member override still wins", merged.STEPCODE_TEAM_MEMBER === "probe1", String(merged.STEPCODE_TEAM_MEMBER));
+				check("spawn env: unrelated leader vars survive too", typeof merged.PATH === "string" && merged.PATH.length > 0, "PATH present");
+			} finally {
+				if (previous === undefined) delete process.env.STEP_CODING_AGENT_DIR;
+				else process.env.STEP_CODING_AGENT_DIR = previous;
+			}
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE32 DONE (all passed)" : `SMOKE32 DONE (${failed}/${results.length} failed)`);

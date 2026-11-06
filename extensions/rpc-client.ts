@@ -48,6 +48,22 @@ export function getStepInvocation(args: string[]): { command: string; args: stri
 	return { command: "step", args };
 }
 
+/**
+ * The environment a member process is spawned with: the leader's environment
+ * plus the per-member overrides.
+ *
+ * Inheriting the leader's environment is a load-bearing contract, not an
+ * accident. `STEP_CODING_AGENT_DIR` decides where the global unified config
+ * lives (`dirname(agentDir)/config.toml`), so a member that did NOT inherit it
+ * would silently read a different config — the searcher endpoints and keys, the
+ * `[compaction]` table, and the model settings would all diverge from the
+ * leader's with nothing to show for it. Extracted so a probe can assert the
+ * merge instead of trusting a spread operator to stay put.
+ */
+export function memberSpawnEnv(overrides: Record<string, string>): Record<string, string> {
+	return { ...process.env, ...overrides } as Record<string, string>;
+}
+
 export class MemberRpc {
 	readonly pid: number;
 	private readonly proc: ChildProcess;
@@ -115,7 +131,7 @@ export class MemberRpc {
 			// ("ignore" points the child's stdin at /dev/null, so prompt writes
 			// silently vanish and the member exits on EOF.)
 			stdio: ["pipe", "pipe", "pipe"],
-			...(env ? { env: { ...process.env, ...env } } : {}),
+			...(env ? { env: memberSpawnEnv(env) } : {}),
 		});
 		const rpc = new MemberRpc(proc, handlers, {
 			requestMs: requestTimeoutMs ?? REQUEST_TIMEOUT_MS,

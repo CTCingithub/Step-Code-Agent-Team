@@ -44,6 +44,11 @@
 git submodule，钉住本沙箱跟踪的 Step Code 版本——step 升级时只需 bump 子模块指针并重跑
 回归，不再被动跟随全局安装的变更。
 
+**当前锁定修订**：`29eb4607`（2026-11-03，`origin/main` 尖端），构建出 **Step Code 0.1.7**。
+版本由构建时注入（`scripts/build-binaries.sh` 的 `STEPCODE_BUILD_VERSION`），而仓库自带的
+`package.json` 全程只写 `0.1.0`——所以 tag 和该文件都告不出你用的是哪个版本，`step --version`
+才行。每次 bump 指针时，把 commit 与该命令报告的版本记在这里，下次升级才有基线可 diff。
+
 - **克隆本仓库时**：用 `git clone --recurse-submodules`，或克隆后执行
   `git submodule update --init sandbox/step`。
 - **step 二进制解析顺序**（`sandbox/step-bin.sh`，run.sh / probe.sh / test/run-smoke.sh
@@ -128,7 +133,7 @@ npm run smoke            # 零 token 全量冒烟（无需 key）
 bash test/run-smoke.sh 5 # phase5 需 key（来自环境变量或 sandbox/TEST-KEY.md）
 ```
 
-**门禁内容**：26 个 phase——清单由 `test/smoke/phase*.ts` 磁盘派生；phase 15/16/23/24/28/30/31
+**门禁内容**：28 个 phase——清单由 `test/smoke/phase*.ts` 磁盘派生；phase 15/16/23/24/28/30/31
 独立运行（不加载扩展，避免与已安装包副本的工具名冲突）；phase5 需 key；phase 之后：
 manifest 检查、7 个 live 检查（**必须由队长自身的干净进程跑**——在成员进程受限环境中会
 整体假阴性）、15s 孤儿进程轮询。失败 phase 以新 session id 重试一次（首发失败行前缀

@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-123，沙箱升级 0.1.7 与 CLI 契约探针；此前为 plan-122）。
+> 最近更新：2026-11-06（plan-124，两个可选项交付与全量排查轮；此前为 plan-123）。
 
 ## 总览
 
@@ -1128,3 +1128,31 @@
 **T6 回归**：全量零 token 门在新 0.1.7 二进制上 **27 phase 全绿（65s）**；tsc 0 错误。
 
 **留给用户的可选项**（不阻塞）：是否把上游 #326 的"可配置 context 比例自动压缩"暴露给插件配置；tui markdown 流式渲染（#315/#319）对 `render.ts` 观感的影响需人工目验（门禁不测视觉）。
+### 86. 两个可选项交付与全量排查轮（plan-124）
+
+**用户 prompt**：「[团队方案·性能] …成员名单：Captain（队长/高effort）、Evaluator（高effort）、Fixer（高effort）、Tester（高effort）；通信拓扑：star，所有消息经Captain中转，依赖仅用任务板blockedBy表达，成员间零直连；任务拆解：1 评估并同意两个可选项→Evaluator / 2 全量排查问题与根因定位→Fixer(1) / 3 实施修复并完成自验→Fixer(2) / 4 测试与回归验证→Tester(3) / 5 汇总交付与质量复盘→Captain(4)…同意两个可选项，然后排查修复所有问题并测试」。
+
+**组建与执行降级**：建 evaluator / fixer / tester 三成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T78–T82 带完整 blockedBy。**队长 Captain 由本会话担任**。T1 派发即 settle 超时（本会话第 28 次），T1–T5 由队长亲自执行，范围未缩。
+
+**T1 两个可选项的判定**：
+
+**① 暴露 #326 自动压缩比例——同意价值，但不加插件键。** 上游能力在 Step Code 统一配置的 `[compaction]` 表（`trigger-policy.ts`：`triggerPolicy` v2/legacy、`triggerRatio` 默认 **0.9** 上限 0.95、`modelTriggerRatios` 按 provider/model、`tokenLimit`、`contextProjection`、`autoClm`；非法值回落默认并进 diagnostics）。关键前提经代码链证实：`rpc-client.ts:118` 的 `{...process.env, ...env}` 使成员继承队长 `STEP_CODING_AGENT_DIR`，而该变量决定全局配置位置（`config.ts:280` + `dirname(agentDir)/config.toml`）——**队长与成员读同一份文件，该表已然同时对二者生效**。加插件键只会造成双来源与优先级争议，收益为零。改为交付「文档 + 继承性探针」，因为继承是**隐式契约**：一旦重构破坏，成员的 searcher 密钥、`[compaction]`、模型配置会与队长**静默分叉**。为使契约可断言，把 env 合并从 `spawn` 内的展开提取为导出的 `memberSpawnEnv()`。
+
+**② markdown 渲染目验——同意，且完全可自动化。** `render.ts` 只用 `Text`（我们自己的渲染由 phase15 覆盖），但宿主会把工具返回的**单行 JSON** 交给 0.1.7 重写过的流式 markdown 渲染器（#315/#319）。`Markdown` 类导出且有 `render(width): string[]`，可被探针直接驱动——不需要人眼。
+
+**T2 全量排查（5 项发现，其中 2 项真实缺口）**：
+- **F1【中】** phase32 漏 `--no-session`——`members.ts` 的 `buildSpawnArgs` 传它，探针未列入 → 上游移除将无人察觉；
+- **F2【中】** 无探针覆盖宿主如何渲染我们的 JSON 输出（即可选项②的缺口）；
+- **F3【中】** 沙箱 LLM 探针无告警：本地 `sandbox/config.toml` 优先级高于 fixture 的 `settings.json`（2026-10-25 实测过的假绿，**风险当前活跃**）；
+- **F4【低】** 文档未记载 submodule 锁定 commit 与 step 版本；
+- **F5【低→误判】** 我报"phase15 仅 2 条断言"，**实际 24 条**（22 条经 `has()` 包装 + 2 条 `check()`），六工具全覆盖——我信的那次 grep 数错了调用。已在记录中纠正。
+
+**正面结论**：18 模块 + 2 脚本零探针遗漏；配置层一致；**0.1.7 成员路径确被测到**（`MemberRpc.spawn` → `getStepInvocation`，门禁里队长是编译后的 step 二进制，故成员是同一 0.1.7 的真实 `step --mode rpc` 进程，phase17/18 覆盖握手与拓扑消息）；成员完整回合属 LLM 层（零 token 门内不可能，属设计分工）。
+
+**T3 实施**：F1 补 flag；F2 新增 phase33；F3 探针入口加 shadow 告警（低风险，不改行为）；F4 两份 sandbox README 记载锁定 `29eb4607` 与构建版本 0.1.7；F6 提取 `memberSpawnEnv()`；F7 CONFIGURATION(_CN) 增 `[compaction]` 节。
+
+**F2 探针查出的真实行为（值得记住）**：宿主把工具文本当 Markdown 渲染——长行按 80 列**折行并填充空格**，故 4000 字符单行 JSON 回来时 token 中间被插入空格；`*` `_` `` ` `` `[` `]` `<>` 等标记字符被解析器消费。**词与 URL 全部幸存**，属渲染而非丢失（对所有工具一视同仁）。据此把断言改为「空白归一化 + 断言信息幸存」，并反向验证（删掉状态码 → 探针指名失败）。
+
+**T4 验证**：全量零 token 门 **28 phase 全绿（91s）**；tsc 0 错误；phase32 补 `--no-session` 与继承性断言后全绿；phase33 全绿且反向验证有效。
+
+**留给用户**：HANDOFF §5 的四项待决策仍未拍板（TEST-KEY.md 权限 664、runner 根治 fixture shadow、三个超大文件是否拆、13 个过度导出是否收窄）——本轮只做了低风险的告警版缓解。

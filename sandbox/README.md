@@ -49,6 +49,14 @@ history live in [../docs/TEST-PLAN.md](../docs/TEST-PLAN.md).
 upgrades you only bump the submodule pointer and re-run the regression suite,
 instead of passively following changes to the global install.
 
+**Pinned revision**: `29eb4607` (2026-11-03, `origin/main` tip), which builds as
+**Step Code 0.1.7**. The version is injected at build time
+(`scripts/build-binaries.sh`, `STEPCODE_BUILD_VERSION`) and the repo's own
+`package.json` says `0.1.0` throughout, so neither a tag nor that file will tell
+you what you are on — `step --version` will. Record the commit and the reported
+version here whenever you bump it, so the next upgrade has a baseline to diff
+against.
+
 - **When cloning this repo**: use `git clone --recurse-submodules`, or after
   cloning run `git submodule update --init sandbox/step`.
 - **step binary resolution order** (`sandbox/step-bin.sh`, which run.sh /
@@ -149,8 +157,8 @@ npm run smoke            # full zero-token smoke (no key needed)
 bash test/run-smoke.sh 5 # phase5 needs a key (from the environment or sandbox/TEST-KEY.md)
 ```
 
-**What the gate runs**: 26 phases — the list is derived on disk from
-`test/smoke/phase*.ts`; phases 15/16/23/24/28/30/31 run standalone (no extension loaded,
+**What the gate runs**: 28 phases — the list is derived on disk from
+`test/smoke/phase*.ts`; phases 15/16/23/24/28/30/31/32/33 run standalone (no extension loaded,
 avoiding the tool-name conflict with an installed package copy); phase 5 needs a
 key; after the phases: a manifest check, 7 live checks (which must run from the
 leader's own clean process — inside a member process they fail wholesale, a

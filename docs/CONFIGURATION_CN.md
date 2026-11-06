@@ -147,6 +147,24 @@ debug = false                        # 调试日志
 
 成员动态获知可通知的邻居：`topo_team_msg` 被拒时会列出可用队友（server 按发送方身份返回 `mayMessage` 列表），`stepcode-team status` 亦可从 shell 查询。
 
+## 自动压缩（`[compaction]`，Step Code 0.1.7）
+
+Step Code 会在会话上下文逼近模型窗口时自动压缩。自 0.1.7 起，触发条件是**上下文窗口的比例**而非固定预留，且配置在 **Step Code 自己的统一配置**里——**不在**本插件的表中：
+
+```toml
+[compaction]
+triggerPolicy = "v2"            # 或 "legacy"（旧的固定预留行为）
+triggerRatio = 0.9              # 0 < 比例 <= 0.95；默认 0.9
+modelTriggerRatios = { "step/step-5-preview" = 0.8 }   # 按 provider/model 覆盖
+tokenLimit = 120000             # 绝对上限；只能让压缩更早触发
+```
+
+非法值会**回落默认值**并进入 settings diagnostics，不会让运行失败。
+
+**为什么这与团队相关**：成员进程以队长的环境启动（含 `STEP_CODING_AGENT_DIR`），因此与队长读写**同一份**全局 `config.toml`。你在这里设的内容对队长和每个成员**一视同仁**——没有插件级键可设，加一个也只会给同一行为制造两个真相来源。相位探针钉住了这个继承关系（phase32 的 "spawn env"），将来重构无法悄悄破坏它。
+
+旧的固定预留在 64K 窗口下约 74% 触发，在 1M 窗口下却要到 ~98%；比例默认值 0.9 在两种窗口下都留有余量。长团队会话中，成员报告加任务板会很快填满窗口——想更早压缩就调低 `triggerRatio` 或设 `tokenLimit`。
+
 ## `.topo/` 与落盘加密（v0.4.0）
 
 **`.topo/` 是什么**：插件在你**当前工作目录**下的工作目录。首次激活时自动创建（插件默认关闭，因此未激活的会话不会在你目录里留任何东西），并把 `.topo/` 追加进**已存在的** `.gitignore`——若没有 `.gitignore` 则**不会替你创建**。目前里面只放一个文件：`team.key`（加密密钥，32 字节 base64，权限 0600）。
