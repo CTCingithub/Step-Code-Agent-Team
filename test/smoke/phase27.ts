@@ -50,6 +50,18 @@ export default function (pi: ExtensionAPI) {
 			check("preset: includes run_command (fetch: the host ships no fetch tool)", (searcher?.tools ?? []).includes("run_command"));
 			check("preset: pins a model (the worker-preset footgun)", searcher?.model === "step-5-preview", String(searcher?.model));
 			check("preset: declares an effort", Boolean(searcher?.effort), String(searcher?.effort));
+			// The role's own guidance is part of the contract: `--need-content` is
+			// the default because without it `content` is empty and a result cannot
+			// be quoted. If someone rewrites the preset and drops that, every
+			// citation the role makes silently loses its source text — and nothing
+			// else in the gate would notice, because the flag is only exercised by
+			// a live (billed) round.
+			// systemPrompt IS the preset file's body (presets.ts parseFrontmatter), so no
+			// path guessing: whichever tier won is what gets asserted here.
+			const presetBody = searcher?.systemPrompt ?? "";
+			check("preset: the body names the retrieval script", presetBody.includes("STEPCODE_TOPO_SEARCH_SCRIPT"), presetBody.slice(0, 80));
+			check("preset: --need-content is the default in the guidance", /--need-content/.test(presetBody) && /by\s+default/i.test(presetBody), presetBody.slice(0, 80));
+			check("preset: the guidance explains what the flag changes", /content/.test(presetBody), presetBody.slice(0, 80));
 			check("preset: does not shadow the other four roles", ["scout", "planner", "worker", "reviewer"].every((r) => loadPreset(r, agentDir())?.name === r));
 
 			// ---- 2. presets.effort override still wins ----

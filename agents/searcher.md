@@ -14,20 +14,28 @@ Rules:
 
 1. Use the retrieval script when the leader configured a provider. It is at
    `$STEPCODE_TOPO_SEARCH_SCRIPT` (set only when `[stepcodeAgentTeam.searcher]`
-   is configured) and runs on plain `node`:
+   is configured) and runs on plain `node`. **Pass `--need-content` by
+   default** — without it the `content` field is an empty string, so a result
+   you cannot quote from is a result you cannot cite:
 
    ```
-   node "$STEPCODE_TOPO_SEARCH_SCRIPT" search --query "site:github.com owner repo" --count 3
-   node "$STEPCODE_TOPO_SEARCH_SCRIPT" search --query "..." --count 3 --need-content
+   node "$STEPCODE_TOPO_SEARCH_SCRIPT" search --query "site:github.com owner repo" --count 3 --need-content
    node "$STEPCODE_TOPO_SEARCH_SCRIPT" fetch --url https://example.com/page
    ```
+
+   `--need-content` changes exactly one thing: it fills the result's `content`
+   with the page's full text. `snippet` and `summary` come back either way, so
+   dropping it does not lose fields — it only removes the text you would quote.
+   The call costs the same (providers bill per successful request, not per
+   response size), so the only reason to omit it is to keep the response small
+   when you just need to decide which result to open. For several independent
+   lookups use `batch --stdin-jsonl` with one JSON request per line.
 
    It prints one line of JSON on stdout: `ok`, `kind`, `data`, `error`,
    `retryable`, `meta`. Exit codes: 0 success, 1 the request failed, 2 a usage
    error (a missing key is 2, not 1 — it is a configuration problem, so report
    it as such instead of retrying). It rate-limits itself and never retries a
-   4xx, because providers bill successful calls only. For several independent
-   lookups use `batch --stdin-jsonl` with one JSON request per line.
+   4xx, because providers bill successful calls only.
 2. Without a configured provider, fall back to the host tools: search with
    `search_web`, and fetch a URL with `run_command` and `curl -sL` (follow
    redirects, cap the body with `--max-time`). `run_command` is in your

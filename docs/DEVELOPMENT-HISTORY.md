@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-125，安全加固、架构拆分与派发根因轮；此前为 plan-124）。
+> 最近更新：2026-11-06（plan-126，`--need-content` 设为默认轮；此前为 plan-125）。
 
 ## 总览
 
@@ -1195,3 +1195,30 @@
 **T6 文档**：ARCHITECTURE(_CN) 补 `team/` 三模块并把模块数 18→21；TESTING(_CN) phase18 行补错误分类器的新位置；HANDOFF §3 文件索引补 team/ 行并记录拆分约束。
 
 **验证**：全量零 token 门 **28 phase 全绿（62s）**；tsc **0 错误**；phase28 去重后复跑通过。
+### 88. `--need-content` 设为默认轮（plan-126）
+
+**用户 prompt**：「默认加--need-content，然后更新所有文档特别是HANDOFF和DEVELOPMENT HISTORY，我即将压缩上下文」。
+
+**先把 flag 的事实测准**（同 query、两种模式各一次真实调用，逐字段对比）：
+
+| 字段 | 不加 | 加 |
+|---|---|---|
+| `content`（网页正文） | **0 字符** | **1442 字符** |
+| `snippet` | 69 | 69（**相同**） |
+| `summary` | 1373 | 1373（**相同**） |
+| 其余 7 字段 | authority/date/rerank_score/site_icon/site_name/title/url | 相同 |
+
+**结论：它只改 `content` 一个字段**；不加不丢字段，只是去掉可引用的正文；**单次调用同价**（服务方按成功请求计费，不按响应大小）；唯一该省它的场景是"只需判断点开哪条"、想缩小响应。
+
+**改动**：`agents/searcher.md` 规则 1 改为"**默认传 `--need-content`**"，并把上述事实写进角色指引——这样角色的引用不再带空正文，且模型知道什么时候可以省。
+
+**守门（本轮真正重要的部分）**：该 flag 只在花钱的 live 轮里被 exercising，所以"预设被重写时丢掉默认"在门禁里**不可见**。phase27 因此新增三条针对 `searcher.systemPrompt`（即预设文件正文，`presets.ts` 的 `parseFrontmatter` 直接给出，**无需猜路径**，故无论哪一层级胜出都被测到）的断言：
+1. 正文提到检索脚本（`STEPCODE_TOPO_SEARCH_SCRIPT`）；
+2. 声明 `--need-content` 为默认；
+3. 解释该 flag 改了什么（提到 `content`）。
+
+**反向验证**：把规则改成"不加默认"→ 探针**指名失败**（`FAIL preset: --need-content is the default in the guidance`）；恢复后全绿。第一轮反向验证没抓到（因为文件里还有第二处提及），修正注入方式后才真正验证了断言的有效性——记录此事是因为"反向验证必须真的破坏被测属性"本身就是要点。
+
+**文档同步**：TEST-PLAN(_CN) 补 R28；DEVELOPMENT-HISTORY 追加本条目；HANDOFF §1 轮次、§5 移除已闭环的该决策项、§3 预设行注明默认 flag 与守门断言。
+
+**验证**：零 token 全量门 28 phase 全绿；tsc 0 错误；phase27 全绿且经反向验证。
