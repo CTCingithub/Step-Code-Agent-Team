@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-31（plan-122，死代码删除轮：并纠正上一轮的错误结论；此前为 plan-121）。
+> 最近更新：2026-11-06（plan-123，沙箱升级 0.1.7 与 CLI 契约探针；此前为 plan-122）。
 
 ## 总览
 
@@ -1103,3 +1103,28 @@
 3. 三个超大文件是否拆分（`members.ts` 1288、`config.ts` 1012、`index.ts` 817）。建议不拆或只拆 `members.ts`。
 
 **验证**：tsc 0 错误；全量零 token 门 26 phase 全绿。提交 `a4ee34b` 已推送 develop。
+### 85. 沙箱升级 0.1.7 与 CLI 契约探针（plan-123）
+
+**用户 prompt**：「[团队方案·性能] …成员：队长/统筹与择优/high；环境工程师/沙箱更新/high；版本分析师/0.1.7特性提取/high；兼容工程师A/核心插件API冲突扫描/high；兼容工程师B/外围插件行为与配置冲突扫描/high；适配优化工程师/实施与调优/high；拓扑 star；任务 T1 沙箱更新至0.1.7 / T2 提取0.1.7新特性 / T3 核心API冲突扫描 / T4 外围行为与配置冲突扫描 / T5 执行适配优化 / T6 回归验证…step code已经发布了0.1.7版本，你在终端中step --version就能看到」。
+
+**组建与执行降级**：建 env-eng / ver-analyst / compat-a / compat-b / adapt-eng 五成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T72–T77 带完整 blockedBy。**队长由本会话担任**。T1 派发即 settle 超时（本会话第 27 次），T1–T6 由队长亲自执行，范围未缩。
+
+**先纠正我上一轮的错误结论（重要）**：我上轮据 `git ls-remote --tags` **超时**得出"Step Code 不存在 0.1.7"，并建议改更新到 origin/main。用户指出 `step --version` 就能看到，**用户是对的**：PATH 上的 `~/.stepcode/bin/step` 报 **0.1.7**（11-06 构建），而沙箱本地构建产物报 0.1.6（10-24，源为锁定的 `81e79bc`）。
+
+**错在哪**：把"网络命令超时"当成了"空结果"。同一个 `ls-remote --tags` 后来重试是能跑通的（251 个 ref）。**教训：网络类命令的超时不是空结果；必须重试或换通道（GitHub API）交叉验证后才能下结论。** 这也解释了我此前的困惑——版本是**构建时注入**的（`scripts/build-binaries.sh:45`，:106-109 剥 `refs/tags/`/`step-v`/`pi-v`/`v` 前缀），仓库 `package.json` 全历史只有 `0.1.0`，GitHub API 也确认 0 tag / 0 release，所以在仓库里永远搜不到 0.1.7。
+
+**T1 沙箱更新**：子模块 `81e79bc`(10-23) → **`29eb4607`**(11-03，`origin/main` 尖端，领先 22 提交；更晚的 `feat/extension-market`(11-06) 与 `feat/desktop-cron-core`(11-04) 是 feature 分支，非发布线）。以 `STEPCODE_BUILD_VERSION=0.1.7` 重建：增量构建 **19 秒**，本地产物 109,725,824 字节、报 **0.1.7**，与已安装一致。更新前后门禁均全绿。
+
+**T2–T4 冲突扫描（22 提交）**：**无阻塞、无高级冲突**。
+- tsc 全导入图 **0 错误**；插件传入的 9 个 CLI 参数全部仍被接受；
+- `--approval-mode` 词汇表收窄为 `confirm`/`auto`（档位改为 Ask / Approve for Me / Full Access），插件用的正是 `auto`，仍合法；
+- `enter_plan_mode` 被移除（只能 `/plan` 或 `--plan` 进入），但插件的 plan 体系**自包含**（`forward.ts:80 teamPlanPrompt()` 自有提示词 + `planConfirmDialogOpts` 自有对话框），从未调用它；
+- subagent 委派门控实现在 `features/subagent/tool-description.ts` 的**提示词层**，无代码级阻断，扩展注册的 `team_*` 工具不受影响；
+- 会话文件命名未变（`session-manager.ts` 仅被 #344 改 3 行，diff 无命名变更；phase22 覆盖 `teamIdForSession` 且门禁通过）；
+- **#333 是净改善**：非零退出码过去被 `throw` 成工具错误、JSON 被埋进错误文本；现在作为普通结果携带 `details.execution`，`bin/topo-search.mjs` 的 exit-1 契约得以完整抵达模型。
+
+**T5 适配优化**：真正该做的不是改行为（没有冲突），而是补上扫描暴露的**覆盖缺口**——插件向 `step` 传 9 个 CLI 参数，却没有任何探针测试这个契约，上游静默移除只会在 live 轮暴露。新增 `test/smoke/phase32.ts`（standalone、零 token）：断言 `step --help` 记录全部九个参数、解析到的二进制报告版本号、`--approval-mode` 仍拒绝已退役的 `strict` 并提示 `confirm, auto`、`-e`/`--extension` 仍是扩展拼写。**反向验证**：临时注入一个不存在的 flag，探针指名失败；恢复后全绿。另修掉 TESTING 双语里被追加两次的 phase31 行（上轮失误）。
+
+**T6 回归**：全量零 token 门在新 0.1.7 二进制上 **27 phase 全绿（65s）**；tsc 0 错误。
+
+**留给用户的可选项**（不阻塞）：是否把上游 #326 的"可配置 context 比例自动压缩"暴露给插件配置；tui markdown 流式渲染（#315/#319）对 `render.ts` 观感的影响需人工目验（门禁不测视觉）。
