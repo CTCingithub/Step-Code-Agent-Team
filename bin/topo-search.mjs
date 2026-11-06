@@ -217,7 +217,17 @@ async function callApi(kind, payload, opts) {
 	if (!key) {
 		// A missing credential is the caller's setup problem, not a failed
 		// request — it must not be mistaken for (or retried like) an API error.
-		return { ok: false, kind, fatal: true, error: "no API key: set STEPCODE_TOPO_SEARCH_KEY / STEPCODE_TOPO_FETCH_KEY (or STEPCODE_SEARCH_API_KEY / DEEPSEEK_API_KEY)", retryable: false, meta };
+		// Lead with the lever the user actually controls. The env names below
+		// are what the leader injects automatically, so naming only those sent
+		// people hunting for an export that the config file already does.
+		return {
+			ok: false,
+			kind,
+			fatal: true,
+			error: `no API key for ${kind}: set ${kind === "fetch" ? "fetchApiKey" : "searchApiKey"} under [stepcodeAgentTeam.searcher] in the step config (the leader injects it for you), or export STEPCODE_TOPO_${kind === "fetch" ? "FETCH" : "SEARCH"}_KEY to run this script by hand`,
+			retryable: false,
+			meta,
+		};
 	}
 
 	const timeoutMs = opts.timeoutMs ?? envInt("STEPCODE_TOPO_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);

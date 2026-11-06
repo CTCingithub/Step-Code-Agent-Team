@@ -92,6 +92,9 @@ searcher = "medium"                  # searcher 角色（v0.4.0 新增）
 searchUrl = ""                        # 空 = 宿主 search_web 的默认端点
 searchApiKey = ""                     # 空 = 登录态 / STEPCODE_SEARCH_API_KEY
 fetchUrl = ""                         # 空 = 对目标 URL 的普通无认证请求
+# 两个 key 都留空时，searcher 角色会以 exit code 2 失败，并给出点名本表的提示——
+# 缺凭证是配置问题而非请求失败，因此绝不重试。队长会注入你在此处设置的值，
+# 无需手动 export 任何环境变量。
 fetchApiKey = ""                      # 空 = 不带 Authorization 头
 #
 # 「空」的含义取决于你说的是哪个消费者，两者不同：**角色**回落到宿主工具

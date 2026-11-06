@@ -95,6 +95,16 @@ runner explicitly SKIPs instead of failing. The key comes from the environment,
 or from the first non-comment line of `sandbox/TEST-KEY.md` (gitignored) — with
 either set, phase5 is part of the regression run.
 
+Every probe reports its cases through a local `check()`, which logs one
+`PASS <name>` / `FAIL <name>` line. The runner counts those lines and keeps the
+result in `test/smoke/assertion-counts.txt`: a phase whose count **drops** below
+the baseline fails with `assertion count dropped N -> M`, so weakening a check
+into a tautology — or deleting one — cannot pass quietly. Raising the count is
+always free; lowering it needs a deliberate edit to that file. (Before this
+existed, the verdict was only "DONE printed, no FAIL line", and three probes
+that reported through ad-hoc `log()`/`fail()` pairs emitted no PASS line at all:
+a check could be removed and the suite stayed green while testing less.)
+
 | Probe | Coverage | Cost |
 |---|---|---|
 | phase1 | Member lifecycle with assertions (spawn / handshake / registry persistence / disband reset / idempotent resume — kill-path instance-identity regression) | zero token |

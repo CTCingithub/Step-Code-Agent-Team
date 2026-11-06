@@ -284,7 +284,15 @@ export default function (pi: ExtensionAPI) {
 			// ---- 10. no credential anywhere ----
 			const noKey = await run(["search", "--query", "q"], { STEPCODE_TOPO_SEARCH_URL: "http://127.0.0.1:1", DEEPSEEK_API_KEY: "" });
 			check("usage: a missing key exits 2 (not a request failure)", noKey.code === 2, `code=${noKey.code}`);
-			check("usage: the missing-key message names the env vars", /STEPCODE_TOPO_SEARCH_KEY/.test(noKey.stdout) && /STEPCODE_SEARCH_API_KEY/.test(noKey.stdout) && /DEEPSEEK_API_KEY/.test(noKey.stdout), noKey.stdout.slice(0, 160));
+			// The message must name the lever the user actually controls. Naming
+			// only the injected env vars sends people hunting for an export the
+			// config file already performs — a missing key is a config problem,
+			// so the config path leads and the env path stays for direct use.
+			check("usage: the missing-key message leads with the config table",
+				/\[stepcodeAgentTeam\.searcher\]/.test(noKey.stdout) && /searchApiKey/.test(noKey.stdout),
+				noKey.stdout.slice(0, 200));
+			check("usage: the missing-key message keeps the direct-script env path",
+				/STEPCODE_TOPO_SEARCH_KEY/.test(noKey.stdout), noKey.stdout.slice(0, 200));
 
 			const failed = results.filter((r) => !r.ok).length;
 			log(failed === 0 ? "SMOKE28 DONE (all passed)" : `SMOKE28 DONE (${failed}/${results.length} failed)`);

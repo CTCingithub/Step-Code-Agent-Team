@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-126，`--need-content` 设为默认轮；此前为 plan-125）。
+> 最近更新：2026-11-06（plan-127，门禁绿得虚假修复轮；此前为 plan-126）。
 
 ## 总览
 
@@ -1222,3 +1222,43 @@
 **文档同步**：TEST-PLAN(_CN) 补 R28；DEVELOPMENT-HISTORY 追加本条目；HANDOFF §1 轮次、§5 移除已闭环的该决策项、§3 预设行注明默认 flag 与守门断言。
 
 **验证**：零 token 全量门 28 phase 全绿；tsc 0 错误；phase27 全绿且经反向验证。
+### 89. 门禁"绿得虚假"修复轮（plan-127）
+
+**用户 prompt**：「[团队方案 · 性能] …成员名单：凌（Leader·现状检查/择优整合，high）、衡（Architect·架构优化，high）、锋（Backend·服务优化，high）、UX（Frontend·体验优化，high）、验（QA/DevOps·测试与部署，high）；通信拓扑：mesh…T1=现状检查与问题清单（凌）；T2=架构优化方案（衡）blockedBy T1；T3=后端深度优化（锋）blockedBy T1；T4=前端性能与体验优化（UX）blockedBy T1；T5=测试覆盖与CI/CD优化（验）blockedBy T1；T6=交叉验证与集成测试（全员）blockedBy T2,T3,T4,T5；T7=竞速择优与最终整合（凌）blockedBy T6…请检查项目现状，然后创建合理的计划，进行全面的修改优化」。
+
+**组建与降级**：按方案建 ling/heng/feng/ux/yan 五成员（均 `model: step-5-preview`、effort high，中文角色写入 systemPrompt——成员名只接受 ASCII），mesh 拓扑收窄到 5 人（首次设置误把 43 个历史成员全圈进 mesh），任务板 T90–T96。
+
+**派发结果**：`oneshot` 短回合**成功 settle 一次**（"只回复两个字：OK"），但 5 路并行实质回合**全部超时**。累计失败 **36 次**（本轮前 31 次）。**这一轮的增量证据**：短回合能成、长回合不成 → 失效点不在成员机制，而在需要多次工具调用的回合。与既有根因一致（成员进了 run 才发射 settle，而这里连 run 都进不去）。按既定模式由队长亲自执行 T1–T5，范围未缩。
+
+## 核心发现：门禁会在"测得更少"时依然全绿
+
+runner 的判定是 `DONE 存在 && fails=0 && skips=0`，**没有断言数下限**。而 phase2/phase3/phase17 三个探针用临时的 `log()` + `fail()` 组合上报，**一条 PASS 行都不发**。后果：某条检查可以被弱化成恒真、或被整条删掉，phase 仍打 DONE 且无 FAIL → 门禁全绿，而实际测得更少。
+
+**实测证实（非推测）**：把 phase2 的环拒绝日志行改成常量，`bash test/run-smoke.sh 2` 仍报 `phase2: OK (fails=0, skips=0)`。
+
+## 修复
+
+**① 断言数棘轮**（test/run-smoke.sh）：`check()` 本来就打一行 PASS/FAIL，故 runner 现在计数、写基线 `test/smoke/assertion-counts.txt`（28 phase 共 **643** 条，原 611），任何 phase 计数下降即判 `FAILED (assertion count dropped N -> M)`。上升自由、下降必须故意改基线。
+
+**② 三个探针转标准 `check()` 形态**：phase2 **0→14**、phase3 **0→15**、phase17 **0→2**。转换逐条保持条件等价、控制流不变；顺带把原先"只记录不断言"的 2 条 registry 断言与 2 条孤儿探针断言补成真断言。
+
+**③ 同族第二个洞**：被掏空的 phase17 不写 `orphan.pid` → runner 自己的 `orphan-check` 降级为**静默 SKIPPED**，而 SKIPPED 不计入 FAILED → 孤儿泄漏保护凭空消失且无人知晓。现改为：phase17 跑过却没写 pid 文件即判失败；真正的子集运行（如 `run-smoke.sh 9`）仍 SKIPPED。
+
+**④ UX：缺 key 报错指向了错误的杠杆**。原文只列 4 个**队长自动注入**的 env 名，用户真正该动的是配置表。改为以 `[stepcodeAgentTeam.searcher]` 的 `searchApiKey` 开头，env 路径保留给直接跑脚本的场景，并由 phase28 两条新断言钉住（防回归）。
+
+## 反向验证（两次救场，值得记录）
+
+1. **棘轮第一版从不触发**：基线行首已是 `phase2`，查找时又拼了一次 `phase$p` → `phasephase2`，永远匹配不到。靠"注入删两条断言、看门禁是否失败"才发现——若不反向验证，这个棘轮会被当成已交付的保护，实际毫无作用。
+2. **往 phase3 注入恒真却没失败**——这是**正确的**（底层行为仍对，恒真只在行为被破坏时才显形）。真正的测法是破坏 `extensions/presets.ts` 的信任门禁（不再要求 `trusted`）→ phase3 **指名失败 4 处**（含两条信任断言），恢复后全绿。这证明新断言真能抓住安全回归。
+3. 缺 key 文案回退为只列 env 名 → phase28 指名失败；恢复后全绿。
+4. 子集运行（不含 17）→ orphan-check 仍 SKIPPED，无误报。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **28 phase + manifest + 7 live + orphan-check 全绿**（69s） |
+| tsc | **0 错误** |
+| 断言总数 | 611 → **643** |
+| phase2/3/17 断言数 | 0 → **14 / 15 / 2** |
+| 反向验证 | 棘轮、phase3 信任断言、phase28 文案断言、orphan-check 均实测有效 |

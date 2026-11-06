@@ -76,6 +76,13 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 而非失败。密钥来自环境变量，或 `sandbox/TEST-KEY.md`（gitignored）首个非注释行——
 任一就绪即纳入回归。
 
+每个探针都通过本地 `check()` 上报用例，每条打一行 `PASS <name>` / `FAIL <name>`。
+runner 统计这些行并把结果写进 `test/smoke/assertion-counts.txt`：某 phase 的条数
+**低于**基线即判失败（`assertion count dropped N -> M`）。因此把某条检查弱化成恒真、
+或直接删掉它，都不可能悄悄通过——而提高条数永远自由，降低则必须故意改该文件。
+（此前判定只有「打了 DONE 且无 FAIL 行」；而 phase2/3/17 三个探针用临时
+`log()`/`fail()` 上报、一条 PASS 行都不发，删掉检查后套件依然全绿，实际测得更少。）
+
 | 探针 | 覆盖 | 成本 |
 |---|---|---|
 | phase1 | 成员生命周期断言（spawn/握手/注册表持久化/disband 复位/幂等恢复——kill 路径实例身份回归） | 零 token |

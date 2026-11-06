@@ -93,6 +93,10 @@ searchUrl = ""                        # empty = the host search_web default
 searchApiKey = ""                     # empty = the login profile / STEPCODE_SEARCH_API_KEY
 fetchUrl = ""                         # empty = a plain unauthenticated request to the target URL
 fetchApiKey = ""                      # empty = no Authorization header
+# Leaving both keys empty makes the searcher role fail with exit code 2 and a
+# message naming this table — a missing credential is a configuration problem,
+# not a failed request, so it is never retried. The leader injects whatever you
+# set here, so there is nothing to export by hand.
 #
 # What "empty" means depends on which consumer you mean, and the two differ:
 # the ROLE falls back to the host tools (search_web's own credential

@@ -23,6 +23,9 @@ STEP_BIN="$(resolve_step_bin)" || exit 2
 AGENT_DIR="$(mktemp -d)"
 SESSION_DIR="$AGENT_DIR/sessions"
 mkdir -p "$SESSION_DIR"
+COUNTS_NOW="$AGENT_DIR/assertion-counts.txt"
+: > "$COUNTS_NOW"
+COUNTS_BASELINE="$ROOT/test/smoke/assertion-counts.txt"
 trap 'rm -rf "$AGENT_DIR"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -73,6 +76,11 @@ run_phase_attempt() {
   fails="$(echo "$probe_log" | grep -cE 'FAIL |FAILED' || true)"
   skips="$(echo "$probe_log" | grep -cE 'SKIP ' || true)"
   done="$(echo "$probe_log" | grep -cE 'DONE' || true)"
+  # Every check() logs one "PASS <name>" or "FAIL <name>" line, so this is the
+  # phase's real assertion count. Without a floor on it, deleting every check()
+  # in a probe leaves it printing DONE with no FAIL line — the verdict below
+  # passes it, and the suite goes green with nothing tested.
+  asserts="$(echo "$probe_log" | grep -cE 'PASS |FAIL ' || true)"
   if [ "$rc" -eq 124 ]; then
     # A 240s SIGTERM kill is a hang, not an assertion failure — say so instead
     # of the indistinguishable "(fails=0)".
@@ -85,7 +93,9 @@ run_phase_attempt() {
     # run against the default agentDir. No probe emits "SKIP " on its normal path
     # (grep-verified), and the runner's own key-gated skip happens outside this
     # function, so requiring zero is safe.
-    echo "phase$p: OK (fails=0, skips=$skips)"
+    echo "phase$p: OK (fails=0, skips=$skips, asserts=$asserts)"
+    # Recorded on the OK branch only: a failed phase's count is not a baseline.
+    echo "phase$p $asserts" >> "$COUNTS_NOW"
     return 0
   else
     echo "phase$p: attempt1 FAILED (fails=$fails) — retrying once with a fresh session id"
@@ -117,6 +127,26 @@ for p in $PHASES; do
   # fails twice deterministically.
   run_phase_attempt "$p" "-retry" || FAILED+=("$p")
 done
+
+# ---- assertion-count ratchet ----
+# A probe that silently loses checks is worse than one that fails: it looks
+# green while testing less. Counts may rise freely; falling needs a deliberate
+# edit to the baseline, which is exactly the point.
+if [ ! -f "$COUNTS_BASELINE" ]; then
+  sort -n -k1.6 "$COUNTS_NOW" > "$COUNTS_BASELINE"
+  echo "assertion-counts: recorded baseline for $(wc -l < "$COUNTS_BASELINE" | tr -d ' ') phases"
+else
+  while read -r p want; do
+    got="$(awk -v key="$p" '$1==key {print $2; exit}' "$COUNTS_NOW")"
+    # A phase that did not run (key-gated skip, or absent from this
+    # invocation's PHASES) has no observation to compare — that is not a drop.
+    [ -z "$got" ] && continue
+    if [ "$got" -lt "$want" ]; then
+      echo "phase$p: FAILED (assertion count dropped $want -> $got — did a check() get deleted?)"
+      FAILED+=("$p")
+    fi
+  done < "$COUNTS_BASELINE"
+fi
 
 # ---- package manifest sanity ----
 # A `pi` manifest suppresses convention-directory discovery for the resource
@@ -289,6 +319,13 @@ if [ -f "$AGENT_DIR/orphan.pid" ]; then
     echo "orphan-check: FAILED (member pid $orphan_pid still alive 15s after leader exit)"
     FAILED+=("orphan-check")
   fi
+elif echo " $PHASES " | grep -q " 17 "; then
+  # phase17 ran but wrote no pid file, so the leak protection above silently
+  # disappeared: a gutted probe passed, the check degraded to SKIPPED, and the
+  # suite stayed green with no orphan coverage at all. Only a genuinely
+  # un-run phase17 (an explicit subset like `run-smoke.sh 9`) may skip.
+  echo "orphan-check: FAILED (phase17 ran but wrote no orphan.pid — the probe is gutted)"
+  FAILED+=("orphan-check")
 else
   echo "orphan-check: SKIPPED (phase17 did not run — no orphan.pid)"
 fi
