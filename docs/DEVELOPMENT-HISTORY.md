@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-130，全量审查与风险交叉验证轮；此前为 plan-129）。
+> 最近更新：2026-11-06（plan-131，待完成事项清零轮；此前为 plan-130）。
 
 ## 总览
 
@@ -1427,3 +1427,52 @@ throw retryErr === err ? cause : retryErr;
 | 断言总数 | 673 → **676** |
 | phase37 新断言反向验证 | 2 次（破坏编排分支 → fails=2；去掉 auto-activate → fails=1） |
 | 文档矛盾修复 | 8 处，逐处命令实测取证 |
+### 93. 待完成事项清零轮（plan-131）
+
+**用户 prompt**：「[团队方案 · 性能] …成员：队长（统筹/择优，high）、执行者甲（执行路径A，high）、执行者乙（执行路径B，high）、执行者丙（执行路径C，high）；拓扑：star；任务：1.事项拆解与分派（队长）；2.执行路径A（甲）；3.执行路径B（乙）；4.执行路径C（丙）；5.竞速比对与择优（队长，blockedBy 2,3,4）；6.终审交付（队长，blockedBy 5）…请把待完成的事项都做了」。
+
+**组建与执行**：建 chief/exec-a/exec-b/exec-c 四成员（`model: step-5-preview`、effort high，中文角色写入 systemPrompt），star 拓扑，任务板 T107–T112。三路并行派发**全部超时**（本会话第 43/44/45 次），三条路径由队长亲自执行。产出 `sandbox/logs/pend-a-llm.md`、`pend-b-searcher.md`、`pend-c-hardening.md`。
+
+## 路径 A：LLM 层 4 探针复跑 — 20/20 全过
+
+隔离 agentDir（mktemp 根目录，父目录无 config.toml）下复跑 phase4/10/11/12：4/4、2/2、1/1、4/4、9/9。
+与历史基线 22/22 的差是 phase10 的断言数随并发样本数浮动，**FAIL 计数为 0**。**develop 在 LLM 层是「合入就绪」的**，v0.4.x 发版前置已满足。
+
+## 路径 B：searcher 收尾 — 抓到并修掉两个真 bug
+
+把 `STEPCODE_TOPO_MAX_BYTES` 调到 4096 跑真实 search（同一代码路径的等价验证，不需真找 >2MB 页面），第一轮 **4/7 失败**暴露两个 bug：
+
+1. **截断标记对 search 丢失**：`data = {...body, _truncated, _note}` 刚设好，search 分支却 `return { data: { results, needContent } }` 重建 data，把标记扔掉。只读 `data` 的调用方看到完全普通的结果，永远不知道响应被截过；`_note` 那行对 search 是死代码。
+2. **`MAX_BYTES=0` 被静默忽略**：`envInt` 的 `parsed > 0` 把 0 当未设置，回退 2 MiB。脚本里**已有** `envIntAllowZero`（backoff cap 在用），MAX_BYTES 却没用——正是文档里反复记载的那个坑，只是这次栽在早期就有的键上。
+
+修复后 7/7。phase28 新增 6 条零成本断言（37→43），双向反向验证指名失败。
+
+## 路径 C：deferred 加固 — 又抓到一个高层级真 bug
+
+**P2-8b 闭环**（新探针 phase38，7 断言）：假模型返回不带 content 的 assistant 消息，驱动 socket 走完"空回复"路径。断言回合仍 settle（空回合是完成的回合，不是挂死）+ 队长侧框成 `Delivered to X.`。
+
+**升级路径闭环**（新探针 phase39，23 断言）：构造 v0.3.0 配置 → 种子化 → 三层（文件/解析/加载）核对用户值幸存。
+
+**phase39 第一版就抓到高层级 bug**：文件级断言全过、宿主 TOML 读取器也能解析出用户值，但 `loadConfig()` 返回**默认值**。
+
+根因：种子块按 `KEEP THE QUOTES` 约定把**每一个**默认值写成带引号字符串（`"default"` 标记必须是 TOML 标量且 `mergeSection` 按字面匹配）。用户照着指令取消注释改成 `max = "6"` 后，TOML 交出字符串 `"6"`，`expectIntRange` 的 `typeof value !== "number"` 把它**静默重置为默认值**，唯一通知进 debug-only 的 `logWarnings`。
+
+**也就是说：文档教用户做的事，对任何非字符串键都不生效。**
+
+**修复**：新增 `scalarNumberOf` / `scalarBooleanOf` / `stringArrayOf` 三个助手，接入 `expectIntRange`/`expectNumberRange`/`expectBoolean`/`activation.keywords`，合法时把 coerced 值写回。反向验证：退回严格检查 → phase39 指名失败 2 处。
+
+**P2-9 重新审计**（原细节不可恢复）：扫全部 phase 四类问题，未发现新的恒真/过窄断言；phase37 那条过窄断言已于 plan-130 修掉。
+
+**附带发现（非 bug）**：测试最初用 `"team, 组队"` 作关键词，加载得 `["team"]`——因为「组队」本就在 `DEPRECATED_KEYWORDS` 里，被剥离是 0.2.0 的刻意设计。记录此事是因为"加载结果与文件不一致"有两种完全不同的原因，排查时必须先排除设计行为。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **34 phase + manifest + 7 live + orphan-check 全绿**（101s） |
+| tsc | **0 错误** |
+| 断言总数 | 676 → **712** |
+| 新增探针 | phase38（7）、phase39（23）；phase28 +6 |
+| 反向验证 | phase28 ×2、phase37 ×2、phase38 ×1、phase39 ×1 |
+| **修复的产品缺陷** | **3 个**（截断标记丢失、MAX_BYTES=0 被忽略、带引号数值/布尔/列表被静默重置） |
+| LLM 层复跑 | 20/20（约 16 次 token，已声明） |

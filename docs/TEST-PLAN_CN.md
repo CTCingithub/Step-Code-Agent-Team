@@ -140,7 +140,7 @@
 
 | # | 检查项 | 命令 / 探针 | 预期 |
 |---|---|---|---|
-| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（32 phase——清单由 `test/smoke/phase*.ts` 磁盘派生——+ manifest + 7 live + orphan-check） |
+| A1 | 全量零 token 回归 | `npm run smoke` | all phases passed（34 phase——清单由 `test/smoke/phase*.ts` 磁盘派生——+ manifest + 7 live + orphan-check） |
 | A2 | 协议探针 | `bash sandbox/probe.sh` | `PROBE OK` |
 | A3 | 沙箱还原往返 | `bash sandbox/restore-project.sh` | `project/` 回到种子状态（种子 bug 复现）；运行时数据与 session 日志清除 |
 | A4 | 干净导出加载 | 由 A1 覆盖（live-clean-export） | `git archive HEAD` 导出物的扩展可激活 |

@@ -862,10 +862,54 @@ function isStringArray(value: unknown): value is string[] {
 	return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
+/**
+ * Coerces a value the seed block's own quoting convention can produce.
+ *
+ * The seed block writes EVERY default as a quoted string, because the
+ * `"default"` marker has to be a TOML scalar and `mergeSection` matches it
+ * literally. So the block tells the reader `KEEP THE QUOTES` — and a user who
+ * follows that instruction and uncomments a numeric key writes `max = "6"`.
+ * TOML then hands back the string `"6"`, which used to fail every type check
+ * below and get silently reset to the built-in default, with the only notice
+ * going to a debug-only log. The documented path therefore did not work for
+ * any non-string key.
+ *
+ * Returns the coerced value, or undefined when the input is not a usable
+ * scalar for that type.
+ */
+function scalarNumberOf(value: unknown, kind: "int" | "number"): number | undefined {
+	if (typeof value === "number") return value;
+	if (typeof value !== "string") return undefined;
+	const text = value.trim();
+	if (text === "") return undefined;
+	const parsed = kind === "int" ? Number.parseInt(text, 10) : Number.parseFloat(text);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function scalarBooleanOf(value: unknown): boolean | undefined {
+	if (typeof value === "boolean") return value;
+	if (typeof value !== "string") return undefined;
+	const text = value.trim();
+	if (text === "true") return true;
+	if (text === "false") return false;
+	return undefined;
+}
+
+/** A comma-separated string is the only way to write a list inside the quoting convention. */
+function stringArrayOf(value: unknown): string[] | undefined {
+	if (isStringArray(value)) return value;
+	if (typeof value !== "string") return undefined;
+	const items = value.split(",").map((s) => s.trim()).filter(Boolean);
+	return items.length > 0 ? items : undefined;
+}
+
 function expectBoolean(obj: Record<string, unknown>, key: string, fallback: boolean, warnings: string[]): void {
-	if (typeof obj[key] !== "boolean") {
+	const value = scalarBooleanOf(obj[key]);
+	if (value === undefined) {
 		obj[key] = fallback;
 		warnings.push(key);
+	} else {
+		obj[key] = value;
 	}
 }
 
@@ -877,10 +921,12 @@ function expectIntRange(
 	max: number,
 	warnings: string[],
 ): void {
-	const value = obj[key];
-	if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+	const value = scalarNumberOf(obj[key], "int");
+	if (value === undefined || !Number.isInteger(value) || value < min || value > max) {
 		obj[key] = fallback;
 		warnings.push(key);
+	} else {
+		obj[key] = value;
 	}
 }
 
@@ -892,10 +938,12 @@ function expectNumberRange(
 	max: number,
 	warnings: string[],
 ): void {
-	const value = obj[key];
-	if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+	const value = scalarNumberOf(obj[key], "number");
+	if (value === undefined || !Number.isFinite(value) || value < min || value > max) {
 		obj[key] = fallback;
 		warnings.push(key);
+	} else {
+		obj[key] = value;
 	}
 }
 
@@ -910,10 +958,14 @@ function validate(config: PluginConfig): string[] {
 	expectBoolean(asRecord(config.activation), "guardEnabled", d.activation.guardEnabled, warnings);
 	expectBoolean(asRecord(config.activation), "confirmBeforeActivate", d.activation.confirmBeforeActivate, warnings);
 	expectBoolean(asRecord(config.activation), "headlessAutoActivate", d.activation.headlessAutoActivate, warnings);
-	if (!isStringArray(config.activation.keywords)) {
+	// A comma-separated string is how the quoting convention spells a list
+	// (`keywords = "team, 组队"`), so accept it before falling back to defaults.
+	const keywords = stringArrayOf(config.activation.keywords);
+	if (keywords === undefined) {
 		config.activation.keywords = d.activation.keywords;
 		warnings.push("activation.keywords");
 	} else {
+		config.activation.keywords = keywords;
 		// Forced migration (0.2.0): deprecated keywords are stripped from the
 		// effective list so a future official agent-teams feature cannot be
 		// shadowed by this plugin. The user's file is never rewritten; the

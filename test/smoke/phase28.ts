@@ -281,6 +281,46 @@ export default function (pi: ExtensionAPI) {
 			check("batch: a failed line sets a non-zero exit", b.code !== 0, `code=${b.code}`);
 			fake.server.close();
 
+			// ---- 11. the response cap, including 0 as a real value ----
+			// Two defects lived here, both found by a real-link probe: the search
+			// branch rebuilt `data` and dropped the truncation marker the shared
+			// code had just computed (so a caller reading only `data` saw an
+			// ordinary result), and MAX_BYTES went through envInt, whose
+			// `parsed > 0` treats 0 as "unset" and silently restored the 2 MiB
+			// default. envIntAllowZero already existed for exactly this case.
+			const capRun = async (maxBytes: string, body: string) => {
+				const f = await startFake((_req, res) => {
+					res.writeHead(200, { "content-type": "application/json" });
+					res.end(body);
+				});
+				const r = await run(["search", "--query", "big", "--count", "1"], { ...baseEnv, STEPCODE_TOPO_SEARCH_URL: `http://127.0.0.1:${f.port}`, STEPCODE_TOPO_MAX_BYTES: maxBytes });
+				const line = r.stdout.trim().split("\n").filter(Boolean).pop() ?? "";
+				f.server.close();
+				return { code: r.code, json: safeJson(line) as Record<string, unknown> | null };
+			};
+			const big = JSON.stringify({ results: [{ title: "T", url: "u", snippet: "s", content: "x".repeat(2000) }] });
+			const uncapped = await capRun("100000", big);
+			check("cap: a body under the cap is not marked truncated",
+				uncapped.json?.ok === true && (uncapped.json?.meta as Record<string, unknown>)?.truncated !== true,
+				JSON.stringify(uncapped.json?.meta ?? {}));
+			const capped = await capRun("100", big);
+			check("cap: an over-cap body sets meta.truncated",
+				capped.json?.ok === true && (capped.json?.meta as Record<string, unknown>)?.truncated === true,
+				JSON.stringify(capped.json?.meta ?? {}));
+			const cappedData = capped.json?.data as Record<string, unknown> | undefined;
+			check("cap: the truncation marker reaches the caller's data (search branch)",
+				cappedData?._truncated === true && typeof cappedData?._note === "string",
+				JSON.stringify(cappedData ?? {}));
+			check("cap: the note names the cap that actually applied",
+				/100/.test(String(cappedData?._note ?? "")), String(cappedData?._note ?? ""));
+			check("cap: the results survive the rebuild",
+				Array.isArray(cappedData?.results) && (cappedData.results as unknown[]).length === 1,
+				JSON.stringify(cappedData?.results ?? []));
+			const zero = await capRun("0", big);
+			check("cap: 0 is a meaningful value, not \"unset\"",
+				(zero.json?.meta as Record<string, unknown>)?.truncated === true,
+				JSON.stringify(zero.json?.meta ?? {}));
+
 			// ---- 10. no credential anywhere ----
 			const noKey = await run(["search", "--query", "q"], { STEPCODE_TOPO_SEARCH_URL: "http://127.0.0.1:1", DEEPSEEK_API_KEY: "" });
 			check("usage: a missing key exits 2 (not a request failure)", noKey.code === 2, `code=${noKey.code}`);

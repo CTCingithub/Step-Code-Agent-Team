@@ -40,6 +40,8 @@
  *   STEPCODE_TOPO_TIMEOUT_MS     per-request timeout (default 10000).
  *   STEPCODE_TOPO_QPS            token-bucket rate per kind (default 5).
  *   STEPCODE_TOPO_MAX_BYTES      response cap before truncation (default 2 MiB).
+ *                                0 is a meaningful value (a zero-byte cap, so
+ *                                every body truncates), not "unset".
  *   STEPCODE_TOPO_BACKOFF_CAP_MS ceiling on the retry wait, in ms. 0 means "do
  *                                not wait at all". This changes only HOW LONG a
  *                                retry waits, never WHICH requests are retried,
@@ -231,7 +233,7 @@ async function callApi(kind, payload, opts) {
 	}
 
 	const timeoutMs = opts.timeoutMs ?? envInt("STEPCODE_TOPO_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
-	const maxBytes = envInt("STEPCODE_TOPO_MAX_BYTES", DEFAULT_MAX_BYTES);
+	const maxBytes = envIntAllowZero("STEPCODE_TOPO_MAX_BYTES", DEFAULT_MAX_BYTES);
 	const maxAttempts = envInt("STEPCODE_TOPO_ATTEMPTS", DEFAULT_ATTEMPTS);
 	const started = Date.now();
 
@@ -294,7 +296,16 @@ async function callApi(kind, payload, opts) {
 				if (!Array.isArray(body?.results)) {
 					meta.shape = `unrecognised response envelope (keys: ${Object.keys(body ?? {}).join(", ") || "none"})`;
 				}
-				return { ok: true, kind, data: { results, needContent: Boolean(payload.need_content) }, meta };
+				// Carry the truncation marker through. The search branch rebuilds
+				// `data`, so the fields set above would otherwise be computed and
+				// dropped here — a caller reading only `data` would see a perfectly
+				// ordinary result and never learn the body was cut.
+				return {
+					ok: true,
+					kind,
+					data: { results, needContent: Boolean(payload.need_content), ...(data._truncated ? { _truncated: true, _note: data._note } : {}) },
+					meta,
+				};
 			}
 			return { ok: true, kind, data: { title: body?.title ?? "", content: body?.content ?? "" }, meta };
 		} catch (err) {
