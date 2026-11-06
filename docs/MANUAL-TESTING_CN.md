@@ -26,7 +26,7 @@
 
 > 自动化基线 **2026-10-30（R17 手动轮驱动轮）复核**：全量门全绿；tsc 零错误；探针 5a/5b/5c/7/8/9 全部 PASS。2026-10-29/30 手动轮的两处错误结论已在文档中更正（环形链长语义、配置文件位置）；配置现可在 `STEPCODE_TEAM_DEBUG=1` 下 trace 出读了哪个文件与生效值；拓扑拒绝文案现含形状；队友回复现带出处框定。
 >
-> 自动化基线 **2026-11-06（plan-129 轮）复核**：全量门在 **32 phase** 下全绿（+ manifest + 7 live + orphan-check，约 101s）；tsc 全导入图零错误；断言数棘轮基线 32 phase / 673 条（`test/smoke/assertion-counts.txt`）。searcher 的真实 search/fetch **已于 plan-119 跑通**（18 次成功请求、search 13/13、fetch 8/8，约 ¥0.09），`--need-content` 已于 plan-126 设为角色默认。早期 25 phase 基线（2026-10-30，plan-114 轮）为历史记录，不再代表当前状态。
+> 自动化基线 **2026-11-06（plan-131 轮）复核**：全量门在 **34 phase** 下全绿（+ manifest + 7 live + orphan-check，约 101s）；tsc 全导入图零错误；断言数棘轮基线 32 phase / 673 条（`test/smoke/assertion-counts.txt`）。searcher 的真实 search/fetch **已于 plan-119 跑通**（18 次成功请求、search 13/13、fetch 8/8，约 ¥0.09），`--need-content` 已于 plan-126 设为角色默认。早期 25 phase 基线（2026-10-30，plan-114 轮）为历史记录，不再代表当前状态。
 >
 > 自动化基线 **2026-10-29 两轮复核**：（R14 测试排气轮）零 token 冒烟 20 phase + manifest + 7 live + orphan-check 全绿；LLM 层 phase4 4/4、phase10 A 支 2/2 + B 支 1/1、phase11 4/4（零 SKIP）、phase12 9/9。（R15 界面改名 + Accept/Cancel/Other 轮）改名与选项调整后同一门禁再次全绿；phase24 现同时断言选项**顺序**（`Accept / Cancel / Other`）与**Other 输入被关闭**（Esc/超时）时与 Cancel 完全同果——后者把「Esc 取消」的数据面移出了本手动集；live 探针 5a/5b 在新标题新标签下 PASS，8 首跑 FAIL 重跑 PASS（机械断言两次均过，仅成员 LLM 自述抖动——探针现已打印该回复，失败无需重跑即可定性）。
 
