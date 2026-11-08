@@ -205,6 +205,12 @@ plaintext.
 - it does NOT protect against a same-uid attacker, who reads the key file too;
 - it does NOT cover the host-written member session JSONL (mode 0644, outside
   the plugin's reach) — that remains the largest real exposure;
+
+**`.topo/` survives uninstall.** `step remove` removes the plugin only; the `.topo/` directory in your
+workspace stays. That is deliberate — it holds your team key and collaboration records, which are your
+data and not the plugin's to delete. To remove it entirely, `rm -rf .topo/` yourself (**this permanently
+loses the team key, and any encrypted collaboration records become undecryptable**). The `.topo/` entry
+in `.gitignore` stops mattering at that point and can be dropped if you no longer use this plugin.
 - losing the key means the data is unrecoverable;
 - plaintext registries written by older versions still load (an envelope is
   decrypted, anything else is read as-is).
