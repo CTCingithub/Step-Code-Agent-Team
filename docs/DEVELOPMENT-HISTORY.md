@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-08（plan-135，付费测试轮；此前为 plan-134）。
+> 最近更新：2026-11-08（plan-136，两项架构决策定案轮；此前为 plan-135）。
 
 ## 总览
 
@@ -1570,3 +1570,47 @@ throw retryErr === err ? cause : retryErr;
 - 样本量小（U3 n=2、U2 n=2 轮）；要统计显著性需多跑，成本线性增长
 - U3 的 tier3 只有宿主 toolResult 一手证据，无会话级证据
 - harness 侧派发退化（累计 52 次 settle 超时）——外部，不在本仓库
+### 96. 两项架构决策定案轮（plan-136）
+
+**用户 prompt**：「先不发版，请给我解释umask问题，大文件不拆，过度导出不收窄」。
+
+本轮**无代码改动**，是三项目标状态收敛：用户明确「先不发版」，并拍板两项长期挂着的架构决策。
+
+## 一、umask 问题（解释了，并修正了我原来的判断）
+
+`umask=0002` → 新建文件得 **664（同组可读）**、新目录 775。五个含凭证的文件现在都是 600，但**保护程度不同**，我原来的说法有一处不准确：
+
+| 文件 | 保护程度 | 证据 |
+|---|---|---|
+| `.topo/team.key` | **真保护** | `topo-init.ts:106` 写时带 `mode:0o600`，`:109` 又显式 `chmodSync(0o600`（双保险）；目录 `mkdirSync(mode:0o700)` |
+| `registry.json` | **真保护** | `registry.ts:135` `mode:0o600` |
+| `sandbox/config.toml` | **半保护** | `config.ts:360` 追加时带 `mode:0o600`，但**实证发现 `appendFileSync` 的 mode 只在创建文件时生效**——该文件是用户先手写建的，所以那个参数从未作用过 |
+| `sandbox/TEST-KEY.md` / `sandbox/auth.json` / `local/test-api-key.md` | **无保护** | 分别由用户手写、step 宿主登录态写入，不在插件管辖内 |
+
+**实证**（本轮新增，比原判断准）：手写创建 664 → 插件 `appendFileSync(mode:0600)` 仍是 664 → 显式 `chmodSync(0600)` 才变 600。
+
+**实际影响面**：五处均已 gitignore、git 历史从未跟踪、四路扫描零命中；单用户机器下**风险接近零，属卫生问题而非正在发生的泄露**。只有文件被**重新创建**才会踩坑（临时文件式编辑器改写、新克隆后 `cp`、`step login` 重写 auth.json）。
+
+**给用户的四个选项**：A 什么都不做（可接受）／B 改全局 umask（波及整个系统，不建议）／C 项目内 shell 封装（要维护）／D 给 `config.ts:360` 后补一次显式 `chmodSync(0o600)`（三行，把半保护变真保护）。**建议 A 或 D**——等用户拍板。
+
+## 二、三个大文件不拆（用户拍板）
+
+`members.ts` 1085 / `config.ts` 1075 / `index.ts` 817 保持原状。理由：
+1. **TypeScript 没有 partial class，类不可跨文件**——`members.ts` 剩余部分是 TeamManager 类本体；可拆的自由函数/纯逻辑已在 plan-125 全部移到 `extensions/team/`（naming/errors/spawn 三模块 334 行），再拆只剩类本身；
+2. `config.ts` 的 schema/校验/种子化/迁移/env 五块**共享同一份 `PluginConfig` 类型**，拆开要复制类型或造循环依赖；
+3. `index.ts` 是激活/命令注册/工具注册三类，拆开要动 14 个 import 站点。
+
+**判断依据**：这三处的长度来自「一个类 / 一个 schema / 一个注册点」的天然内聚，不是堆积——拆分的回归风险超过可读性收益。
+
+## 三、13 个过度导出不收窄（用户拍板）
+
+对外 API 面保持不变。理由：
+1. 那 13 个符号**全部有真实使用者**——一部分被本模块内部调用（`configFilePath`/`settingsFilePath`/`hasCjk`/`meshTopology` 等），一部分被探针直接导入（`searcherSpawnEnv`/`memberSpawnEnv`/`packageRoot`/`extensionDir`），**不是死代码**；
+2. 收窄是纯 cosmetic，却有真实风险——plan-125 收窄 members.ts 自用的 6 个 helper 时，差点因 grep 计数误判而误删 13 个函数（靠「看命中位置并扣掉定义行」才避开）；
+3. 保持导出面对下游更友好。
+
+## 四、状态
+
+用户明确「先不发版」，故 **v0.4.x 发版继续挂着**（前置已全部满足：LLM 层 20/20、38 phase 全绿、tsc 0、无破坏性契约变更）。
+
+**验证**：本轮无代码改动，`tsc 0`、全量门禁 38 phase 全绿（101s）复跑确认无回归。
