@@ -74,7 +74,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39 40 41 42 43）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -120,6 +120,10 @@ runner 统计这些行并把结果写进 `test/smoke/assertion-counts.txt`：某
 | phase35 | **多轮回合能 settle**——假模型第一轮返回 tool_call、第二轮返回最终文本，强制 agent loop 走第二轮，并断言工具输出真的回到了第二轮。长回合正是由这些构成的，故此处的回归会在这里失败，而不是以无法解释的 settle 超时出现在 live 轮。 |
 | phase36 | 对**真实提供方**的成员派发（key-gated，计费：两次短提示）。短提示与必须用工具的长提示都能 settle。这是唯一打真实提供方的成员派发探针；它的存在是因为 39 次超时在它证明事实并非如此之前，全被归因于长回合。 |
 | phase38 | 产出**没有任何文本**的成员回合仍能 settle，且队长侧把空回复框成交付确认——P2-8b，多年来列为 deferred 是因为它需要一个 live 空回复，也就是一次模型调用。假模型返回一个不带任何 content 的 assistant 消息，这正是 live 空回复留下的状态（rpc-client 只捕获非空文本）。断言回合仍 settle、模型真被问过、没有文本回来、且 `formatTeammateReply` 产出 `Delivered to X.` 而非静默的空结果。 |
+| phase40 | 团队注册表的崩溃存活：写入是 tmp+rename，target 永不被半写；孤儿 `.tmp-<pid>` 被加载器忽略；截断或空的注册表加载为 null——而 forSession 会据此静默重建一个**空**团队。最后一条正是防止「加载为 null」被读成「恢复」的断言：数据按设计就没了（注册表是临时状态）。只读 target 那条让原子性**变得可观测**：`write tmp; rename` 能越过 0444 的 target，而直接写不能。 |
+| phase41 | 同一 agentDir 下两个团队不冲突：两个会话文件给出两个 teamId、因而两个 socket（`<teamsRoot>/<teamId>/sock`），且**与 cwd 无关**；两个 TeamServer 可并发 listen（无 EADDRINUSE）且两个 socket 均为 0600；嵌套团队 id 在其父之下命名空间隔离。隔离是 teamId 的纯函数，所以这是护栏而非运气。 |
+| phase42 | plan 档位的 happy path——P2-8e 中**此前在任何成本下都无覆盖**的那一半。phase24 驱动确认链但其脚本 ctx 没有 modelRegistry，故 generateTeamPlan 直接放弃、只展示档位回退。此处脚本 complete() 返回固定方案，并追踪它直到 Accept 时进入注入，同时验证 Cancel 时不泄漏。**只主张 plumbing**：真实模型是否产出符合档位的方案仍需 key。 |
+| phase43 | 团队树究竟能到多深——决定深度 3 是否可达的那个边界，phase37 从未触及（它只从深度 0 触发 canOrchestrate）。用真实子进程会携带的深度 env 驱动：bound=3 时深度 2 成员可编排（深度 3 可达）、深度 3 成员不可，故树是有限的。**刻意不覆盖**真实三层 LLM 链，且无法廉价覆盖——脚本化模型无法在嵌套链里于正确时机选出正确的 spawn 调用。 |
 | phase39 | 升级路径：v0.3.0 的 config.toml 遇上 v0.4.x 种子块——每个存量用户必定走一次的路径，此前无覆盖。断言用户真实值在三个层面都幸存（文件文本、宿主解析、加载后的配置）、新增段被加上且全部注释掉、二次种子化是 no-op、全新目录仍拿到完整块。这个探针首跑就抓到一个真缺陷。 |
 | phase37 | 成员 spawn 契约，以及**我们的插件不是成员卡住的原因**：`buildSpawnArgs` 发 `--no-extensions -e <member-messaging.ts>`，成员只加载消息 shim；而加载了整个插件的成员与 bare 成员 settle 得一样快。同时断言 `MemberRpc` 的 stderr 尾部可达——它此前被整体丢弃，这正是 38 次超时查不出原因的原因。 |
 | phase33 | 宿主如何渲染我们工具的输出：工具返回的内容是单行 JSON，而宿主会把它交给 Step Code 0.1.7 重写过的流式 markdown 渲染器（#315/#319）。本探针用我们真实产出的形态驱动该渲染器——单行 search 结果、4000 字符超长单行、含 markdown 敏感字符、多行 batch 流——并断言载荷幸存：不抛错、url/title/状态码等词仍在、超长正文不被吞。比较前先做空白归一化，因为渲染器会按终端宽度折行并填充（这也意味着 `*` `_` `` ` `` `[` `]` 等标记字符会被消费——词与 URL 幸存，断言检查的正是这些） | 零 token（独立运行） |

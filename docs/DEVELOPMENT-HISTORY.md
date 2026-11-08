@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-131，待完成事项清零轮；此前为 plan-130）。
+> 最近更新：2026-11-06（plan-134，U2-U5 清零轮；此前为 plan-131）。
 
 ## 总览
 
@@ -1476,3 +1476,49 @@ throw retryErr === err ? cause : retryErr;
 | 反向验证 | phase28 ×2、phase37 ×2、phase38 ×1、phase39 ×1 |
 | **修复的产品缺陷** | **3 个**（截断标记丢失、MAX_BYTES=0 被忽略、带引号数值/布尔/列表被静默重置） |
 | LLM 层复跑 | 20/20（约 16 次 token，已声明） |
+### 94. U2-U5 清零轮（plan-134）
+
+**用户 prompt**：「[团队方案 · 均衡] …成员名单：队长-张衡(20%)、勘察-李明(25%)、规划-王芳(20%)、执行-赵磊(25%)、审查-陈静(10%)；通信拓扑：star…T1 U2-U5需求勘察与确认（李明），blockedBy：无；T2 技术方案与计划设计（王芳），blockedBy：T1；T3 U2-U5开发与部署（赵磊），blockedBy：T2；T4 质量审查与集成验收（陈静），blockedBy：T3；T5 终审与交付（张衡），blockedBy：T4…请创建合理的计划后做u2 u3 u4 u5事项」。
+
+**组建与执行**：建 zhangheng/liming/wangfang/zhaolei/chenjing 五成员（`model: step-5-preview`；effort 按占比映射为 medium/medium/medium/medium/low），star 拓扑，任务板 T122–T126（blockedBy 链完整）。**李明成功交付**勘察报告（`sandbox/logs/u2u5-t1-survey.md`，155 行，本会话第 3 次成功的成员派发）；王芳派发**超时**（第 49 次），T2–T5 由队长亲自执行。
+
+## 李明的勘察结论（决定了实施范围）
+
+| 项 | 结论 |
+|---|---|
+| U2 plan 档位 live | 机械路径**本可就零成本覆盖**，但 phase24 的脚本 ctx 没有 `modelRegistry`，`generateTeamPlan` 直接放弃 → 「模型返回方案→展示→Accept 注入」**在任何成本下都无覆盖**。真实顺从度才需 key（~4k-8k token） |
+| U3 depth≥3 | 进程级已覆盖（phase8 深度2 / phase37 深度4），但 **phase37 只从深度 0 触发 `canOrchestrate`**，「深度 3 是否可达」这个边界从未被测。真实三层链需 key（~10k-25k）且正是 harness settle 超时高发路径 |
+| U4 多项目并发 | 完全可零成本：socket=`<teamsRoot>/<teamId>/sock`，teamId 由会话文件派生，**与 cwd 无关** |
+| U5 registry 半写 | 完全可零成本：写路径是 `tmp-<pid>`+`renameSync`，target 永不被半写 |
+
+李明还纠正了一点我交给他的前提：他说「假模型不发 tool_call」不准确——phase35 已证明能发。真正的原因是脚本化模型无法在嵌套链里于正确时机选出正确的 spawn 调用。**他是对的**，我按正确理由重述。
+
+## 实施：四个新探针，36 条断言，全部双向反向验证
+
+**phase40（11 断言）— U5 registry 崩溃存活**。孤儿 `.tmp-<pid>` 被加载器忽略、tmp 名按 pid 命名空间、二次 save 整体胜出、截断/空注册表加载为 null。**关键设计**：单线程下 `write tmp; rename` 与 `write target` 终态不可区分——所以第一版探针在有人把 rename 换成 copyFile 后**依然全绿**（反向验证没抓住）。改为用「只读 target」制造可观测差异：rename 能越过 0444 的 target（目录可写），直接写不能。uid 非 root 这条也写成断言而非假定。另明确「损坏→null→静默重建空团队」是**重置不是恢复**，防止绿勾被读成数据回来了。
+
+**phase41（8 断言）— U4 多项目并发**。两会话→两 teamId→两 socket；socket 是 teamId 的纯函数；两个 TeamServer 并发 listen 无 EADDRINUSE 且均 0600；嵌套 team id 在父之下命名空间隔离。
+
+**phase42（6 断言）— U2 plan 档位 happy path**。给脚本 ctx 一个会应答的 `modelRegistry.complete`，追踪固定方案直到 Accept 时进入注入，并验证 Cancel 时不泄漏。**只主张 plumbing**——真实模型是否产出符合档位的方案仍需 key，断言名与头注都写清了这条界线。
+
+**phase43（11 断言）— U3 深度边界**。用真实子进程携带的深度 env 驱动 `buildSpawnArgs`：bound=3 时深度 2 成员可编排（**深度 3 可达**）、深度 3 成员不可，故树有限。真实三层 LLM 链**刻意不覆盖**且无法廉价覆盖，头注明说。
+
+## 过程中修掉的自己的两个错
+
+1. **phase40 第一版的反向验证没抓住注入缺陷**——因为原子性在单线程下不可观测。已用只读 target 修好，两条反向验证（rename→copyFile、catch 返回空团队）现均指名失败。
+2. **phase43 的深度语义 off-by-one**——`planAt(p)` 是「深度 p 的进程的子嗣」，我一度把「深度 N 可达」写成 `planAt(N-1)`，恰好反意。修正后把映射关系写进注释，防止再错。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **38 phase + manifest + 7 live + orphan-check 全绿**（109s） |
+| tsc | **0 错误** |
+| 断言总数 | 712 → **748**（+36） |
+| 新探针反向验证 | **8 次**（每探针 2 次），均指名失败 |
+| `/tmp/config.toml` | 不存在（hermetic） |
+| 真实 key 花费 | **0**（四项全部零成本闭环） |
+
+## 仍未闭环
+
+- **U2 的真实顺从度**（真实模型按档位产出合格方案，~4k-8k token）与 **U3 的真实三层链**（~10k-25k token/条）——二者本质需 key，且 U3 真链正是 harness 派发退化高发路径。**建议在派发退化解决前不做**，已在探针头注与 HANDOFF 中注明，避免绿勾被过度解读。
