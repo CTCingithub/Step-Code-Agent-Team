@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-06（plan-134，U2-U5 清零轮；此前为 plan-131）。
+> 最近更新：2026-11-08（plan-135，付费测试轮；此前为 plan-134）。
 
 ## 总览
 
@@ -1522,3 +1522,51 @@ throw retryErr === err ? cause : retryErr;
 ## 仍未闭环
 
 - **U2 的真实顺从度**（真实模型按档位产出合格方案，~4k-8k token）与 **U3 的真实三层链**（~10k-25k token/条）——二者本质需 key，且 U3 真链正是 harness 派发退化高发路径。**建议在派发退化解决前不做**，已在探针头注与 HANDOFF 中注明，避免绿勾被过度解读。
+### 95. 付费测试轮：真实三层派发链与档位顺从度（plan-135）
+
+**用户 prompt**：「[团队方案 · 性能] …成员名单：队长（统筹/高）；策略师A（测试设计/高）；策略师B（测试设计/高）；执行员（环境与执行/高）；审计员（结果验证/高）。通信拓扑：custom…任务1 需求确认（队长）；2 测试方案V1（策略师A，blockedBy 1）；3 测试方案V2（策略师B，blockedBy 1）；4 环境搭建（执行员，blockedBy 1）；5 方案择优（队长，blockedBy 2,3）；6 测试执行（执行员，blockedBy 5）；7 结果验证（审计员，blockedBy 6）；8 报告与确认（队长，blockedBy 4,7）。同意测试付费测试项目」。
+
+**组建与执行**：建 captain/strategist-a/strategist-b/runner/auditor 五成员（`model: step-5-preview`、effort high），**custom 拓扑**（队长统一对外；strategist-a↔b 竞速互通；runner↔auditor 验证回路），任务板 T127–T134（blockedBy 链完整）。三路派发**全部超时**（本会话第 50/51/52 次），T2–T8 由队长亲自执行。
+
+**总计费 48,029 token**（预算 ≤60k）：U2 八次 `modelRegistry.complete` 14,492；U3 两条链 20,081 + 13,456。密钥泄漏扫描 5 份报告**零命中**；4xx 未重试（DeepSeek chat 401 直接记为未通过，符合计费诚实）。
+
+## U3 真实三层派发链：通过
+
+`leader → tier1 → tier2 → tier3` 真实成立：
+
+- **进程链**：`teams/paidu3b` → `teams/team-paidu3b-tier1` → `teams/team-team-paidu3b-tier1-tier2`，前两者 registry+sock 均落盘
+- **tier3 真实跑回合并真实回复**：宿主记录的 `team_send` toolResult 含 `usage:{input:3793,output:8,turns:1}` 与 `fullText:"THREETIER-7"`
+- 23.8s、tier1 3 turns、13,456 token；**未触发 settle 超时**
+- 深度语义正确：tier3 无自己的 team 目录——`maxRecursionDepth=3` 时 `3<3` 为假，tier3 是 `--no-extensions` 的隔离叶节点，与 phase43 断言一致
+
+**方法论（本轮最值得留传的）**：特征串会同时出现在**指令参数**、**tier3 的 prompt 文件**、**顶层回复**三处，所以「顶层回复含特征串」**不能**作为判据——它可能只是指令在层间转述。唯一可靠的观测点是**宿主记录的 toolResult**（`details.usage.turns` + `details.fullText` + `details.member`），模型无法伪造那一层。本轮靠它排除了过度声称；现场也确实**没有 tier3 的会话文件**（隔离叶节点不建 team），若只采信顶层回复就会误判。
+
+## U2 真实顺从度：实质通过，但不可机械门禁化
+
+8 样本成员数单调递增，且只有 performance 自发引入 racing：
+
+| 档位 | 样本1 | 样本2 | 拓扑 |
+|---|---|---|---|
+| economic | 2 | 2 | star |
+| fast | 3 | 3 | star |
+| balanced | 5 | 4 | star |
+| performance | 7 | 6 | **mesh/custom + 竞速** |
+
+**但机械判据三轮都不稳**：① 正则「N 个成员」——balanced 写法是 `Roster: Lead Mira (coordinator, 20%); …`，提得 0 误判 FAIL；② 任务行去重负责人——输出格式变（`— Ravi`/`Fixer:`/`（探路者）`/`[SmokeTestAnalyst]`）仍提不满；③ 放宽——第二轮四档全变短只 2/4 判对。
+
+**根因**：plan 输出是自由文本，句式逐次不同，轮间方差极大（同档 999 → 277 字符）。**结论：实质通过（人工阅卷），不可机械门禁化**；门禁能守住的只有 plumbing（phase42 已覆盖）。这与「不加插件键、用文档+探针覆盖」的既有决策一致，且多一层证据：**即便加探针也没有稳定判据**。
+
+## 对既有结论的修正
+
+1. **U3 真实链可行**（此前标记"建议延后，高风险"）——实际 13k–20k token、24–49s，且未触发 settle 超时，因为走的是产品插件的 TeamManager 而非 harness 的 team_send。进一步印证「退化在 harness 不在本仓库」。
+2. **U2 不可机械门禁化**是新结论，记入 HANDOFF 以免后人再花 token 尝试。
+
+## 附带确认（非缺陷）
+
+第一版直接 `fetch` DeepSeek `/v1/chat/completions` 得 **401**：`sandbox/config.toml` 里那个 key 是 search/fetch 工具的凭证而非 chat 凭证。真实路径必须经宿主 `ctx.modelRegistry.complete`（step provider + STEP_API_KEY）——那才是 `generateTeamPlan` 实际走的路。
+
+## 仍未闭环
+
+- 样本量小（U3 n=2、U2 n=2 轮）；要统计显著性需多跑，成本线性增长
+- U3 的 tier3 只有宿主 toolResult 一手证据，无会话级证据
+- harness 侧派发退化（累计 52 次 settle 超时）——外部，不在本仓库
