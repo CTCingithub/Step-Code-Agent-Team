@@ -150,23 +150,41 @@ debug = false                        # 调试日志
 
 成员动态获知可通知的邻居：`topo_team_msg` 被拒时会列出可用队友（server 按发送方身份返回 `mayMessage` 列表），`stepcode-team status` 亦可从 shell 查询。
 
-## 自动压缩（`[compaction]`，Step Code 0.1.7）
+## 自动压缩（`[compaction]`，Step Code 0.1.8）
 
 Step Code 会在会话上下文逼近模型窗口时自动压缩。自 0.1.7 起，触发条件是**上下文窗口的比例**而非固定预留，且配置在 **Step Code 自己的统一配置**里——**不在**本插件的表中：
-
 ```toml
 [compaction]
 triggerPolicy = "v2"            # 或 "legacy"（旧的固定预留行为）
-triggerRatio = 0.9              # 0 < 比例 <= 0.95；默认 0.9
+triggerRatio = 0.85             # 0 < 比例 <= 0.95；**0.1.8 起默认 0.85**（原 0.9）
 modelTriggerRatios = { "step/step-5-preview" = 0.8 }   # 按 provider/model 覆盖
 tokenLimit = 120000             # 绝对上限；只能让压缩更早触发
+contextProjection = "off"       # "off"（原生摘要压缩，**0.1.8 起默认**）
+                                # | "clm-v1"（选择性启用 CLM）| "lightweight-v1"
 ```
 
 非法值会**回落默认值**并进入 settings diagnostics，不会让运行失败。
 
+**0.1.8 改了三个默认值**，全部在上游侧、均非插件键：
+
+- `triggerRatio` **0.9 → 0.85**，为估算误差留更多余量，避免请求超出窗口；
+- `contextProjection` **`clm-v1` → `off`**，即原生摘要压缩成为默认，CLM 改为选择性启用
+  （`contextProjection = "clm-v1"`、`--context-projection clm-v1` 或 `/clm on`）。上游给了实测理由：
+  逼近满窗时 CLM 的维护请求要携带几乎整个上下文（1M 窗口下约 975K token）却只省约 12%，
+  导致提示变慢——930K token 会话上原生压缩 16–19s，而 CLM 47–72s；
+- 提示大小估算改为按 **UTF-8 字节数**而非 JavaScript 字符数——旧的 `length / 4` 启发式把一个汉字
+  算作 0.25 token，而网关实际计约 0.61，这正是近窗请求会超限的原因。
+
+0.1.8 另新增：`retry.provider.streamIdleTimeoutMs`（默认 300000，超过该时长没有解析出事件的流会被取消），
+以及 `compaction.autoClm.coldMaxPrefillTokens`（默认 262144，无法复用缓存前缀时跳过自动 CLM 维护请求）。
+
+> **上游自身的不一致，记录而不替其断言**：0.1.8 changelog 说 `contextProjection` 默认改为 `off`，
+> 但 `packages/coding-agent/src/core/settings-manager.ts` 的 `getContextProjectionMode()`
+> 在压缩开启且未显式设置时仍返回 `"clm-v1"`。**实际行为以代码为准**；本插件两个值都不设，故不受影响。
+
 **为什么这与团队相关**：成员进程以队长的环境启动（含 `STEP_CODING_AGENT_DIR`），因此与队长读写**同一份**全局 `config.toml`。你在这里设的内容对队长和每个成员**一视同仁**——没有插件级键可设，加一个也只会给同一行为制造两个真相来源。相位探针钉住了这个继承关系（phase32 的 "spawn env"），将来重构无法悄悄破坏它。
 
-旧的固定预留在 64K 窗口下约 74% 触发，在 1M 窗口下却要到 ~98%；比例默认值 0.9 在两种窗口下都留有余量。长团队会话中，成员报告加任务板会很快填满窗口——想更早压缩就调低 `triggerRatio` 或设 `tokenLimit`。
+旧的固定预留在 64K 窗口下约 74% 触发，在 1M 窗口下却要到 ~98%；比例默认值在两种窗口下都留有余量。长团队会话中，成员报告加任务板会很快填满窗口——想更早压缩就调低 `triggerRatio` 或设 `tokenLimit`。
 
 ## `.topo/` 与落盘加密（v0.4.0）
 

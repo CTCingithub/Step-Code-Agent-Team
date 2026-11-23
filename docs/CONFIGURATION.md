@@ -154,7 +154,7 @@ Topology shapes (declared with `team_set_topology` after creating members, befor
 
 Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejection lists the allowed teammates (the server returns the `mayMessage` list for the sender's identity), and `stepcode-team status` reports the same from a shell.
 
-## Automatic compaction (`[compaction]`, Step Code 0.1.7)
+## Automatic compaction (`[compaction]`, Step Code 0.1.8)
 
 Step Code compacts a session's context automatically when it approaches the
 model's window. Since 0.1.7 the trigger is a **ratio of the context window**
@@ -164,13 +164,42 @@ config — **not** in this plugin's table:
 ```toml
 [compaction]
 triggerPolicy = "v2"            # or "legacy" (the old fixed-reserve behaviour)
-triggerRatio = 0.9              # 0 < ratio <= 0.95; default 0.9
+triggerRatio = 0.85             # 0 < ratio <= 0.95; DEFAULT 0.85 since 0.1.8 (was 0.9)
 modelTriggerRatios = { "step/step-5-preview" = 0.8 }   # per provider/model override
 tokenLimit = 120000             # absolute ceiling; can only trigger EARLIER
+contextProjection = "off"       # "off" (native summary compaction, DEFAULT since
+                                # 0.1.8) | "clm-v1" (opt-in CLM) | "lightweight-v1"
 ```
 
 Invalid values fall back to the defaults and are reported as settings
 diagnostics — they never fail the run.
+
+**0.1.8 changed three defaults**, all upstream-side and none of them plugin keys:
+
+- `triggerRatio` **0.9 → 0.85**, leaving more room for estimation error before a
+  request can exceed the window;
+- `contextProjection` **`clm-v1` → `off`**, i.e. native summary compaction is now
+  the default and CLM is opt-in (`contextProjection = "clm-v1"`,
+  `--context-projection clm-v1`, or `/clm on`). Upstream measured the reason:
+  near a full window CLM's maintenance request carried almost the whole context
+  (~975K tokens at a 1M window) to save ~12%, so prompts ran 47–72s against
+  16–19s for native compaction on a 930K-token session;
+- prompt-size estimation now counts **UTF-8 bytes** rather than JavaScript
+  characters — the old `length / 4` heuristic priced a Han character at 0.25
+  token while the gateway bills ~0.61, which is what made near-window requests
+  overshoot.
+
+Also new in 0.1.8: `retry.provider.streamIdleTimeoutMs` (default 300000) cancels
+a provider stream that produces no parsed event for that long, and
+`compaction.autoClm.coldMaxPrefillTokens` (default 262144) skips an automatic-CLM
+maintenance request that cannot reuse the cached prefix.
+
+> **Upstream inconsistency, recorded rather than resolved**: the 0.1.8 changelog
+> says `contextProjection` now defaults to `off`, and
+> `SettingsManager.getContextProjectionMode()` in
+> `packages/coding-agent/src/core/settings-manager.ts` still returns `"clm-v1"`
+> when compaction is enabled and no explicit mode is set. The shipped behaviour
+> follows the code; this plugin sets no key either way, so it is unaffected.
 
 **Why this matters to a team**: members are spawned with the leader's
 environment (`STEP_CODING_AGENT_DIR` included), so they read the **same** global
@@ -180,7 +209,7 @@ only create two sources of truth for the same behaviour. A probe pins the
 inheritance so a future refactor cannot quietly break it (phase32, "spawn env").
 
 The old fixed reserve triggered at ~74% of a 64K window but ~98% of a 1M window;
-the ratio default of 0.9 leaves headroom on both. Lower `triggerRatio` (or set
+the ratio default leaves headroom on both. Lower `triggerRatio` (or set
 `tokenLimit`) to compact earlier on long team runs, where a member's report plus
 the task board can fill a window quickly.
 

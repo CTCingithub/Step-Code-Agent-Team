@@ -74,7 +74,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39 40 41 42 43）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39 40 41 42 43 44）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -123,10 +123,11 @@ runner 统计这些行并把结果写进 `test/smoke/assertion-counts.txt`：某
 | phase40 | 团队注册表的崩溃存活：写入是 tmp+rename，target 永不被半写；孤儿 `.tmp-<pid>` 被加载器忽略；截断或空的注册表加载为 null——而 forSession 会据此静默重建一个**空**团队。最后一条正是防止「加载为 null」被读成「恢复」的断言：数据按设计就没了（注册表是临时状态）。只读 target 那条让原子性**变得可观测**：`write tmp; rename` 能越过 0444 的 target，而直接写不能。 |
 | phase41 | 同一 agentDir 下两个团队不冲突：两个会话文件给出两个 teamId、因而两个 socket（`<teamsRoot>/<teamId>/sock`），且**与 cwd 无关**；两个 TeamServer 可并发 listen（无 EADDRINUSE）且两个 socket 均为 0600；嵌套团队 id 在其父之下命名空间隔离。隔离是 teamId 的纯函数，所以这是护栏而非运气。 |
 | phase42 | plan 档位的 happy path——P2-8e 中**此前在任何成本下都无覆盖**的那一半。phase24 驱动确认链但其脚本 ctx 没有 modelRegistry，故 generateTeamPlan 直接放弃、只展示档位回退。此处脚本 complete() 返回固定方案，并追踪它直到 Accept 时进入注入，同时验证 Cancel 时不泄漏。**只主张 plumbing**：真实模型是否产出符合档位的方案仍需 key。 |
+| phase44 | `/topo` 命令把参数逐字转发——**断言在插件自己的调用上，不在宿主的输出上**。它过去靠 grep RPC 流里的请求文本来断言，那时能成立是因为宿主会回显用户消息；上游 #318 移除了该回显（独特字符串的普通 prompt 现在毫不留痕，且不涉及任何插件），于是那条检查是在断言一个上游发射细节，并因与插件无关的原因失败。本探针用假 ExtensionAPI 驱动真实命令 handler，直接读传给 `sendUserMessage` 的字符串：裸参数原样、空格保留（旧 grep 分不清「保留」与「被压掉」）、tier token 被消耗故 `balanced fix it` 发出去的是 `fix it`、无参数则什么都不发、`off` 只反激活不转发。 |
 | phase43 | 团队树究竟能到多深——决定深度 3 是否可达的那个边界，phase37 从未触及（它只从深度 0 触发 canOrchestrate）。用真实子进程会携带的深度 env 驱动：bound=3 时深度 2 成员可编排（深度 3 可达）、深度 3 成员不可，故树是有限的。**刻意不覆盖**真实三层 LLM 链，且无法廉价覆盖——脚本化模型无法在嵌套链里于正确时机选出正确的 spawn 调用。 |
 | phase39 | 升级路径：v0.3.0 的 config.toml 遇上 v0.4.x 种子块——每个存量用户必定走一次的路径，此前无覆盖。断言用户真实值在三个层面都幸存（文件文本、宿主解析、加载后的配置）、新增段被加上且全部注释掉、二次种子化是 no-op、全新目录仍拿到完整块。这个探针首跑就抓到一个真缺陷。 |
 | phase37 | 成员 spawn 契约，以及**我们的插件不是成员卡住的原因**：`buildSpawnArgs` 发 `--no-extensions -e <member-messaging.ts>`，成员只加载消息 shim；而加载了整个插件的成员与 bare 成员 settle 得一样快。同时断言 `MemberRpc` 的 stderr 尾部可达——它此前被整体丢弃，这正是 38 次超时查不出原因的原因。 |
-| phase33 | 宿主如何渲染我们工具的输出：工具返回的内容是单行 JSON，而宿主会把它交给 Step Code 0.1.7 重写过的流式 markdown 渲染器（#315/#319）。本探针用我们真实产出的形态驱动该渲染器——单行 search 结果、4000 字符超长单行、含 markdown 敏感字符、多行 batch 流——并断言载荷幸存：不抛错、url/title/状态码等词仍在、超长正文不被吞。比较前先做空白归一化，因为渲染器会按终端宽度折行并填充（这也意味着 `*` `_` `` ` `` `[` `]` 等标记字符会被消费——词与 URL 幸存，断言检查的正是这些） | 零 token（独立运行） |
+| phase33 | 宿主如何渲染我们工具的输出：工具返回的内容是单行 JSON，而宿主会把它交给 Step Code 0.1.8 重写过的流式 markdown 渲染器（#315/#319）。本探针用我们真实产出的形态驱动该渲染器——单行 search 结果、4000 字符超长单行、含 markdown 敏感字符、多行 batch 流——并断言载荷幸存：不抛错、url/title/状态码等词仍在、超长正文不被吞。比较前先做空白归一化，因为渲染器会按终端宽度折行并填充（这也意味着 `*` `_` `` ` `` `[` `]` 等标记字符会被消费——词与 URL 幸存，断言检查的正是这些） | 零 token（独立运行） |
 | phase32 | Step CLI 契约：`step --help` 记录了 `extensions/members.ts` 建成员时传入的每个参数（`--mode`/`--session-id`/`--session-dir`/`--no-extensions`/`--extension`/`--append-system-prompt`/`--approval-mode`/`--model`/`--thinking`/`--tools`）、解析到的二进制报告版本号、`--approval-mode` 仍拒绝已退役的取值（`strict`）并提示 `confirm, auto`、`-e`/`--extension` 仍是加载扩展的拼写。它堵住的缺口是：上游若静默移除某参数，此前只会在 live 轮才暴露 | 零 token（独立运行） |
 | phase30 | 协作记录：内容与文件布局、幂等、三种落盘形态（加密 / 因关闭而明文 / 因无密钥而明文）、`records.enabled=false`、自定义 `records.dir`、配置面与种子块、`.topo` 损坏时的降级 | 零 token（独立运行） |
 | phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言选项顺序恰为 `Accept / Cancel / Other`、Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、空提交按原样接受、**输入被关闭**（Esc/超时→undefined）与 Cancel 完全同果、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |

@@ -55,7 +55,7 @@ fi
 # which makes step stage the repo package into the agent dir and load a second
 # copy of index.ts: a fatal tool-name conflict. These probes don't need the
 # team extension, so don't load it.
-STANDALONE_PHASES="15 16 23 24 28 30 31 32 33 42"
+STANDALONE_PHASES="15 16 23 24 28 30 31 32 33 42 44"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
 KEY_PHASES="5 36"
@@ -238,9 +238,18 @@ rm -rf "$PKGDIR"
 # happened but its toast was coalesced away, and the verbatim request was then
 # completed solo — zero team tool calls), and since 0.2.0 the request is
 # forwarded VERBATIM as a real user message — what lands in the transcript is
-# exactly what the user typed (asserted on the delivered user-message event);
-# the team-usage instruction is injected request-locally through the context
-# event and never appears in the transcript.
+# exactly what the user typed. The verbatim guarantee itself is asserted by
+# phase44, which drives the real command handler through a fake ExtensionAPI and
+# reads the exact string handed to sendUserMessage; that is stronger than any
+# host-side grep and does not depend on the host echoing anything.
+#
+# It used to be asserted HERE, by grepping the RPC stream for the request text.
+# Upstream #318 ("write a session record of facts, not replayed progress")
+# removed that echo: a plain prompt with a distinctive string now leaves no trace
+# in RPC output at all, with no plugin involved — verified before changing this.
+# So this check was asserting an upstream emission detail, and it failed for a
+# reason unrelated to this plugin. What it still owns is the real-host half:
+# the command activates, announces the forward, and the host accepts it.
 LIVE3="$(mktemp -d)"
 mkdir -p "$LIVE3/sessions"
 fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo ping-forward-check"}\n' \
@@ -254,8 +263,11 @@ elif ! echo "$fwd_out" | grep -q 'forwarding your request to the agent'; then
   echo "live-args-forward: FAILED (no forwarding announcement on the team board)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
-elif ! echo "$fwd_out" | grep -q '"text":"ping-forward-check"'; then
-  echo "live-args-forward: FAILED (request was not forwarded verbatim as a user message)"
+elif ! echo "$fwd_out" | grep -q '"command":"prompt","success":true'; then
+  # The forward is a queued user message; a throw inside sendUserMessage would
+  # surface as a warning notify and a failed prompt, so host acceptance is the
+  # observable proof that the forward was delivered rather than dropped.
+  echo "live-args-forward: FAILED (the host did not accept the forwarded prompt)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
 else
@@ -263,17 +275,19 @@ else
 fi
 rm -rf "$LIVE3"
 
-# /topo review: the command activates and forwards the target verbatim (the
-# review-protocol instruction is injected request-locally and never logged).
+# /topo review: the command activates and the host accepts the forwarded target
+# (the review-protocol instruction is injected request-locally and never logged).
+# Same upstream-echo caveat as live-args-forward above; the verbatim half lives
+# in phase44.
 LIVE5="$(mktemp -d)"
 mkdir -p "$LIVE5/sessions"
 rev_out="$(cd "$LIVE5" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo review ping-review-check"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE5/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-review --session-dir "$LIVE5/sessions" -a 2>&1)" || true
-if echo "$rev_out" | grep -q 'Topology Agent Team activated' && echo "$rev_out" | grep -q '"text":"ping-review-check"'; then
+if echo "$rev_out" | grep -q 'Topology Agent Team activated' && echo "$rev_out" | grep -q '"command":"prompt","success":true'; then
   echo "live-review: OK"
 else
-  echo "live-review: FAILED (the /topo review command did not activate and forward verbatim)"
+  echo "live-review: FAILED (the /topo review command did not activate and forward)"
   echo "$rev_out" | tail -5
   FAILED+=("live-review")
 fi

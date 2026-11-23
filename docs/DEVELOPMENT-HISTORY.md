@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-08（plan-136，两项架构决策定案轮；此前为 plan-135）。
+> 最近更新：2026-11-23（plan-137，沙箱升级 0.1.8 与上游能力比对轮；此前为 plan-136）。
 
 ## 总览
 
@@ -1614,3 +1614,73 @@ throw retryErr === err ? cause : retryErr;
 用户明确「先不发版」，故 **v0.4.x 发版继续挂着**（前置已全部满足：LLM 层 20/20、38 phase 全绿、tsc 0、无破坏性契约变更）。
 
 **验证**：本轮无代码改动，`tsc 0`、全量门禁 38 phase 全绿（101s）复跑确认无回归。
+### 97. 沙箱升级 0.1.8 与上游能力比对轮（plan-137）
+
+**用户 prompt**：「step code已经更新，请创建合理的计划，更新沙箱环境，检查接口是否更新，是否有官方已经实现的功能要避免重复，是否可以进一步优化。完成修改后，告诉我那些项目需要手动测试」。
+
+**执行**：队长按五步执行（更新沙箱 → 接口扫描 → 官方功能比对 → 优化 → 汇报）。**总计费 0 token**（全零成本闭环）。
+
+## 一、沙箱升级：29eb4607 → 414416e2f（构建 0.1.7 → 0.1.8）
+
+上游领先 **34 提交 / 177 文件**（2026-11-03 → 11-21）。以 `STEPCODE_BUILD_VERSION=0.1.8` 重建（19s 增量），`resolve_step_bin` 解析到本地构建、版本 0.1.8；PATH 上的全局 step 亦为 0.1.8（11-23 安装，与"已更新"吻合）。submodule 指针已提交（`3ba6ec7`）。
+
+## 二、接口扫描：完全兼容
+
+| 面 | 结论 |
+|---|---|
+| tsc 全导入图 | **0 错误** |
+| CLI flag | 我们传入的 9 个全部仍被 `--help` 记录；`--approval-mode` 仍只有 `confirm`/`auto`（phase32 的"strict 被拒"断言仍有效） |
+| RPC 事件 | `agent_settled`/`message_end`/`entry_appended`/`extension_ui_request`/`session_start`/`session_shutdown` 全部仍发射 |
+| 扩展 API | `registerTool`/`registerCommand`/`setUnavailableTools`/`getActiveTools`/`setActiveTools`/`sendUserMessage` 全部在位 |
+| 新 UI 方法 | `setStatus`/`setWorkingMessage` 为 fire-and-forget，无需响应，探针不用改 |
+
+## 三、唯一影响到我们的上游行为变更：#318 移除 RPC 用户消息回显
+
+升级后 `live-args-forward` 与 `live-review` 失败。**先证明是上游变更而非我们的回归**：不经插件、直接 prompt 一个独特字符串（`PLAINPROBE-xyz`），新宿主的 RPC 输出里**同样零痕迹**（只有 1 个 `step.activity_capabilities` entry_appended）。根因是 #318「写会话事实记录而非回放进度」。
+
+runner 原来靠 grep 该回显断言"逐字转发"——那是在断言一个上游已不再发射的细节。
+
+**修法（比原来更强）**：新增 **phase44**（8 断言，standalone），用假 ExtensionAPI 驱动**真实命令 handler**，直接读传给 `sendUserMessage` 的字符串。覆盖：裸参数逐字、空格保留、tier token 消耗其余作为 request、无参数不乱发、`off` 不转发。live 检查只保留它本该管的真实宿主半边（激活 + 转发宣告 + 宿主接受 prompt）。
+
+**反向验证**：把转发时的空格压掉 → phase44 指名失败 2 处（"spaces are preserved"、"tier token is consumed"）。
+
+## 四、官方已实现功能比对：search 有交集但**差集正是我们存在的理由**
+
+上游 #364 把 `search_web` 改成有序候选链（StepFun 端点 + tavily/tinyfish/exa/firecrawl/parallel 免费候选）：
+
+| 维度 | 上游 `search_web` | 我们 `bin/topo-search.mjs` |
+|---|---|---|
+| 参数 | **仅 `query`** | `--query --count(1-5) --need-content` |
+| 结果条数 | 固定 **10** | 可配 1–5 |
+| 摘要上限 | **400 字符** | 服务方给（DeepSeek 实测 ~1373） |
+| **网页全文** | **无**（全仓 `need_content` 零命中） | **有**（实测 0→1442 字符） |
+| **任意 URL 抓取** | **无独立 fetch 工具** | **有** `fetch --url` |
+| 端点 | StepFun MCP + 免费候选 | **厂家无关**，凭证用户自配 |
+
+**结论：不重复，保留。** #364 让无凭证会话也能搜索，但**不改变差集**——免费候选同样只给摘要。
+
+`[compaction]` 维持"不加插件键"决策，并把 0.1.8 的新默认值写进 CONFIGURATION(_CN)：`triggerRatio` 0.9→**0.85**、`contextProjection` `clm-v1`→**`off`**（原生摘要压缩成默认；上游实测 930K 会话上 CLM 47–72s vs 原生 16–19s）、提示估算改按 **UTF-8 字节**、新增 `retry.provider.streamIdleTimeoutMs`(300000) 与 `compaction.autoClm.coldMaxPrefillTokens`(262144)。
+
+**记录一处上游自身不一致**（不替其断言）：changelog 说 `contextProjection` 默认改 `off`，但 `settings-manager.ts` 的 `getContextProjectionMode()` 未显式设置时仍返回 `"clm-v1"`。实际行为以代码为准；本插件两值都不设，不受影响。
+
+其余上游新能力（`AgentSession.submit` #363、`/ps`+`/subagents` #351、subagent 批默认固定 8 #350、会话级定时任务 #352、执行轨迹、工具调用计时、git runtime-context、provider 流空闲看门狗）**均无重复，也无需对接**。
+
+## 五、优化：无可删的重复实现
+
+- 我们的工具输出截断已用 `Buffer.byteLength(text,"utf8")`（`tools.ts:51`），与上游新的字节算法一致，phase16 有"4 bytes omitted"断言；
+- 配置一律走宿主 `readStepConfig`，无自制 TOML 解析（phase31 的 minimal reader 是探针断言种子文本用，可接受）；
+- 上游虽导出 `textUtf8ByteLength`，但与 `Buffer.byteLength` 等价，为一个相同操作加 import 不划算；
+- 覆盖审计：21 个模块全部有探针引用（`team/errors.ts` 经 members.ts 薄桶间接覆盖），CLI 参数全覆盖，**无缺口**。
+
+**故本轮的优化实质是"消除一处脆弱断言 + 同步一处滞后文档"，而非删代码。**
+
+## 六、验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **39 phase + manifest + 7 live + orphan-check 全绿**（94s） |
+| tsc | **0 错误** |
+| 断言总数 | 748 → **756**（phase44 +8） |
+| 反向验证 | phase44 ×1（压空格 → 指名失败 2 处） |
+| 真实 key 花费 | **0** |
+| 文档同步 | sandbox/README(_CN) pin+版本、HANDOFF 架构地图、TESTING(_CN) phase33 宿主版本、CONFIGURATION(_CN) compaction 段 |
