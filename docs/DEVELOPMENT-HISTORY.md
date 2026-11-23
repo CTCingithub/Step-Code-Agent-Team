@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-11-23（plan-137，沙箱升级 0.1.8 与上游能力比对轮；此前为 plan-136）。
+> 最近更新：2026-11-23（plan-138，0.1.8 接口审计与缺口补齐轮；此前为 plan-137）。
 
 ## 总览
 
@@ -1684,3 +1684,74 @@ runner 原来靠 grep 该回显断言"逐字转发"——那是在断言一个�
 | 反向验证 | phase44 ×1（压空格 → 指名失败 2 处） |
 | 真实 key 花费 | **0** |
 | 文档同步 | sandbox/README(_CN) pin+版本、HANDOFF 架构地图、TESTING(_CN) phase33 宿主版本、CONFIGURATION(_CN) compaction 段 |
+### 98. 0.1.8 接口审计与缺口补齐轮（plan-138）
+
+**用户 prompt**：「[团队方案 · 性能] …成员名单：AgentLead（队长/集成，high）；EnvUpdater（环境，medium）；InterfaceAuditor（接口审计，high）；CodeRefactor（重构，high）；ParallelOptimizer（优化竞速，high）；QAAnalyst（测试，medium）。通信拓扑：star。任务1 EnvUpdater更新沙箱环境并验证依赖兼容性；2 InterfaceAuditor解析step code变更并输出接口影响报告；3 InterfaceAuditor比对官方功能与项目代码，输出去重与缺口清单（blockedBy 2）；4 CodeRefactor按清单执行去重并迁移至官方能力（blockedBy 3）；5 ParallelOptimizer基于新环境独立提交优化与性能方案（blockedBy 1）；6 AgentLead择优合并任务4与5成果并落地最终改动（blockedBy 4,5）；7 QAAnalyst执行全量回归，梳理并输出必须手动测试项清单（blockedBy 6）；8 AgentLead汇总更新报告、风险与手动测试清单（blockedBy 7）。step code已经更新，请创建合理的计划，更新沙箱环境，检查接口是否更新，是否有官方已经实现的功能要避免重复，是否可以进一步改进优化项目。完成修改后，告诉我那些项目需要手动测试」。
+
+**组建与执行**：建 agent-lead/env-updater/iface-auditor/code-refactor/par-opt/qa-analyst 六成员（`model: step-5-preview`；effort 按方案：high/high/high/high/high/medium），star 拓扑，任务板 T135–T142（blockedBy 链完整）。两路派发**超时**（本会话第 55/56 次），T1–T8 由队长亲自执行。
+
+## 一、环境复核（T1）：无需重装
+
+- submodule pin `414416e2f` 确为 `origin/main` 尖端、工作树干净、本地构建 0.1.8、`resolve_step_bin` 解析到本地构建；
+- **`pnpm-lock.yaml`/`package.json` 在两 pin 间无 diff**——上游 34 提交未改任何依赖；`node_modules` 时间戳（今天 14:06）新于源码最后改动（11-21）；
+- `@step-harness/coding-agent` 可导入 **479 个导出**，tsc 全导入图 **0 错误**；
+- 零成本预检：假模型端点 + TeamManager 派发 **36ms settle、0 token**。
+
+## 二、接口审计（T2）：无破坏性变更，一处语义需注意
+
+- 扩展 API 六方法、`ExtensionContext`、CLI 九 flag（含 `--approval-mode` 仍 confirm/auto）全部有效；
+- `ExtensionUI` 新增 `setStatus`/`setWorkingMessage`/`editor`——**`setStatus` 是 fire-and-forget**（`rpc-mode.ts:195-204` 注释明写），探针无需应答；
+- **`session_shutdown` 现有三种 reason**（`reload`/可变/`quit`，见 `agent-session-runtime.ts:258/534` 与 `agent-session.ts:4377`）——我们的 handler 对每种都会杀成员，**正确但此前无断言**；
+- 系统性排查"上游撤回的依赖"：除 #318 移除 RPC 回显外无其他。
+
+## 三、缺口清单（T3）：7 个候选全部不迁移
+
+| 候选 | 不迁移理由 |
+|---|---|
+| `--exclude-tools` | 是对 allowlist 的**过滤**，语义不等价；phase37 已钉住 `--tools` |
+| `--tool-override` | 改审批级别，与 `--approval-mode auto` 叠加出难推理组合 |
+| `setStatus` | 状态栏常驻 vs 团队板一次性快照 |
+| `AgentSession.submit` | 不提供 `agent_settled` 与 usage delta |
+| `streamIdleTimeoutMs` | 层次不同，我们的更严（10s vs 300s） |
+| `--no-builtin-tools` 等 4 个 | 无实测数据支持，标"未验证、暂缓" |
+| `--provider` | 不适用 |
+
+**但找到两个真实缺口**：C1 `session_shutdown` 多 reason 无覆盖；C2 `--tools` 空值时**不传**且 `topo_team_msg` 也不会进白名单（省略 `tools` 的调用方会得到无法通信的成员）。
+
+## 四、重构（T4）：零产品代码改动，只补探针
+
+新增 `test/smoke/phase45.ts`（12 断言，standalone）覆盖 C1/C2：
+- 空 tool list 不传 `--tools`、也拿不到 `topo_team_msg`（记为既定契约）；
+- 非空 list 构建 allowlist 且 `topo_team_msg` 必在其中、调用方 tools 保留；
+- 子队长团队工具只在可编排时加入（`canOrchestrate = childDepth < maxRecursionDepth`）；
+- `shutdown` 在 `reload`/`quit`/`new` 三种 reason 下都清空成员。
+
+**实施中修掉自己的一个错**：初版把"能编排的成员"设成 depth-0 队长子嗣，而默认 `maxRecursionDepth=1` 时 `1<1` 为假，队长子嗣本就不能编排——与 plan-134 的 phase43 off-by-one 同类，已把 `plan(p)` 语义写进注释。
+
+**双向反向验证**：空 tools 也构建 allowlist → 指名失败 2 处；allowlist 去掉 `topo_team_msg` → 指名失败 1 处。
+
+## 五、优化竞速（T5）：最大候选被自我推翻
+
+T5 假设"38 phase × 2s 退出等待 = 76 秒浪费"，A/B 实测只差 **59ms**——那 2s 绝大部分是 step 会话启动开销。**假设不成立，未改。** 若当时改 38 个文件，收益近零而 diff 噪音巨大。
+
+结构性优化亦无可做项：`index.ts` 全文只 1 处 `existsSync`、`getConfig()` 有缓存、三个大文件用户已拍板不拆。
+
+T5 另发现一个真实盲区：诊断探针漏写 `import type { ExtensionAPI }` 时，runner 报 `fails=0` 却判失败、`probe_log` 全空——**runner 不跑 tsc**，类型错误的探针会变成谜之失败。建议加一次前置 tsc 检查（门禁 ~100s→~110s），本轮未实施。
+
+## 六、择优合并（T6）：无冲突
+
+T4 与 T5 都**零产品代码改动**，且都诚实判定"无可迁移、无可删、无可优化"，并写明不改成理由。**两个独立方向用不同方法得出同一结论，比单一方向说"没问题"可信得多。**
+
+## 七、回归（T7）
+
+| 项 | 结果 |
+|---|---|
+| tsc | **0 错误** |
+| 全量零 token 门 | **40 phase + manifest + 7 live + orphan-check 全绿**（124s） |
+| 断言基线 | 756 → **768**（phase45 +12） |
+| 反向验证 | phase45 ×2，均指名失败 |
+| 探针质量 | 恒真零命中；**过窄断言发现并修掉 1 处**（如上）；覆盖缺口 C1/C2 已补 |
+
+## 八、结论
+
+**本轮的正确结论是"没有可做的迁移与优化"。** 五项独立工作指向同一结论，唯一实质增量是两个此前无覆盖的边界探针（phase45，12 断言）。

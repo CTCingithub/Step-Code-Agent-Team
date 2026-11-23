@@ -74,7 +74,7 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39 40 41 42 43 44）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39 40 41 42 43 44 45）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
@@ -123,6 +123,8 @@ runner 统计这些行并把结果写进 `test/smoke/assertion-counts.txt`：某
 | phase40 | 团队注册表的崩溃存活：写入是 tmp+rename，target 永不被半写；孤儿 `.tmp-<pid>` 被加载器忽略；截断或空的注册表加载为 null——而 forSession 会据此静默重建一个**空**团队。最后一条正是防止「加载为 null」被读成「恢复」的断言：数据按设计就没了（注册表是临时状态）。只读 target 那条让原子性**变得可观测**：`write tmp; rename` 能越过 0444 的 target，而直接写不能。 |
 | phase41 | 同一 agentDir 下两个团队不冲突：两个会话文件给出两个 teamId、因而两个 socket（`<teamsRoot>/<teamId>/sock`），且**与 cwd 无关**；两个 TeamServer 可并发 listen（无 EADDRINUSE）且两个 socket 均为 0600；嵌套团队 id 在其父之下命名空间隔离。隔离是 teamId 的纯函数，所以这是护栏而非运气。 |
 | phase42 | plan 档位的 happy path——P2-8e 中**此前在任何成本下都无覆盖**的那一半。phase24 驱动确认链但其脚本 ctx 没有 modelRegistry，故 generateTeamPlan 直接放弃、只展示档位回退。此处脚本 complete() 返回固定方案，并追踪它直到 Accept 时进入注入，同时验证 Cancel 时不泄漏。**只主张 plumbing**：真实模型是否产出符合档位的方案仍需 key。 |
+| phase45 | 0.1.8 接口审计发现的两个此前无覆盖的 spawn 边界。`--tools` 只在成员工具列表非空时才传（`team/spawn.ts:196`），故省略 `tools` 的调用方既拿到宿主默认工具集、**也拿不到 `topo_team_msg`**——该成员完全无法与队友通信。这是既定契约，断言它以便任一侧变化时可见。另：子队长团队工具只在成员可编排时才加入（`canOrchestrate = childDepth < maxRecursionDepth`）；且 `shutdown` 在**每一种** `session_shutdown` reason 下都清空成员——上游现在会发 reload/可变/quit 三种，而此前没有任何探针断言清理动作在三种下都成立。 |
+
 | phase44 | `/topo` 命令把参数逐字转发——**断言在插件自己的调用上，不在宿主的输出上**。它过去靠 grep RPC 流里的请求文本来断言，那时能成立是因为宿主会回显用户消息；上游 #318 移除了该回显（独特字符串的普通 prompt 现在毫不留痕，且不涉及任何插件），于是那条检查是在断言一个上游发射细节，并因与插件无关的原因失败。本探针用假 ExtensionAPI 驱动真实命令 handler，直接读传给 `sendUserMessage` 的字符串：裸参数原样、空格保留（旧 grep 分不清「保留」与「被压掉」）、tier token 被消耗故 `balanced fix it` 发出去的是 `fix it`、无参数则什么都不发、`off` 只反激活不转发。 |
 | phase43 | 团队树究竟能到多深——决定深度 3 是否可达的那个边界，phase37 从未触及（它只从深度 0 触发 canOrchestrate）。用真实子进程会携带的深度 env 驱动：bound=3 时深度 2 成员可编排（深度 3 可达）、深度 3 成员不可，故树是有限的。**刻意不覆盖**真实三层 LLM 链，且无法廉价覆盖——脚本化模型无法在嵌套链里于正确时机选出正确的 spawn 调用。 |
 | phase39 | 升级路径：v0.3.0 的 config.toml 遇上 v0.4.x 种子块——每个存量用户必定走一次的路径，此前无覆盖。断言用户真实值在三个层面都幸存（文件文本、宿主解析、加载后的配置）、新增段被加上且全部注释掉、二次种子化是 no-op、全新目录仍拿到完整块。这个探针首跑就抓到一个真缺陷。 |
