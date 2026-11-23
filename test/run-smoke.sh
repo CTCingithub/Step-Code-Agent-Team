@@ -39,6 +39,26 @@ trap 'rm -rf "$AGENT_ROOT"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# ---- type check first ----
+# Without this, a probe carrying a type error looks like a `fails=0` mystery
+# failure: the runner's own verdict code treats "no FAIL line" as a failure, but
+# the probe never got far enough to print DONE, so the log tail is empty and the
+# only clue is a missing line. tsc costs ~3.5s and turns that into the actual
+# compiler message. The type config covers the whole import graph, so this also
+# catches a probe that stopped compiling against a changed product signature.
+if [ -f "$ROOT/tsconfig.typecheck.json" ]; then
+  TSC_BIN="$(ls "$ROOT"/sandbox/step/node_modules/.bin/tsc 2>/dev/null | head -1)"
+  if [ -n "$TSC_BIN" ]; then
+    if ! tsc_out="$("$TSC_BIN" -p "$ROOT/tsconfig.typecheck.json" 2>&1)"; then
+      echo "typecheck: FAILED"
+      echo "$tsc_out" | grep -E "error TS" | head -20
+      echo "run-smoke: FAILED (typecheck) — fix the errors above before running probes"
+      exit 1
+    fi
+    echo "typecheck: OK"
+  fi
+fi
+
 # Phase list derives from disk so a newly added phaseN.ts runs automatically;
 # OPT_OUT_PHASES (empty by default) is the only deliberate exclusion. Explicit
 # arguments still override (bash test/run-smoke.sh 9 13).

@@ -68,6 +68,17 @@ export default function (pi: ExtensionAPI) {
 			check("tools: an empty tool list omits --tools (host default applies)",
 				!bare.args.includes("--tools"), bare.args.join(" "));
 
+			// ---- C2-1b: an explicitly empty array behaves the same way ----
+			// The name above says "empty" but only an absent list was covered; a
+			// caller passing [] is a different code path into the same guard, so
+			// pin it separately. Without this, changing the guard to a truthiness
+			// test (which [] passes) leaves this probe green.
+			const emptyList = plan({ name: "emptylist", sessionId: "smoke45-emptylist", tools: [] });
+			check("tools: an explicitly empty array also omits --tools",
+				!emptyList.args.includes("--tools"), emptyList.args.join(" "));
+			check("tools: an explicitly empty array yields no topo_team_msg either",
+				toolsOf(emptyList.args).length === 0, toolsOf(emptyList.args).join(","));
+
 			// ---- C2-2: ...which also means no topo_team_msg ----
 			// Documented consequence, asserted so either side changing is visible.
 			check("tools: an empty tool list yields no topo_team_msg either",
@@ -109,12 +120,33 @@ export default function (pi: ExtensionAPI) {
 			for (const reason of ["reload", "quit", "new"]) {
 				const before = manager.snapshot().members.length;
 				manager.shutdown();
+				// The sweep is what makes the registry stop lying: every entry must
+				// read dead with no pid, not merely be absent after the next
+				// createMember. A skipped sweep leaves stale "ready" entries pointing
+				// at processes that no longer exist.
+				const swept = manager.snapshot().members;
+				check(`shutdown: registry entries are marked dead on reason "${reason}"`,
+					swept.length > 0 && swept.every((m) => m.status === "dead" && m.pid === -1),
+					swept.map((m) => `${m.name}:${m.status}:${m.pid}`).join(","));
 				await manager.createMember({ name: "shutchk", tools: ["read"] });
 				const after = manager.snapshot().members.length;
 				check(`shutdown: members are cleared on reason "${reason}"`,
 					before > 0 && after === 1, `before=${before} after=${after}`);
 			}
-			check("shutdown: the spawned member process is stopped", member.pid > 0, String(member.pid));
+			// Was `member.pid > 0` — always true for a spawned process, so it
+			// asserted nothing about the process being stopped. Poll for the pid to
+			// actually disappear instead.
+			let stopped = false;
+			for (let i = 0; i < 50 && !stopped; i++) {
+				try {
+					process.kill(member.pid, 0);
+				} catch {
+					stopped = true;
+				}
+				if (!stopped) await new Promise((r) => setTimeout(r, 100));
+			}
+			check("shutdown: the spawned member process is stopped", stopped,
+				stopped ? "" : `pid ${member.pid} still alive 5s after shutdown`);
 			await manager.disband();
 		} catch (err) {
 			check("setup: the probe reached its spawn-boundary stage", false, err instanceof Error ? err.message : String(err));

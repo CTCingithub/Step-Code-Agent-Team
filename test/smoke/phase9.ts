@@ -241,9 +241,15 @@ export default function (pi: ExtensionAPI) {
 			fs.writeFileSync(projectCfg, JSON.stringify({ stepcodeAgentTeam: { members: { max: 7 } } }));
 			const c4 = loadConfig({ agentDir: agentDir(), projectDir: proj, trusted: true });
 			check("project config: applied when trusted", c4.members.max === 7, `got ${c4.members.max}`);
+			// "Ignored" has to mean "the default survives", so compare against a
+			// load that has no project config at all. Written as `!== 7` these two
+			// checks only passed because the default happened not to be 7 — change
+			// the default and they fail with `got 7`, which reads as "the project
+			// config leaked" when nothing leaked.
+			const defaultMax = loadConfig({ agentDir: agentDir(), projectDir: fs.mkdtempSync(path.join(os.tmpdir(), "scat-proj9-def-")), trusted: true }).members.max;
 			const c4b = loadConfig({ agentDir: agentDir(), projectDir: proj, trusted: false });
-			check("project config: ignored when untrusted", c4b.members.max !== 7, `got ${c4b.members.max}`);
-			check("project config: cached ambient config unaffected", getConfig().members.max !== 7, `got ${getConfig().members.max}`);
+			check("project config: ignored when untrusted", c4b.members.max === defaultMax, `got ${c4b.members.max}, default ${defaultMax}`);
+			check("project config: cached ambient config unaffected", getConfig().members.max === defaultMax, `got ${getConfig().members.max}, default ${defaultMax}`);
 			// legacy project file still honored when no settings section exists
 			fs.rmSync(projectCfg);
 			fs.writeFileSync(
@@ -266,8 +272,11 @@ export default function (pi: ExtensionAPI) {
 				manager.snapshot().members.find((m) => m.name === "r1")?.status === "dead",
 			);
 			let gone = false;
-			for (let i = 0; i < 10 && !gone; i++) {
-				await new Promise((r) => setTimeout(r, 1000));
+			// Poll at 100ms, not 1000ms: the old interval made the minimum wait a
+			// full second even when the process died immediately, and it made the
+			// "still alive after 10s" message lie about the real deadline.
+			for (let i = 0; i < 100 && !gone; i++) {
+				await new Promise((r) => setTimeout(r, 100));
 				try {
 					process.kill(pid, 0);
 				} catch {
