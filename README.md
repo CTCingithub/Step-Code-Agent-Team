@@ -277,8 +277,9 @@ Enforcement lives in the team server: every message carries its sender (injected
 | `planner` | read-only | Implementation plans |
 | `worker` | full | Executes plans, runs checks |
 | `reviewer` | read-only | Adversarial review (correctness / style / security) |
+| `searcher` | read-only + `search_web`/`run_command` | External retrieval: web search and URL fetching, with sources cited — via `bin/topo-search.mjs` |
 
-Preset effort defaults: `scout`=low, `planner`=medium, `worker`=medium,
+Preset effort defaults: `scout`=low, `planner`=medium, `worker`=medium, `searcher`=medium,
 `reviewer`=high. Resolution order: an explicit `effort` argument to
 `team_create_member` → the `[stepcodeAgentTeam.presets.effort]` config
 override (built-in role names) → the preset's frontmatter `effort` → `high`.
@@ -292,6 +293,23 @@ overriding bundled presets by name: see [docs/ROLES.md](docs/ROLES.md).
 The parallel multi-reviewer workflow ships as the **`/topo review [target]`**
 command, and the orchestration protocol is injected request-locally on
 activation — no skill or prompt-template resources are shipped.
+
+## Your workspace: `.topo/` and at-rest encryption
+
+On first activation the plugin creates `.topo/` in your current directory —
+its working directory, home of the at-rest encryption key — and appends
+`.topo/` to an existing `.gitignore` (it never invents one). Nothing is created
+before activation: the plugin is default-off, so an idle session leaves your
+tree untouched.
+
+The team registry is encrypted at rest by default (AES-256-GCM, key in
+`.topo/team.key`, mode 0600), and every team task appends a collaboration
+record to `.topo/records/` (members, tasks, topology, spend) — sealed or
+plaintext according to the same option. That covers the file the plugin owns — the one
+holding member reports. It does **not** cover the member session files the host
+writes, and it does not stop a same-uid attacker who can read the key next to
+the ciphertext; see [CONFIGURATION.md](docs/CONFIGURATION.md) for the honest
+scope and the degrade paths.
 
 ## Development sandbox
 
@@ -467,6 +485,16 @@ other DSH-only plugin — because no such plugin exists in Step Code. If a
 sidebar-like UI is ever added, it must be built on Step Code native APIs, or
 sit behind an optional interface that degrades to a no-op when the dependency
 is absent, so the core team functionality always runs.
+
+**Operating systems.** Member-to-member messaging rides a Unix domain socket
+(`extensions/team-server.ts`, `net.createServer`), and the team socket path is
+derived from the agent dir. Unix domain sockets are not available on Windows, so
+the plugin's team features — `create_member`, `send`, `set_topology`,
+`disband`, and the member-side `topo_team_msg` tool — require Linux or macOS.
+Everything else (configuration, seeding, the retrieval script, records,
+rendering) is platform-independent. This is stated here because nothing in the
+code announces it: the failure on Windows surfaces as a socket error rather
+than as an unsupported-platform message.
 
 ## Status
 

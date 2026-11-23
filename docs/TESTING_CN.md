@@ -8,7 +8,13 @@
 ## 0. 环境准备
 
 零 token 层：`test/run-smoke.sh` 自建一次性临时 agentDir（mktemp），无需任何准备，与真实
-`~/.stepcode` 完全隔离。LLM 层在 `sandbox/` 内运行（`sandbox/` 随仓库分发，`cfg-*` fixture 已内含；仅 agent dir、sessions、teams 等运行时状态在 .gitignore 内）。step 二进制解析顺序：`$STEPCODE_STEP_BIN` > `sandbox/step-build/step`（从 `sandbox/step` submodule 构建）> PATH 中的 `step`（见 `sandbox/step-bin.sh`）。headless 探针必须带
+`~/.stepcode` 完全隔离。
+
+agentDir **嵌在该一次性根目录的下一层**（`AGENT_ROOT=$(mktemp -d); AGENT_DIR=$AGENT_ROOT/agent`），
+而非直接把 mktemp 目录当 agentDir。插件把统一配置解析到 `dirname(agentDir)/config.toml`
+（宿主自身即此约定）并在每次激活时种子化它；若 agentDir 是平的 mktemp 目录，该路径就是
+`/tmp/config.toml`——门禁会写进共享目录，下一轮又读回它，而它在全局层最后应用、压过插件自己的
+JSON 配置。嵌一层后整个东西都落在 EXIT trap 会清掉的树里，`/tmp` 保持干净。LLM 层在 `sandbox/` 内运行（`sandbox/` 随仓库分发，`cfg-*` fixture 已内含；仅 agent dir、sessions、teams 等运行时状态在 .gitignore 内）。step 二进制解析顺序：`$STEPCODE_STEP_BIN` > `sandbox/step-build/step`（从 `sandbox/step` submodule 构建）> PATH 中的 `step`（见 `sandbox/step-bin.sh`）。headless 探针必须带
 `--approval-mode auto`，否则派生进程的工具会被审批拦截：
 
 ```bash
@@ -68,13 +74,20 @@ bash sandbox/restore-project.sh
 不污染 `~/.stepcode` 或 gitignore 的 sandbox/：
 
 ```bash
-npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24）
+npm run smoke                 # 全部零 token 层（phase 1 2 3 5 6 7 8 9 13 14 15 16 17 18 19 20 21 22 23 24 34 35 36 37 38 39 40 41 42 43 44 45）
 bash test/run-smoke.sh 9 13   # 只跑指定 phase
 ```
 
 phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY` 时 runner 显式 SKIP
 而非失败。密钥来自环境变量，或 `sandbox/TEST-KEY.md`（gitignored）首个非注释行——
 任一就绪即纳入回归。
+
+每个探针都通过本地 `check()` 上报用例，每条打一行 `PASS <name>` / `FAIL <name>`。
+runner 统计这些行并把结果写进 `test/smoke/assertion-counts.txt`：某 phase 的条数
+**低于**基线即判失败（`assertion count dropped N -> M`）。因此把某条检查弱化成恒真、
+或直接删掉它，都不可能悄悄通过——而提高条数永远自由，降低则必须故意改该文件。
+（此前判定只有「打了 DONE 且无 FAIL 行」；而 phase2/3/17 三个探针用临时
+`log()`/`fail()` 上报、一条 PASS 行都不发，删掉检查后套件依然全绿，实际测得更少。）
 
 | 探针 | 覆盖 | 成本 |
 |---|---|---|
@@ -91,12 +104,34 @@ phase5 会发起一次真实模型调用（1 token）：未设置 `STEP_API_KEY`
 | phase15 | TUI 渲染断言（render.ts 六工具 call/result，含折叠/展开/用量行/状态图标） | 零 token（独立运行） |
 | phase16 | 成本护栏与输出截断单测（costWarning / truncateOutput）+ `dispatchPrompt` 合并契约 + `assertDispatchable` 门禁（failed 任务可重派） | 零 token（独立运行） |
 | phase17 | 孤儿进程（成员不得比队长长寿） | 零 token |
-| phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + dispatch 失败上下文（超时/中止提示接力在途与成员名册） | 零 token |
+| phase18 | 名额计数（解散释放名额）+ 恢复参数忽略提示 + 派发失败上下文（超时/中止通知转发在途消息与成员名册）+ 决定哪些可重试的错误分类器（`isRetryableSpawnError` / `isSettleTimeoutError` / `augmentDispatchError`，现居 extensions/team/errors.ts，经 members.ts 的 re-export 引入） + 两端共用的线路帧解析（`splitLines`，extensions/team/framing.ts）——含其他探针从未产生过的「一帧被拆成两个块」，而那正是帧解析器存在的唯一理由 | 零 token |
 | phase19 | 统一配置层级（全局/项目级 config.toml、信任门控、优先级、非法 TOML 容忍、env 仍胜出） | 零 token |
 | phase20 | 配置种子化（首次激活追加注释默认值块；幂等、保序、既有内容保留） | 零 token |
 | phase21 | 团队请求指令构建器 + 方案档位数据（语言选择、档位策略提示词、选单选项、自定义流程、评审协议）+ `planConfirmDialogOpts`（TUI 无倒计时） | 零 token |
 | phase22 | 工具可用性自愈：`ensureToolsAvailable` 在宿主重置后恢复工具、失活时 no-op、`session_start` 对团队注册表已存在的会话重新激活 | 零 token |
 | phase23 | 团队工具 JSON-schema 契约：每个工具与每个顶层参数均有非空 description（守卫 typebox 双参 Optional 类回归——曾致 reason 丢失描述） | 零 token |
+| phase25 | `.topo/` 初始化契约：目录创建、0600 密钥材料、幂等、`.gitignore` 四种可接受拼写、CRLF 保留，以及全部降级路径（`.topo` 是文件、符号链接不跟随、超长路径）——全部对 hermetic mktemp cwd 执行 | 零 token（独立运行） |
+| phase26 | 落盘加密：AES-256-GCM 信封往返、篡改与错钥拒绝、**明文** registry 仍可读（向后兼容）、`enabled = false` 写明文、缺密钥时降级不抛 | 零 token（独立运行） |
+| phase28 | `bin/topo-search.mjs` 对本地假 DeepSeek 端点：请求体与端点路径、Bearer 头（且绝不进 stdout/stderr）、**计费诚实的重试策略**（429 重试、400 不重试）、5xx 重试、超时分类、批量模式、退出码契约、缺 key 路径（exit 2，且文案列明整条 key 链——`STEPCODE_TOPO_SEARCH_KEY` → `STEPCODE_SEARCH_API_KEY` → `DEEPSEEK_API_KEY`）、以及厂家无关的响应形态守卫（无法识别的信封经 `meta.shape` 报告实际键名，而非静默返回空结果） | 零 token（独立运行） |
+| phase27 | `searcher` 角色：预设 frontmatter 五字段（含钉住的 `model:`）、`presets.effort` 覆盖、searcher/encryption 配置面与种子块，以及成员 spawn 环境——断言对象是生产代码自己调用的**导出函数 `searcherSpawnEnv`**，而不是它的副本。这一区别正是重点：本探针过去携带的副本照抄了 `buildSpawnArgs` 的四行，于是与原版共享盲区——缺失的 `STEPCODE_TOPO_SEARCH_KEY` 顺利过了门禁，而脚本的 search 路径压根没有凭证。现在它钉住五个 env 键（`STEPCODE_TOPO_SEARCH_KEY`、`STEPCODE_SEARCH_API_KEY`、`STEPCODE_TOPO_SEARCH_URL`、`STEPCODE_TOPO_FETCH_URL`、`STEPCODE_TOPO_FETCH_KEY`）外加按需注入的 `STEPCODE_TOPO_SEARCH_SCRIPT`，以及"一个配置 key 以两个名字注入"与"空字符串绝不变成变量"两条规则 | 零 token（独立运行） |
+| phase31 | 配置种子化：首次激活块全为注释（searcher 四行曾是其中唯一未注释的行，于是落进 TOML 根表，取消段头注释即成重复键错误）、每个配置表都有文档、`"default"` 对各类类型一律解析为内置默认值（已对全部 27 个键实证，兄弟键不受影响）、把每条 DEFAULT 行取消注释后仍得默认值、**每条标记行都带引号**（裸 `default` 不是合法 TOML 标量，step 的读取器会在我们的代码看到之前就丢弃整表——既无法检测也无法警告）、旧版本标记触发刷新、无标记旧块不复制、活动表不复制、显式值压过 `DEFAULT` | 零 token（独立运行） |
+| phase34 | prompt→settle 全路径，打在一个本地假模型上——这正是反复出现的 `timeout waiting for member to settle` 背后的盲区。Part A：被指向假 OpenAI-Chat-Completions 端点的成员**真实进入** agent run、真实调用模型、真实结束回合并真实发射 `agent_settled`（45ms、usage delta 1、`/v1/chat/completions` 收到带凭证的请求）。Part B：端点接收请求后永不应答，**复现退化本身**，并断言门禁察觉得到——派发失败、沉默前已进入 run、超时被诊断为「卡住的成员」而非「跑得慢」。零 token、零外网。 |
+| phase34 | prompt→settle 全路径，打在一个本地假模型上——这正是反复出现的 `timeout waiting for member to settle` 背后的盲区。Part A：成员真实进入 agent run、真实调模型、真实结束回合并真实发射 `agent_settled`。Part B：端点接收请求后永不应答，复现退化本身。零 token、零外网。 |
+| phase35 | **多轮回合能 settle**——假模型第一轮返回 tool_call、第二轮返回最终文本，强制 agent loop 走第二轮，并断言工具输出真的回到了第二轮。长回合正是由这些构成的，故此处的回归会在这里失败，而不是以无法解释的 settle 超时出现在 live 轮。 |
+| phase36 | 对**真实提供方**的成员派发（key-gated，计费：两次短提示）。短提示与必须用工具的长提示都能 settle。这是唯一打真实提供方的成员派发探针；它的存在是因为 39 次超时在它证明事实并非如此之前，全被归因于长回合。 |
+| phase38 | 产出**没有任何文本**的成员回合仍能 settle，且队长侧把空回复框成交付确认——P2-8b，多年来列为 deferred 是因为它需要一个 live 空回复，也就是一次模型调用。假模型返回一个不带任何 content 的 assistant 消息，这正是 live 空回复留下的状态（rpc-client 只捕获非空文本）。断言回合仍 settle、模型真被问过、没有文本回来、且 `formatTeammateReply` 产出 `Delivered to X.` 而非静默的空结果。 |
+| phase40 | 团队注册表的崩溃存活：写入是 tmp+rename，target 永不被半写；孤儿 `.tmp-<pid>` 被加载器忽略；截断或空的注册表加载为 null——而 forSession 会据此静默重建一个**空**团队。最后一条正是防止「加载为 null」被读成「恢复」的断言：数据按设计就没了（注册表是临时状态）。只读 target 那条让原子性**变得可观测**：`write tmp; rename` 能越过 0444 的 target，而直接写不能。 |
+| phase41 | 同一 agentDir 下两个团队不冲突：两个会话文件给出两个 teamId、因而两个 socket（`<teamsRoot>/<teamId>/sock`），且**与 cwd 无关**；两个 TeamServer 可并发 listen（无 EADDRINUSE）且两个 socket 均为 0600；嵌套团队 id 在其父之下命名空间隔离。隔离是 teamId 的纯函数，所以这是护栏而非运气。 |
+| phase42 | plan 档位的 happy path——P2-8e 中**此前在任何成本下都无覆盖**的那一半。phase24 驱动确认链但其脚本 ctx 没有 modelRegistry，故 generateTeamPlan 直接放弃、只展示档位回退。此处脚本 complete() 返回固定方案，并追踪它直到 Accept 时进入注入，同时验证 Cancel 时不泄漏。**只主张 plumbing**：真实模型是否产出符合档位的方案仍需 key。 |
+| phase45 | 0.1.8 接口审计发现的两个此前无覆盖的 spawn 边界。`--tools` 只在成员工具列表非空时才传（`team/spawn.ts:196`），故省略 `tools` 的调用方既拿到宿主默认工具集、**也拿不到 `topo_team_msg`**——该成员完全无法与队友通信。这是既定契约，断言它以便任一侧变化时可见。另：子队长团队工具只在成员可编排时才加入（`canOrchestrate = childDepth < maxRecursionDepth`）；且 `shutdown` 在**每一种** `session_shutdown` reason 下都清空成员——上游现在会发 reload/可变/quit 三种，而此前没有任何探针断言清理动作在三种下都成立。 | plan-139 的破坏性抽检发现：注入 `--tools` 真值判断的 bug 后本探针依然全绿——因为"空 tool list"那条传的是 `undefined` 而非 `[]`。现在两者都覆盖到了，另外补上注册表清扫（每个 shutdown reason 的 `status`/`pid`）与真实的进程死亡轮询（替换掉 `pid > 0` 这条恒真断言）。
+
+| phase44 | `/topo` 命令把参数逐字转发——**断言在插件自己的调用上，不在宿主的输出上**。它过去靠 grep RPC 流里的请求文本来断言，那时能成立是因为宿主会回显用户消息；上游 #318 移除了该回显（独特字符串的普通 prompt 现在毫不留痕，且不涉及任何插件），于是那条检查是在断言一个上游发射细节，并因与插件无关的原因失败。本探针用假 ExtensionAPI 驱动真实命令 handler，直接读传给 `sendUserMessage` 的字符串：裸参数原样、空格保留（旧 grep 分不清「保留」与「被压掉」）、tier token 被消耗故 `balanced fix it` 发出去的是 `fix it`、无参数则什么都不发、`off` 只反激活不转发。 |
+| phase43 | 团队树究竟能到多深——决定深度 3 是否可达的那个边界，phase37 从未触及（它只从深度 0 触发 canOrchestrate）。用真实子进程会携带的深度 env 驱动：bound=3 时深度 2 成员可编排（深度 3 可达）、深度 3 成员不可，故树是有限的。**刻意不覆盖**真实三层 LLM 链，且无法廉价覆盖——脚本化模型无法在嵌套链里于正确时机选出正确的 spawn 调用。 |
+| phase39 | 升级路径：v0.3.0 的 config.toml 遇上 v0.4.x 种子块——每个存量用户必定走一次的路径，此前无覆盖。断言用户真实值在三个层面都幸存（文件文本、宿主解析、加载后的配置）、新增段被加上且全部注释掉、二次种子化是 no-op、全新目录仍拿到完整块。这个探针首跑就抓到一个真缺陷。 |
+| phase37 | 成员 spawn 契约，以及**我们的插件不是成员卡住的原因**：`buildSpawnArgs` 发 `--no-extensions -e <member-messaging.ts>`，成员只加载消息 shim；而加载了整个插件的成员与 bare 成员 settle 得一样快。同时断言 `MemberRpc` 的 stderr 尾部可达——它此前被整体丢弃，这正是 38 次超时查不出原因的原因。 |
+| phase33 | 宿主如何渲染我们工具的输出：工具返回的内容是单行 JSON，而宿主会把它交给 Step Code 0.1.8 重写过的流式 markdown 渲染器（#315/#319）。本探针用我们真实产出的形态驱动该渲染器——单行 search 结果、4000 字符超长单行、含 markdown 敏感字符、多行 batch 流——并断言载荷幸存：不抛错、url/title/状态码等词仍在、超长正文不被吞。比较前先做空白归一化，因为渲染器会按终端宽度折行并填充（这也意味着 `*` `_` `` ` `` `[` `]` 等标记字符会被消费——词与 URL 幸存，断言检查的正是这些） | 零 token（独立运行） |
+| phase32 | Step CLI 契约：`step --help` 记录了 `extensions/members.ts` 建成员时传入的每个参数（`--mode`/`--session-id`/`--session-dir`/`--no-extensions`/`--extension`/`--append-system-prompt`/`--approval-mode`/`--model`/`--thinking`/`--tools`）、解析到的二进制报告版本号、`--approval-mode` 仍拒绝已退役的取值（`strict`）并提示 `confirm, auto`、`-e`/`--extension` 仍是加载扩展的拼写。它堵住的缺口是：上游若静默移除某参数，此前只会在 live 轮才暴露 | 零 token（独立运行） |
+| phase30 | 协作记录：内容与文件布局、幂等、三种落盘形态（加密 / 因关闭而明文 / 因无密钥而明文）、`records.enabled=false`、自定义 `records.dir`、配置面与种子块、`.topo` 损坏时的降级 | 零 token（独立运行） |
 | phase24 | 确认路径端到端：假 ExtensionAPI + 脚本化 ctx 驱动真实扩展工厂——断言选项顺序恰为 `Accept / Cancel / Other`、Accept 原样转发请求并注入方案指令、Other 输入 note 原样合并、空提交按原样接受、**输入被关闭**（Esc/超时→undefined）与 Cancel 完全同果、Cancel 仅注入激活指令（`plan.enabled` 经 resetConfigCache 钩子切换并还原） | 零 token（独立运行） |
 
 **runner 行为与通过标准**：phase 清单由 `test/smoke/phase*.ts` 磁盘派生（run-smoke.sh:37）；失败 phase 以新 session id 重试一次（首发失败行前缀 `attempt1`，重试通过不会给 CI 留裸 `FAILED` 行）；240s 内无 `DONE` 输出判为 hang（rc=124），与断言失败区分；判定要求 DONE 标记 + 零 FAIL 行。phase 之后：manifest 检查、7 个 live 检查、15s 孤儿进程轮询（phase17 跳过时孤儿检查报 `SKIPPED` 而非静默通过）。**类型门**：`sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`（paths 把四个 `@step-harness` 包映射到 `dist/*.d.ts` + typebox）对 `extensions/` 与 `test/smoke/` 必须**零错误**——自 R16（2026-10-29）补全 phase15 的 Theme 桩与 phase24 的 contextHandler 守卫后已归零。**live 检查必须由队长自身的干净进程跑**——在成员进程的受限环境中会整体假阴性（2026-10-25 实测：成员侧 7 项全红、队长侧全绿）。仓库的类型检查同样算门禁的一部分：tsc 全导入图零错误（R16 轮前为 17——phase15 的 Theme 桩与 phase24 的 context hook 读取；复现命令 `sandbox/step/node_modules/.bin/tsc -p tsconfig.typecheck.json`）。
@@ -121,6 +156,7 @@ sleep 300 | bash sandbox/with-test-key.sh step -e "$PWD/extensions/index.ts" \
 | phase10 | cfg-conc / cfg-deadlock | 并发上限 live / 嵌套消息死锁 |
 | phase11 | cfg-deep2 | 递归深度 2 真实链 |
 | phase12 | 默认 | oneshot/任务链/Unicode/崩溃恢复/流式进度 |
+| probe-searcher | 沙箱配置的 `[stepcodeAgentTeam.searcher]`（需真实 key） | **真实** search 与 fetch——与 hermetic 覆盖同一契约的 phase28 对应的 Layer-C 版本。端点与密钥从**配置文件**读取（不是某厂家的 key 文件），经与队长注入成员完全相同的 `STEPCODE_TOPO_*` 变量传给脚本，然后断言：结果非空且每条带 url、`need_content` 返回正文、fetch 返回标题与 Markdown、抓取真实项目内容可匹配、批量扇出逐行成功。探针在开头声明本次计费调用上限（最多 6 次）；未配置 key 时 exit 2 并打印应添加的配置（零调用）；支持 `TOPO_PROBE_MAX_CALLS=0` 只做配置干跑。**不计入零 token 门**——每次成功调用都由服务方计费 |
 | probe-remaining-manual `5a` | 隔离 agentDir（plan.enabled） | 确认框 Other 路径：脚本化 RPC 客户端应答档位选单→确认框选「Other」→input，断言用户文本原样进入转发的 user 消息。对话框按**标题**（`Topology Agent Team`）、选项按**精确标签**（`Other`）匹配——无位置兜底，选项改名或换序会让探针失败而非 silently 答成 Cancel。每个场景等待会话的 **`agent_settled`** 事件（prompt 命令自己的 response 只是 preflight 应答——rpc-mode.ts 在 `preflightResult` 里就发出了），`waitMs` 仅作安全上限，另等会话文件大小稳定后再读取 |
 | probe-remaining-manual `5b` | 隔离 agentDir（plan.tier 钉档） | 负向断言：钉档后档位选单与三选项确认框**均不出现**（plan-104 的 `pinnedTier` 标志同时跳过两者；显式 `/topo <档位>` 仍保留确认） |
 | probe-remaining-manual `5c` | 隔离 agentDir（plan.tier 钉档，关键词 prompt） | 钉档走**关键词**路径（命令路径是 5b）：`applyStandingTier` 与 `runTeamCommand` 的钉档分支是两条代码路径，且「对话框不出现」是负向观察——故断言两个对话框均不出现**外加**一条激活正向断言防假绿（首跑即靠该断言抓到真假绿：未应答 L2 confirm 导致插件根本没激活，仅负向断言会因错误的理由通过） |

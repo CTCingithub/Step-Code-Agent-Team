@@ -25,6 +25,7 @@ import {
 	type CreateMemberParams,
 } from "../../extensions/members.ts";
 import { getConfig, resetConfigCache } from "../../extensions/config.ts";
+import { splitLines } from "../../extensions/team/framing.ts";
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
@@ -34,6 +35,32 @@ export default function (pi: ExtensionAPI) {
 			results.push({ name, ok, detail });
 			log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail.replace(/\s+/g, " ").slice(0, 160)}` : ""}`);
 		};
+
+		// ---- wire framing (plan-140) ----
+		// Both ends of the team protocol arrived as arbitrary chunks, so the
+		// newline framing was duplicated in members.ts and team-server.ts. It now
+		// lives in team/framing.ts, and these checks pin the case the rest of the
+		// suite never produced: a frame split across two chunks. Every other
+		// messaging probe writes a whole line in one go, so dropping the trailing
+		// partial used to leave the whole gate green.
+		{
+			const one = splitLines('{"a":1}\n{"b":2}\n');
+			check("framing: two complete lines come back with an empty rest",
+				one.lines.length === 2 && one.rest === "", `lines=${one.lines.length} rest=${JSON.stringify(one.rest)}`);
+			const split = splitLines('{"a":1');
+			check("framing: a partial frame yields no line and is kept as rest",
+				split.lines.length === 0 && split.rest === '{"a":1', `lines=${split.lines.length} rest=${JSON.stringify(split.rest)}`);
+			const done = splitLines(split.rest + "}\n");
+			check("framing: the continuation completes the split frame",
+				done.lines.length === 1 && done.lines[0] === '{"a":1}' && done.rest === "",
+				`lines=${JSON.stringify(done.lines)} rest=${JSON.stringify(done.rest)}`);
+			const crlf = splitLines('{"a":1}\r\n');
+			check("framing: a trailing CR is stripped", crlf.lines.length === 1 && crlf.lines[0] === '{"a":1}',
+				JSON.stringify(crlf.lines));
+			const mixed = splitLines('{"a":1}\n{"b":2');
+			check("framing: a complete line and a trailing partial are separated",
+				mixed.lines.length === 1 && mixed.rest === '{"b":2', `lines=${mixed.lines.length} rest=${JSON.stringify(mixed.rest)}`);
+		}
 
 		try {
 			// Stage a small member cap into the throwaway agent dir BEFORE the

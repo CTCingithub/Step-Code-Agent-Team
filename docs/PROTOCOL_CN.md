@@ -143,3 +143,9 @@ shim 从 spawn env 取身份与地址：`STEPCODE_TEAM_SOCK`、`STEPCODE_TEAM_ME
 | `STEPCODE_TEAM_DEPTH` | 本成员在团队树中的深度（队长 = 0） |
 | `STEPCODE_TEAM_MAXDEPTH` | 生效的深度上限（可能来自项目级配置，队长加载时才能读到）；成员进程的配置加载器据此覆盖 `members.maxRecursionDepth` |
 | `STEPCODE_TEAM_AUTOACTIVATE` | `1` = 授予子团队，成员进程加载本扩展并自动激活 |
+| `STEPCODE_TEAM_REPLY_TIMEOUT_MS` | 生效的派发超时；成员侧 `topo_team_msg` 的回复等待用它，使嵌套中继绝不会比外层派发活得更久 |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` | 来自 `[stepcodeAgentTeam.searcher]` 的检索端点；为空表示用消费者各自的默认值 |
+| `STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_TOPO_FETCH_KEY` | 检索凭证。配置的 `searchApiKey` 会以**两个名字**注入——`STEPCODE_TOPO_SEARCH_KEY`（`bin/topo-search.mjs` 读的名字）与 `STEPCODE_SEARCH_API_KEY`（宿主 `search_web` 工具自己的名字）；曾经只注入后者，导致脚本 search 路径没有凭证而 fetch 却正常 |
+| `STEPCODE_TOPO_SEARCH_SCRIPT` | `bin/topo-search.mjs` 的路径，仅在 searcher 配置非空时注入（成员无从猜测包的位置） |
+
+searcher 相关变量只注入非空值，故未配置团队的环境保持原样、各自走默认值。该映射本身是 `extensions/config.ts` 导出的 `searcherSpawnEnv`，phase27 探针直接断言它，而不是断言一份副本。

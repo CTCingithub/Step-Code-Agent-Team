@@ -66,7 +66,7 @@ reapIntervalMs = 300000              # reaping check interval (5 min)
 
 [stepcodeAgentTeam.storage]
 # dir omitted (null) = <agentDir>/teams
-# dir must be an absolute path: a relative value resolves against the launching process's cwd (registry.ts teamsRoot), not <agentDir>
+# dir must be an absolute path: a relative value resolves against the <agentDir> (registry.ts teamsRoot), not the process cwd
 
 [stepcodeAgentTeam.tasks]
 max = 999                           # task-board capacity (ids T1..T<max>; 1–10000)
@@ -86,6 +86,39 @@ scout = "low"                        # per-role effort overrides (custom roles: 
 planner = "medium"                   # ignored while models.autonomousEffort is on (the leader picks)
 worker = "medium"
 reviewer = "high"
+searcher = "medium"                  # the searcher role (added in v0.4.0)
+
+[stepcodeAgentTeam.searcher]           # endpoints/credentials for the searcher role (added in v0.4.0)
+searchUrl = ""                        # empty = the host search_web default
+searchApiKey = ""                     # empty = the login profile / STEPCODE_SEARCH_API_KEY
+fetchUrl = ""                         # empty = a plain unauthenticated request to the target URL
+fetchApiKey = ""                      # empty = no Authorization header
+# Leaving both keys empty makes the searcher role fail with exit code 2 and a
+# message naming this table — a missing credential is a configuration problem,
+# not a failed request, so it is never retried. The leader injects whatever you
+# set here, so there is nothing to export by hand.
+#
+# What "empty" means depends on which consumer you mean, and the two differ:
+# the ROLE falls back to the host tools (search_web's own credential
+# resolution for search, a plain curl for fetch), while the SCRIPT
+# (bin/topo-search.mjs) falls back to its built-in DeepSeek endpoints and
+# DEEPSEEK_API_KEY. Setting the keys is what makes a non-default provider real
+# for both.
+#
+# These four keys are the whole point: the searcher role is NOT tied to one
+# provider. Point searchUrl/fetchUrl at any endpoint that speaks the script's
+# JSON contract ({query,count,need_content} → {results}; {url} → {title,content})
+# and set the matching key here. The leader injects them into member processes
+# as STEPCODE_TOPO_SEARCH_URL / _SEARCH_KEY / _FETCH_URL / _FETCH_KEY, plus
+# STEPCODE_SEARCH_API_KEY for the host search tool and
+# STEPCODE_TOPO_SEARCH_SCRIPT pointing at the script itself.
+
+[stepcodeAgentTeam.encryption]         # at-rest encryption of the team registry (added in v0.4.0, on by default)
+enabled = true                        # AES-256-GCM; key in .topo/team.key (0600)
+
+[stepcodeAgentTeam.records]            # collaboration records (added in v0.4.1)
+enabled = true                        # write one record to .topo/records after every team task
+dir = "records"                       # sub-directory of .topo/
 
 [stepcodeAgentTeam]
 debug = false                        # debug logging
@@ -121,6 +154,107 @@ Topology shapes (declared with `team_set_topology` after creating members, befor
 
 Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejection lists the allowed teammates (the server returns the `mayMessage` list for the sender's identity), and `stepcode-team status` reports the same from a shell.
 
+## Automatic compaction (`[compaction]`, Step Code 0.1.8)
+
+Step Code compacts a session's context automatically when it approaches the
+model's window. Since 0.1.7 the trigger is a **ratio of the context window**
+rather than a fixed reserve, and it is configurable in Step Code's own unified
+config — **not** in this plugin's table:
+
+```toml
+[compaction]
+triggerPolicy = "v2"            # or "legacy" (the old fixed-reserve behaviour)
+triggerRatio = 0.85             # 0 < ratio <= 0.95; DEFAULT 0.85 since 0.1.8 (was 0.9)
+modelTriggerRatios = { "step/step-5-preview" = 0.8 }   # per provider/model override
+tokenLimit = 120000             # absolute ceiling; can only trigger EARLIER
+contextProjection = "off"       # "off" (native summary compaction, DEFAULT since
+                                # 0.1.8) | "clm-v1" (opt-in CLM) | "lightweight-v1"
+```
+
+Invalid values fall back to the defaults and are reported as settings
+diagnostics — they never fail the run.
+
+**0.1.8 changed three defaults**, all upstream-side and none of them plugin keys:
+
+- `triggerRatio` **0.9 → 0.85**, leaving more room for estimation error before a
+  request can exceed the window;
+- `contextProjection` **`clm-v1` → `off`**, i.e. native summary compaction is now
+  the default and CLM is opt-in (`contextProjection = "clm-v1"`,
+  `--context-projection clm-v1`, or `/clm on`). Upstream measured the reason:
+  near a full window CLM's maintenance request carried almost the whole context
+  (~975K tokens at a 1M window) to save ~12%, so prompts ran 47–72s against
+  16–19s for native compaction on a 930K-token session;
+- prompt-size estimation now counts **UTF-8 bytes** rather than JavaScript
+  characters — the old `length / 4` heuristic priced a Han character at 0.25
+  token while the gateway bills ~0.61, which is what made near-window requests
+  overshoot.
+
+Also new in 0.1.8: `retry.provider.streamIdleTimeoutMs` (default 300000) cancels
+a provider stream that produces no parsed event for that long, and
+`compaction.autoClm.coldMaxPrefillTokens` (default 262144) skips an automatic-CLM
+maintenance request that cannot reuse the cached prefix.
+
+> **Upstream inconsistency, recorded rather than resolved**: the 0.1.8 changelog
+> says `contextProjection` now defaults to `off`, and
+> `SettingsManager.getContextProjectionMode()` in
+> `packages/coding-agent/src/core/settings-manager.ts` still returns `"clm-v1"`
+> when compaction is enabled and no explicit mode is set. The shipped behaviour
+> follows the code; this plugin sets no key either way, so it is unaffected.
+
+**Why this matters to a team**: members are spawned with the leader's
+environment (`STEP_CODING_AGENT_DIR` included), so they read the **same** global
+`config.toml` as the leader. Whatever you set here applies to the leader and to
+every member alike — there is no plugin-level key to set, and adding one would
+only create two sources of truth for the same behaviour. A probe pins the
+inheritance so a future refactor cannot quietly break it (phase32, "spawn env").
+
+The old fixed reserve triggered at ~74% of a 64K window but ~98% of a 1M window;
+the ratio default leaves headroom on both. Lower `triggerRatio` (or set
+`tokenLimit`) to compact earlier on long team runs, where a member's report plus
+the task board can fill a window quickly.
+
+## `.topo/` and at-rest encryption (v0.4.0)
+
+**What `.topo/` is**: the plugin's working directory inside your current
+workspace. It is created on first activation (the plugin is default-off, so an
+inactive session leaves nothing in your tree) and registered in an **existing**
+`.gitignore` — if there is no `.gitignore`, none is invented. It currently holds
+one file: `team.key` (the encryption key, 32 bytes base64, mode 0600).
+
+**What is encrypted**: the team registry `registry.json` — its
+`tasks[].title/detail/result` carries full member reports and is the most
+sensitive payload the plugin owns. AES-256-GCM, with an envelope carrying
+`iv/tag/data` plus a plaintext `teamId`/`cwd` header (cwd is not sensitive and
+is what lets a reader locate the key). `encryption.enabled = false` writes
+plaintext.
+
+**The boundaries (do not oversell this)**:
+- it protects against OTHER USERS reading the file, and against the file being
+  committed or backed up in the clear;
+- it does NOT protect against a same-uid attacker, who reads the key file too;
+- it does NOT cover the host-written member session JSONL (mode 0644, outside
+  the plugin's reach) — that remains the largest real exposure;
+
+**`.topo/` survives uninstall.** `step remove` removes the plugin only; the `.topo/` directory in your
+workspace stays. That is deliberate — it holds your team key and collaboration records, which are your
+data and not the plugin's to delete. To remove it entirely, `rm -rf .topo/` yourself (**this permanently
+loses the team key, and any encrypted collaboration records become undecryptable**). The `.topo/` entry
+in `.gitignore` stops mattering at that point and can be dropped if you no longer use this plugin.
+- losing the key means the data is unrecoverable;
+- plaintext registries written by older versions still load (an envelope is
+  decrypted, anything else is read as-is).
+
+**Degrade paths**: `.topo` already exists as a file, is a symlink (not followed
+— writing key material through a link we did not create would leak it to an
+arbitrary path), a read-only parent, or an over-long path. All of them degrade:
+the team keeps running without at-rest encryption and one line is logged.
+
+### Collaboration records (`.topo/records/`)
+
+After every team task ends — a whole-team `team_disband`, a `/topo off` deactivation, or a shutdown fallback when the session ends with the team still live — the plugin writes one record to `.topo/records/<teamId>-<UTC stamp>.json` plus a same-named Markdown summary. Contents: the member roster (role/model/effort/tools/status/turns/cost), the whole task board (status/assignee/dependencies), the topology in force at close, cumulative spend and summary counts. **Idempotent**: a team never gets a second record.
+
+Whether it is encrypted follows YOUR option: `encryption.enabled` with a key available means the same AES-256-GCM envelope as the registry; anything else is plaintext. `records.enabled = false` turns records off entirely. Same degrade rule: an unwritable record is logged and forgotten — it never blocks a disband or a deactivation.
+
 ## Environment Overrides
 
 | Variable | Purpose |
@@ -129,10 +263,16 @@ Members learn their notifiable neighbors dynamically: a `topo_team_msg` rejectio
 | `STEPCODE_TEAM_COST_WARN=<usd>` | Overrides `cost.warnThreshold` (invalid values ignored) |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | Overrides `members.maxRecursionDepth` (1–4; invalid values ignored); the leader injects the effective value into sub-member processes |
 | `STEPCODE_TEAM_SOCK` | Injected automatically by the leader into member processes, pointing at the team service socket (no manual setup needed) |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` / `STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_SEARCH_API_KEY` / `STEPCODE_TOPO_SEARCH_SCRIPT` | Injected automatically by the leader into member processes from `[stepcodeAgentTeam.searcher]` (the searcher role reads them by name; see `docs/ROLES.md`). The configured key arrives under both `STEPCODE_TOPO_SEARCH_KEY` (the script's own name) and `STEPCODE_SEARCH_API_KEY` (the host `search_web` tool's name), and the script's path is only injected when the searcher config is actually configured. Set them by hand only to test `bin/topo-search.mjs` directly |
+| `STEPCODE_SEARCH_API_KEY` | Injected by the leader when the searcher `searchApiKey` is set; also the host `search_web` tool's own credential key |
 
 ## Notes
 
 - **First-activation seed**: when the plugin is first activated in a session and your global config has no `stepcodeAgentTeam` table, a commented defaults block is appended to `config.toml`. It is comments only (defaults keep applying) — uncomment to override, or delete the block.
+- **The `default` marker**: keys shown as `"default"` mean *use the built-in default*, and the loader resolves them to it. This is what makes a seeded config survive an upgrade: a literal would pin the value you had when you seeded, and silently outrank the new version's default forever. `DEFAULT` follows the default instead, for every type at once — a number, a boolean, an array or a string (verified against all 27 keys). Omitting the key does the same thing, so `DEFAULT` is documentation you can uncomment safely.
+- **`"default"` is a reserved token — keep the quotes.** A bare `default` (no quotes) is not a TOML scalar: step's config reader then drops the **whole table**, silently taking every real setting in it with them. The plugin cannot detect this, because the table is gone before our code runs, and the config warnings are debug-only — so nothing will tell you. The quotes are what make it a string the loader can recognise. Verified against step's own reader: `max = "default"` parses and resolves to the built-in default with the rest of the table intact, while `max = default` (bare, either case) drops the table.
+- **The quoting convention applies to every key type, and the loader honours it.** Because the `"default"` marker must be a TOML scalar, the seed block writes every default quoted — so when you uncomment a key you naturally keep the quotes. Numbers, booleans and lists therefore arrive as strings, and the loader coerces them: `max = "6"`, `enabled = "false"` and `keywords = "team, squadup"` (a comma-separated string is how a list is spelled under this convention) all take effect. Before plan-131 they did not — the values were silently reset to the built-in defaults, with the only notice going to a debug-only log.
+- **Upgrades add the new options**: every section in the block carries the plugin version that documented it. After you install a newer version, the next activation appends just the sections that are new or changed — never a second copy of the whole block, and never over anything you wrote. A section you already have counts as documented whether it is a commented reference or an active table you configured yourself, so an old install is not duplicated; a section marked at an older version is refreshed so new keys inside it appear. Everything stays comments until you uncomment it.
 - **Known compromise**: tool description strings fixed at registration (e.g. the model list) and the depth gate (`maxRecursionDepth`) do not refresh when a project-level override is applied mid-session; the effective depth bound is propagated to sub-members via `STEPCODE_TEAM_MAXDEPTH`, and description changes take effect next session.
 - **Scope**: these settings govern the team plugin only. The built-in subagent extension (`subagent` / `agent_send` tools) has its own settings and lifecycle; team role presets and subagent agent definitions are discovered from the same directories but parsed independently. For a personal in-session checklist use the built-in `task_*` tools — the team board is the shared, cross-member board.
 - **Sandbox isolation**: `STEP_CODING_AGENT_DIR` moves both the agent dir and the global config root, so the sandbox never touches your real configuration.

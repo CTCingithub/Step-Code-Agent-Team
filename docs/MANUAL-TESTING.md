@@ -26,9 +26,12 @@
 
 ## Status overview (2026-10-29)
 
+> Automation baseline re-verified **2026-11-23 (plan-139 round)**: full gate green at **40 phases** (+ manifest + 7 live checks + orphan-check, 99–276s — the spread is machine load, not the suite); the gate now runs `tsc` first and prints `typecheck: OK`; assertion-count ratchet baseline 40 phases / 773 entries (`test/smoke/assertion-counts.txt`). Earlier baselines below are historical records and are left as they were.
 > Automation baseline re-verified **2026-10-30 (R17, the manual-round-driven round)**: full gate green; tsc zero; probes 5a/5b/5c/7/8/9 all PASS. The 2026-10-29/30 manual round's two wrong conclusions are corrected in the docs (the ring chain-length semantics and the config file location), the config now traces which file it read and the effective values under `STEPCODE_TEAM_DEBUG=1`, the topology denial names its shape, and a teammate's reply carries provenance framing.
 >
 > Automation baseline re-verified **2026-10-29 (R16, the leftover-closure round)**: zero-token gate green again; **tsc across the whole import graph is now zero errors** (was 17); new probe scenario **5c** automates the pinned-tier KEYWORD path (the last item that still needed a manual spot-check), and a relative `storage.dir` now resolves under the agent dir instead of the launch directory.
+>
+> Automation baseline re-verified **2026-10-30 (plan-114, the team-scheme round)**: zero-token gate green at **25 phases** + manifest + 7 live + orphan-check; tsc zero across the whole import graph; phase27 reworked to assert the exported `searcherSpawnEnv` instead of a hand-copied mirror of `buildSpawnArgs` (that mirror is what let a missing `STEPCODE_TOPO_SEARCH_KEY` pass the gate while the script's search path had no credential). The searcher's real search/fetch is still unrun — it needs a real key in `[stepcodeAgentTeam.searcher]`.
 >
 > Automation baseline re-verified **2026-10-29 twice**: (R14, the v0.3.0 test-exhaustion round) zero-token smoke 20 phases + manifest + 7 live + orphan-check green; LLM layer phase4 4/4, phase10 A 2/2 + B 1/1, phase11 4/4 (zero SKIP), phase12 9/9. (R15, the UI-naming + Accept/Cancel/Other round) the same gate green again after the rename and the option reorder; phase24 now also asserts the option **order** (`Accept / Cancel / Other`) and that a **dismissed** Other input (Esc/timeout) cancels exactly like Cancel — which moves the "Esc cancels" data plane out of this manual set; live probes 5a/5b PASS on the new title and labels, 8 FAIL→PASS on re-run (mechanical assertion passed both times; only the member's LLM self-report flaked — the probe now prints that reply so a failure is diagnosable without a re-run).
 | # | Item | Status |
@@ -44,6 +47,62 @@
 | 9 | Custom roles (agent-dir + trusted project tier) | ➖ phase3 covers loading and the trust gate + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 8`: the frontmatter's tools/effort/prompt land on a real spawn and the member self-reports the allowlist incl. topo_team_msg); **re-verified 2026-10-29 (R14)** — the create-result half passed twice, the member self-report flaked once and passed on re-run (an LLM-behavior assertion, not a mechanical one); the project tier still needs the M2 trust flow ⬜ |
 | 10 | Keyword migration notice | ✅ phase6/phase9 cover the stripping semantics + **live-verified 2026-10-25** (`probe-remaining-manual.mjs 9`: the notice appears exactly once per session); **re-verified 2026-10-29 (R14)** — exactly one notice on the final product code |
 | — | English translation review | ⬜ Recommended |
+
+## The workflow — what you run yourself, in order
+
+Automation covers everything a script can observe: 40 phases, 773 assertions, the
+package manifest, 7 live wiring checks and the orphan check, all zero-token. What
+is left is exactly what a script cannot see — pixels, keypresses, a trust dialog
+somebody has to click, and English written for humans. Five items, one order.
+
+| # | Item | Detail | Time | Writes your real settings? | Costs money? |
+|---|---|---|---|---|---|
+| M1 | Real install / uninstall | §2 | ~5 min | **yes** | no |
+| M2 | Trust popup — Accept *and* Cancel | §3 | ~3 min | no | no |
+| M3 | TUI pixels and keypresses | §1 | ~15 min | no | no |
+| M5 | English translation review | docs/*.md | ~30 min | no | no |
+| M6 | Eight-member performance | §6 | ~20 min | no | **yes — optional** |
+
+**The order matters.** M1 first, because every later step depends on the installed
+extension actually loading; then M2, because the trust state it produces changes
+what M3 sees; then M3, which is the long one; M5 is independent and can be done
+any time, including offline. M6 is optional and the only item that spends money.
+
+1. **Preflight** — Step 0 below: archive the previous round, reset the sandbox,
+   confirm the test key is in `sandbox/TEST-KEY.md`.
+2. **Automated gate first** — `npm run smoke` must be green before any manual
+   work. It now runs `tsc` over the whole import graph *first* and prints
+   `typecheck: OK`; a type error stops the run before any probe starts, so a
+   green gate also means everything compiles. Budget ~100s unloaded (longer on a
+   busy machine — the 7 live checks each spawn their own session).
+3. **M1 — real install.** `step install ~/GitProjects/Step-Code-Agent-Team`, open
+   a normal session, paste `Use the topo team feature to introduce yourself`, then
+   `step remove ~/GitProjects/Step-Code-Agent-Team` and confirm the team tools are
+   gone. Local-path installs are reference-only, so this does not copy the repo.
+   **This is the one item that writes your real settings** — which is why you run
+   it and not a script.
+4. **M2 — trust dialog.** In a fresh project with `.stepcode/config.toml`, start
+   the sandbox and click **Accept** once; delete `sandbox/agent/trust.json` and
+   click **Cancel** once. Both branches: Accept proves the project config is then
+   read, Cancel proves it is not.
+5. **M3 — TUI.** Work the §1 prompt list one prompt at a time, watching rendering
+   and keys (spinner, the three-option confirmation, `ctrl+o`, Esc, empty submit).
+   The 0.1.8 upgrade changed compaction internals, so pay attention to how a long
+   session behaves near the context limit.
+6. **M5 — English.** Read the English docs as a native speaker. No command needed.
+7. **Wrap-up** — Step 3 below: status, session log, archive, restore, and a
+   TEST-PLAN row.
+
+### Two 0.1.8-specific things to watch (observe, do not gate)
+
+1. After `/topo ping`, the host no longer echoes back the line you typed. That is
+   upstream #318 working as intended — not the plugin dropping your request. The
+   verbatim-forward guarantee is now asserted by phase44, which drives the real
+   command handler and reads the exact string handed to `sendUserMessage`, so it
+   no longer depends on what the host chooses to print.
+2. Long-session auto-compaction now runs the host's native summary instead of the
+   older CLM path. If context-filling prompts used to feel slow, they should not
+   now.
 
 ## Round runbook (one complete test round)
 
@@ -66,7 +125,7 @@ required; without one those steps fail.
 ### Step 1 — automated gate (must be green before any manual work)
 
 ```bash
-npm run smoke   # 20 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
+npm run smoke   # tsc + 40 phases + manifest + 7 live checks (+ orphan-check); stop and fix on any failure
 ```
 
 ### Step 2 — interactive scenarios (in order, one prompt at a time)
@@ -90,7 +149,10 @@ npm run smoke   # 20 phases + manifest + 7 live checks (+ orphan-check); stop an
 **Must-run manual items (M1/M2)**: the real install/uninstall (§2 — it writes your real
 settings, so **you run it yourself**) and the project-config trust popup (§3) are
 **required** manual items, not optional; §2/§3 keep their current content and are called
-out here so a round is not considered complete without them.
+out here so a round is not considered complete without them. See
+[The workflow](#the-workflow--what-you-run-yourself-in-order) above for the full
+ordered list, including M3 (TUI) and M5 (English), and for the two 0.1.8-specific
+observation points.
 
 **Tier confirmation content (actual-plan rework)**: when `/topo` carries a request and
 a tier is picked, the plugin first asks the model (one-off, plan-only call with a

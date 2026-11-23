@@ -7,6 +7,8 @@
  *   2. The CLI shim (bin/stepcode-team.mjs) round-trips through that socket.
  *   3. Role presets load from agents/ (resolved relative to the extension).
  *   4. createMember with a preset role persists the coordination section.
+ *   5. The member-side topo_team_msg tool: env-gated registration, schema, and
+ *      the socket round-trip including topology denials.
  *
  * Note: the shim must be spawned ASYNCHRONOUSLY. The TeamServer runs inside
  * this (leader) process, so a blocking spawnSync would stall the event loop and
@@ -14,6 +16,12 @@
  *
  * The actual message dispatch (shim `msg` → sendMessage → LLM) costs tokens and
  * is validated by the user.
+ *
+ * Every case goes through check(), so each logs one PASS/FAIL line and is
+ * counted by the runner's assertion ratchet. This probe used to report through
+ * ad-hoc log()/fail() pairs, which meant a case could be weakened into a
+ * tautology and the runner would still see DONE with no FAIL line — green while
+ * testing less.
  */
 
 import { spawn } from "node:child_process";
@@ -61,6 +69,11 @@ function runShim(
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		const log = (...args: unknown[]) => console.error("[smoke3]", ...args);
+		const results: Array<{ name: string; ok: boolean; detail: string }> = [];
+		const check = (name: string, ok: boolean, detail = "") => {
+			results.push({ name, ok, detail });
+			log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail.replace(/\s+/g, " ").slice(0, 160)}` : ""}`);
+		};
 		const fail = (msg: string) => log("SMOKE3 FAILED:", msg);
 		try {
 			const manager = TeamManager.forSession(ctx.sessionManager.getSessionFile(), ctx.cwd);
@@ -76,6 +89,9 @@ export default function (pi: ExtensionAPI) {
 			log("shim status exit:", res.code);
 			log("shim status stdout:", res.stdout.trim().slice(0, 300));
 			if (res.stderr.trim()) log("shim status stderr:", res.stderr.trim().slice(0, 300));
+			check("shim: status round-trips over the socket",
+				res.code === 0 && res.stdout.includes("teamId"),
+				`exit=${res.code} stdout=${res.stdout.trim().slice(0, 80)}`);
 			if (res.code !== 0 || !res.stdout.includes("teamId")) {
 				fail("shim status round-trip broken");
 				server.stop();
@@ -90,6 +106,9 @@ export default function (pi: ExtensionAPI) {
 					? `${preset.name} tools=${preset.tools?.join(",")} model=${preset.model} promptLen=${preset.systemPrompt.length}`
 					: "NOT FOUND",
 			);
+			check("preset: reviewer loads from agents/",
+				Boolean(preset) && preset?.name === "reviewer",
+				preset ? `${preset.name} model=${preset.model}` : "NOT FOUND");
 			if (!preset || preset.name !== "reviewer") {
 				fail("preset loading broken");
 				server.stop();
@@ -109,16 +128,21 @@ export default function (pi: ExtensionAPI) {
 			const untrustedPreset = loadPreset("trustprobe", projTmp, false);
 			const trustedPreset = loadPreset("trustprobe", projTmp, true);
 			const untrustedAgain = loadPreset("trustprobe", projTmp, false);
+			check("trust gate: an untrusted project tier is skipped", !untrustedPreset, String(Boolean(untrustedPreset)));
 			if (untrustedPreset) {
 				fail("project-tier preset loaded from an UNTRUSTED project (trust gate broken)");
 			} else {
 				log("trust gate: untrusted project tier skipped: OK");
 			}
+			check("trust gate: a trusted project tier loads",
+				Boolean(trustedPreset) && trustedPreset?.name === "trustprobe",
+				String(trustedPreset?.name));
 			if (!trustedPreset || trustedPreset.name !== "trustprobe") {
 				fail("project-tier preset not loaded from a TRUSTED project");
 			} else {
 				log("trust gate: trusted project tier loaded: OK");
 			}
+			check("trust gate: the preset cache is keyed on trust", !untrustedAgain, String(Boolean(untrustedAgain)));
 			if (untrustedAgain) {
 				fail("preset cache leaked the trusted project tier into an untrusted load");
 			} else {
@@ -137,6 +161,10 @@ export default function (pi: ExtensionAPI) {
 					promptBody.includes("topo_team_msg") &&
 					promptBody.includes("not a messaging target"),
 			);
+			check("member: the preset's model is persisted", member.model === preset.model, `${member.model} vs ${preset.model}`);
+			check("member: the prompt carries the coordination section",
+				promptBody.includes("Team messaging") && promptBody.includes("topo_team_msg") && promptBody.includes("not a messaging target"),
+				`len=${promptBody.length}`);
 			if (
 				member.model !== preset.model ||
 				!promptBody.includes("Team messaging") ||
@@ -173,6 +201,7 @@ export default function (pi: ExtensionAPI) {
 			delete process.env.STEPCODE_TEAM_SOCK;
 			delete process.env.STEPCODE_TEAM_MEMBER;
 			const inertTools = loadMsgTools();
+			check("member messaging: inert outside a member process", inertTools.length === 0, String(inertTools.length));
 			if (inertTools.length !== 0) {
 				fail(`topo_team_msg must stay inert outside a member process (got ${inertTools.length} tools)`);
 			} else {
@@ -183,11 +212,21 @@ export default function (pi: ExtensionAPI) {
 			process.env.STEPCODE_TEAM_MEMBER = "rev1";
 			const msgTools = loadMsgTools();
 			const msgTool = msgTools[0];
+			check("member messaging: registered inside a member process",
+				msgTools.length === 1 && msgTool?.name === "topo_team_msg",
+				msgTools.map((t) => t.name).join(",") || "none");
 			if (msgTools.length !== 1 || !msgTool || msgTool.name !== "topo_team_msg") {
 				fail("topo_team_msg tool not registered inside a member process");
 			} else {
 				log("topo_team_msg: registered inside a member process: OK");
 				const params = msgTool.parameters as { type?: string; properties?: Record<string, unknown>; required?: string[] };
+				check("member messaging: the schema requires to + message",
+					params?.type === "object" &&
+						Boolean(params.properties?.to) &&
+						Boolean(params.properties?.message) &&
+						(params.required ?? []).includes("to") &&
+						(params.required ?? []).includes("message"),
+					`required=${(params.required ?? []).join(",")}`);
 				if (
 					params?.type !== "object" ||
 					!params.properties?.to ||
@@ -199,6 +238,9 @@ export default function (pi: ExtensionAPI) {
 				} else {
 					log("topo_team_msg: schema requires to + message: OK");
 				}
+				check("member messaging: the description mentions the topology gate",
+					(msgTool.description ?? "").includes("topology"),
+					(msgTool.description ?? "").slice(0, 80));
 				if (!(msgTool.description ?? "").includes("topology")) {
 					fail("topo_team_msg description must mention the topology gate");
 				} else {
@@ -214,6 +256,9 @@ export default function (pi: ExtensionAPI) {
 						details?: { to?: string };
 					};
 					const text = res.content?.map((c) => c.text ?? "").join("\n") ?? "";
+					check("member messaging: a topology denial surfaces with the allowed list",
+						res.isError === true && /topology denies|Allowed teammates/i.test(text),
+						text.slice(0, 100));
 					if (res.isError !== true || !/topology denies|Allowed teammates/i.test(text)) {
 						fail(`topo_team_msg socket round-trip broken: ${text.slice(0, 160)}`);
 					} else {
@@ -221,6 +266,8 @@ export default function (pi: ExtensionAPI) {
 					}
 					// details.to echoes the addressed member — the reply is attributed to
 					// the target the sender named, not to whoever answered.
+					check("member messaging: details.to echoes the addressed member",
+						res.details?.to === "ghost", String(res.details?.to));
 					if (res.details?.to !== "ghost") {
 						fail(`topo_team_msg details.to must echo the addressed member (got ${JSON.stringify(res.details?.to)})`);
 					} else {
@@ -236,6 +283,9 @@ export default function (pi: ExtensionAPI) {
 						details?: { to?: string };
 					};
 					const leaderText = leaderRes.content?.map((c) => c.text ?? "").join("\n") ?? "";
+					check("member messaging: the leader target explains the final-report path",
+						leaderRes.isError === true && /not a messaging target/i.test(leaderText) && /final report/i.test(leaderText),
+						leaderText.slice(0, 100));
 					if (
 						leaderRes.isError !== true ||
 						!/not a messaging target/i.test(leaderText) ||
@@ -245,6 +295,8 @@ export default function (pi: ExtensionAPI) {
 					} else {
 						log("topo_team_msg: leader target denied with final-report guidance: OK");
 					}
+					check("member messaging: details.to echoes the leader address",
+						leaderRes.details?.to === "leader", String(leaderRes.details?.to));
 					if (leaderRes.details?.to !== "leader") {
 						fail(`topo_team_msg details.to must echo the addressed member (got ${JSON.stringify(leaderRes.details?.to)})`);
 					} else {
@@ -260,7 +312,8 @@ export default function (pi: ExtensionAPI) {
 
 			await manager.disband();
 			server.stop();
-			log("SMOKE3 DONE");
+			const failed = results.filter((r) => !r.ok);
+			log(`SMOKE3 DONE (${results.length - failed.length}/${results.length} passed)`);
 		} catch (err) {
 			fail(err instanceof Error ? err.message : String(err));
 		}

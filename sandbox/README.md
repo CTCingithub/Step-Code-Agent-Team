@@ -29,10 +29,12 @@ agent team.
 | `project/` | Demo project: zero-dependency Node.js task manager (`npm test`: 12 tests, 11 pass with the seeded bug in place) |
 | `project-pristine/` | Initial snapshot of the demo project (the source for restore; do not modify) |
 | `smoke-phase4/10/11/12.ts` | LLM-layer regression probes (need a key; see docs/TESTING.md for how to run) |
+| `bin/topo-search.mjs` (repo root) | the searcher role's retrieval script: `search` / `fetch` / `batch`. The endpoints and keys come from `[stepcodeAgentTeam.searcher]` in the config — any provider speaking this script's JSON contract works, DeepSeek's `/v1/tools/search` + `/v1/tools/fetch` are only the defaults (see ../../docs/CONFIGURATION.md) |
+| `probe-searcher.mjs` | the searcher **live** probe: real search/fetch against the configured provider, driven by the config file (see below) |
 | `probe-remaining-manual.mjs` | RPC-driver live probes for the formerly-manual scenarios (needs the key): `node sandbox/probe-remaining-manual.mjs <5a\|5b\|5c\|7\|8\|9\|all>` — answers the host dialogs (select/input/confirm) to drive the plan confirmation, the L1 guard, custom roles and the migration notice; each subcommand uses an isolated temp agentDir and must run from the leader's own process (and with the six `STEPCODE_TEAM_*` variables unset — inside a member process they are inherited by the probe's own `step` child, whose extension then reads depth 1 ≥ `maxRecursionDepth` 1 and stays inert, so every probe false-fails). `all` runs every scenario in its own child process (one mktemp agentDir each) and prints a per-scenario verdict plus a summary line |
 | `cfg-*/settings.json` | Probe config fixtures (staged through the legacy settings.json tier, still honored). Live: `cfg-conc` (phase10 Branch A), `cfg-deadlock` (phase10 Branch B), `cfg-deep2` (phase11); the rest are legacy with no live consumer (phase9 builds its own mktemp fixture). A local `sandbox/config.toml` shadows these — isolate the probe's agentDir (see docs/TESTING.md Layer C) |
-| `TEST-KEY.md` | Test API key (gitignored — one `STEP_API_KEY=<key>` line; read by run-smoke.sh and with-test-key.sh) |
-| `with-test-key.sh` | Runs a command with the key from TEST-KEY.md exported (used for the Layer C LLM probes) |
+| `TEST-KEY.md` | Test credentials (gitignored — `STEP_API_KEY=<key>` for the step CLI; an optional `DEEPSEEK_API_KEY=<key>` line is a convenience fallback for the searcher script's default endpoint). The searcher's own key belongs in `[stepcodeAgentTeam.searcher]` in `sandbox/config.toml` (also gitignored), which is provider-neutral |
+| `with-test-key.sh` | Runs a command with the keys from TEST-KEY.md exported (used for the Layer C LLM probes) |
 | `step/` | Step Code source submodule (pins the version this sandbox tracks) |
 | `step-bin.sh` | step binary resolver (sourced by the scripts) |
 | `build-step.sh` | Optional: builds step from the submodule to `sandbox/step-build/` |
@@ -46,6 +48,14 @@ history live in [../docs/TEST-PLAN.md](../docs/TEST-PLAN.md).
 (MIT licensed), pinning the Step Code revision this sandbox tracks — when step
 upgrades you only bump the submodule pointer and re-run the regression suite,
 instead of passively following changes to the global install.
+
+**Pinned revision**: `414416e2f` (2026-11-21, `origin/main` tip), which builds as
+**Step Code 0.1.8**. The version is injected at build time
+(`scripts/build-binaries.sh`, `STEPCODE_BUILD_VERSION`) and the repo's own
+`package.json` says `0.1.0` throughout, so neither a tag nor that file will tell
+you what you are on — `step --version` will. Record the commit and the reported
+version here whenever you bump it, so the next upgrade has a baseline to diff
+against.
 
 - **When cloning this repo**: use `git clone --recurse-submodules`, or after
   cloning run `git submodule update --init sandbox/step`.
@@ -83,6 +93,42 @@ record the round afterwards as described in [Session log](#session-log) below.
 `project/secret-sample.txt` is a **fake secret**, used to verify the
 path-protection guardrail (members must not read or exfiltrate it).
 
+## Testing the searcher for real (costs money)
+
+`bin/topo-search.mjs` talks to whatever provider you configure — DeepSeek's
+`/v1/tools/search` and `/v1/tools/fetch` are only the defaults. The endpoints
+and the keys live in the **config file**, never in a vendor-specific key file:
+
+```toml
+# sandbox/config.toml  (gitignored)
+[stepcodeAgentTeam.searcher]
+searchUrl = "https://api.deepseek.com"
+searchApiKey = "<your key>"
+fetchUrl = "https://api.deepseek.com"
+fetchApiKey = "<your key>"
+```
+
+Then run the live probe — it reads that table, injects the values through the
+same `STEPCODE_TOPO_*` variables the leader gives members, and asserts the real
+contract (non-empty results with urls, `need_content` bodies, fetch returning a
+title plus markdown, real project content, batch fan-out):
+
+```bash
+node sandbox/probe-searcher.mjs                    # uses the config
+TOPO_PROBE_MAX_CALLS=0 node sandbox/probe-searcher.mjs   # config-only dry run
+```
+
+**It is billed.** Providers charge per successful request (DeepSeek: ¥5 per
+1000). The probe prints its budget before it starts (at most 6 billable calls),
+and with no key configured it exits 2 with the exact config to add and makes
+**zero** calls. Failures, empty results and timeouts are not billed — which is
+also why the script never retries a 4xx.
+
+To exercise the **role** end-to-end (a member with `role: searcher` calling the
+script), start a session in the sandbox and ask for a search — the member
+inherits `DEEPSEEK_API_KEY` from the leader's environment, or the keys arrive
+from the config table above via the leader's injection.
+
 ## Session log
 
 After each sandbox test round, have the agent write the process to
@@ -111,8 +157,8 @@ npm run smoke            # full zero-token smoke (no key needed)
 bash test/run-smoke.sh 5 # phase5 needs a key (from the environment or sandbox/TEST-KEY.md)
 ```
 
-**What the gate runs**: 20 phases — the list is derived on disk from
-`test/smoke/phase*.ts`; phases 15/16/23/24 run standalone (no extension loaded,
+**What the gate runs**: 40 phases — the list is derived on disk from
+`test/smoke/phase*.ts`; phases 15/16/23/24/28/30/31/32/33 run standalone (no extension loaded,
 avoiding the tool-name conflict with an installed package copy); phase 5 needs a
 key; after the phases: a manifest check, 7 live checks (which must run from the
 leader's own clean process — inside a member process they fail wholesale, a

@@ -16,6 +16,7 @@ import * as net from "node:net";
 import * as path from "node:path";
 import type { TeamManager } from "./members.ts";
 import { getConfig } from "./config.ts";
+import { splitLines } from "./team/framing.ts";
 
 /** Opt-in diagnostics for the messaging layer (config.debug, or STEPCODE_TEAM_DEBUG). */
 function debugLog(...args: unknown[]): void {
@@ -49,16 +50,15 @@ export class TeamServer {
 			// requests still gets its replies in order.
 			let queue: Promise<void> = Promise.resolve();
 			conn.on("data", (data: Buffer) => {
-				buffer += data.toString("utf8");
-				let idx: number;
-				while ((idx = buffer.indexOf("\n")) >= 0) {
-					const line = buffer.slice(0, idx).replace(/\r$/, "");
-					buffer = buffer.slice(idx + 1);
-					if (line.trim()) {
-						queue = queue
-							.then(() => this.handle(conn, line))
-							.catch((err) => debugLog("handle error:", err instanceof Error ? err.message : String(err)));
-					}
+				const framed = splitLines(buffer + data.toString("utf8"));
+				buffer = framed.rest;
+				for (const line of framed.lines) {
+					if (!line.trim()) continue;
+					// Serialize handling per connection so a member that pipelines two
+					// requests still gets its replies in order.
+					queue = queue
+						.then(() => this.handle(conn, line))
+						.catch((err) => debugLog("handle error:", err instanceof Error ? err.message : String(err)));
 				}
 			});
 			conn.on("error", (err: Error) => {

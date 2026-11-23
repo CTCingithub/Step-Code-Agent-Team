@@ -48,6 +48,25 @@ export function getStepInvocation(args: string[]): { command: string; args: stri
 	return { command: "step", args };
 }
 
+/**
+ * The environment a member process is spawned with: the leader's environment
+ * plus the per-member overrides.
+ *
+ * Inheriting the leader's environment is a load-bearing contract, not an
+ * accident. `STEP_CODING_AGENT_DIR` decides where the global unified config
+ * lives (`dirname(agentDir)/config.toml`), so a member that did NOT inherit it
+ * would silently read a different config — the searcher endpoints and keys, the
+ * `[compaction]` table, and the model settings would all diverge from the
+ * leader's with nothing to show for it. Extracted so a probe can assert the
+ * merge instead of trusting a spread operator to stay put.
+ */
+export function memberSpawnEnv(overrides: Record<string, string>): Record<string, string> {
+	return { ...process.env, ...overrides } as Record<string, string>;
+}
+
+/** How much member stderr to retain for diagnostics. */
+const STDERR_TAIL_BYTES = 8_192;
+
 export class MemberRpc {
 	readonly pid: number;
 	private readonly proc: ChildProcess;
@@ -63,6 +82,8 @@ export class MemberRpc {
 	private interimListeners = new Set<(text: string) => void>();
 	private lastAssistantText = "";
 	private usage: MemberUsage = emptyUsage();
+	/** Bounded tail of the member's stderr; see the constructor's note. */
+	private stderrTail = "";
 
 	private constructor(
 		proc: ChildProcess,
@@ -77,8 +98,13 @@ export class MemberRpc {
 		this.handlers = handlers;
 
 		proc.stdout?.on("data", (data: Buffer) => this.onData(data));
-		proc.stderr?.on("data", () => {
-			// Member stderr is diagnostics only; not part of the protocol.
+		// Member stderr is diagnostics only and never part of the protocol — but
+		// discarding it outright is why 38 settle timeouts went undiagnosed: the
+		// member was the only process that knew why it never ran, and we threw
+		// its answer away. Keep a bounded tail instead, so a zero-delta timeout
+		// can quote the member's own last words rather than guessing.
+		proc.stderr?.on("data", (data: Buffer) => {
+			this.stderrTail = `${this.stderrTail}${data.toString()}`.slice(-STDERR_TAIL_BYTES);
 		});
 
 		proc.on("error", (err: Error) => {
@@ -115,7 +141,7 @@ export class MemberRpc {
 			// ("ignore" points the child's stdin at /dev/null, so prompt writes
 			// silently vanish and the member exits on EOF.)
 			stdio: ["pipe", "pipe", "pipe"],
-			...(env ? { env: { ...process.env, ...env } } : {}),
+			...(env ? { env: memberSpawnEnv(env) } : {}),
 		});
 		const rpc = new MemberRpc(proc, handlers, {
 			requestMs: requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
@@ -371,6 +397,15 @@ export class MemberRpc {
 	}
 
 	/** Hard shutdown for disband: SIGTERM, then SIGKILL after a grace period. */
+	/**
+	 * The member's recent stderr, trimmed to whole lines. Empty when the member
+	 * said nothing — which is itself informative (a silent member never ran).
+	 */
+	stderrLines(limit = 12): string[] {
+		const lines = this.stderrTail.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+		return lines.slice(-limit);
+	}
+
 	kill(): void {
 		if (this.closed || this.proc.killed) return;
 		this.proc.kill("SIGTERM");

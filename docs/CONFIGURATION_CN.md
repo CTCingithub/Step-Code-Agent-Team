@@ -66,7 +66,7 @@ reapIntervalMs = 300000              # 回收检查间隔（5 分钟）
 
 [stepcodeAgentTeam.storage]
 # dir 省略（null）= <agentDir>/teams
-# dir 须为绝对路径：相对路径按启动插件的进程 cwd 解析（registry.ts teamsRoot），而非 <agentDir>
+# dir 须为绝对路径：相对路径按 <agentDir> 解析（registry.ts teamsRoot），不按进程 cwd
 
 [stepcodeAgentTeam.tasks]
 max = 999                           # 任务板容量（id 为 T1..T<max>；1–10000）
@@ -86,6 +86,35 @@ scout = "low"                        # 按角色覆盖 effort（自定义角色�
 planner = "medium"                   # models.autonomousEffort 开启时一律不生效（由队长选择）
 worker = "medium"
 reviewer = "high"
+searcher = "medium"                  # searcher 角色（v0.4.0 新增）
+
+[stepcodeAgentTeam.searcher]           # searcher 角色的检索/抓取端点与凭证（v0.4.0 新增）
+searchUrl = ""                        # 空 = 宿主 search_web 的默认端点
+searchApiKey = ""                     # 空 = 登录态 / STEPCODE_SEARCH_API_KEY
+fetchUrl = ""                         # 空 = 对目标 URL 的普通无认证请求
+# 两个 key 都留空时，searcher 角色会以 exit code 2 失败，并给出点名本表的提示——
+# 缺凭证是配置问题而非请求失败，因此绝不重试。队长会注入你在此处设置的值，
+# 无需手动 export 任何环境变量。
+fetchApiKey = ""                      # 空 = 不带 Authorization 头
+#
+# 「空」的含义取决于你说的是哪个消费者，两者不同：**角色**回落到宿主工具
+# （search 用 search_web 自己的凭证解析，fetch 用普通 curl），而**脚本**
+# （bin/topo-search.mjs）回落到内置的 DeepSeek 端点与 DEEPSEEK_API_KEY。把 key
+# 配上，非默认厂家对两条路才同时真正生效。
+#
+# 这四个键就是重点：searcher 角色**不绑定任何厂家**。把 searchUrl/fetchUrl 指向
+# 任何遵循该脚本 JSON 契约的端点（{query,count,need_content} → {results}；
+# {url} → {title,content}）并在此配上对应密钥即可。队长会把它们以
+# STEPCODE_TOPO_SEARCH_URL / _SEARCH_KEY / _FETCH_URL / _FETCH_KEY 注入成员进程，
+# 另有 STEPCODE_SEARCH_API_KEY 供宿主 search 工具，以及指向脚本本身的
+# STEPCODE_TOPO_SEARCH_SCRIPT。
+
+[stepcodeAgentTeam.encryption]         # 团队注册表的落盘加密（v0.4.0 新增，默认开）
+enabled = true                        # AES-256-GCM；密钥在 .topo/team.key（0600）
+
+[stepcodeAgentTeam.records]            # 团队协作记录（v0.4.1 新增）
+enabled = true                        # 每次协作任务结束后向 .topo/records 写一份记录
+dir = "records"                       # .topo/ 下的子目录名
 
 [stepcodeAgentTeam]
 debug = false                        # 调试日志
@@ -121,6 +150,65 @@ debug = false                        # 调试日志
 
 成员动态获知可通知的邻居：`topo_team_msg` 被拒时会列出可用队友（server 按发送方身份返回 `mayMessage` 列表），`stepcode-team status` 亦可从 shell 查询。
 
+## 自动压缩（`[compaction]`，Step Code 0.1.8）
+
+Step Code 会在会话上下文逼近模型窗口时自动压缩。自 0.1.7 起，触发条件是**上下文窗口的比例**而非固定预留，且配置在 **Step Code 自己的统一配置**里——**不在**本插件的表中：
+```toml
+[compaction]
+triggerPolicy = "v2"            # 或 "legacy"（旧的固定预留行为）
+triggerRatio = 0.85             # 0 < 比例 <= 0.95；**0.1.8 起默认 0.85**（原 0.9）
+modelTriggerRatios = { "step/step-5-preview" = 0.8 }   # 按 provider/model 覆盖
+tokenLimit = 120000             # 绝对上限；只能让压缩更早触发
+contextProjection = "off"       # "off"（原生摘要压缩，**0.1.8 起默认**）
+                                # | "clm-v1"（选择性启用 CLM）| "lightweight-v1"
+```
+
+非法值会**回落默认值**并进入 settings diagnostics，不会让运行失败。
+
+**0.1.8 改了三个默认值**，全部在上游侧、均非插件键：
+
+- `triggerRatio` **0.9 → 0.85**，为估算误差留更多余量，避免请求超出窗口；
+- `contextProjection` **`clm-v1` → `off`**，即原生摘要压缩成为默认，CLM 改为选择性启用
+  （`contextProjection = "clm-v1"`、`--context-projection clm-v1` 或 `/clm on`）。上游给了实测理由：
+  逼近满窗时 CLM 的维护请求要携带几乎整个上下文（1M 窗口下约 975K token）却只省约 12%，
+  导致提示变慢——930K token 会话上原生压缩 16–19s，而 CLM 47–72s；
+- 提示大小估算改为按 **UTF-8 字节数**而非 JavaScript 字符数——旧的 `length / 4` 启发式把一个汉字
+  算作 0.25 token，而网关实际计约 0.61，这正是近窗请求会超限的原因。
+
+0.1.8 另新增：`retry.provider.streamIdleTimeoutMs`（默认 300000，超过该时长没有解析出事件的流会被取消），
+以及 `compaction.autoClm.coldMaxPrefillTokens`（默认 262144，无法复用缓存前缀时跳过自动 CLM 维护请求）。
+
+> **上游自身的不一致，记录而不替其断言**：0.1.8 changelog 说 `contextProjection` 默认改为 `off`，
+> 但 `packages/coding-agent/src/core/settings-manager.ts` 的 `getContextProjectionMode()`
+> 在压缩开启且未显式设置时仍返回 `"clm-v1"`。**实际行为以代码为准**；本插件两个值都不设，故不受影响。
+
+**为什么这与团队相关**：成员进程以队长的环境启动（含 `STEP_CODING_AGENT_DIR`），因此与队长读写**同一份**全局 `config.toml`。你在这里设的内容对队长和每个成员**一视同仁**——没有插件级键可设，加一个也只会给同一行为制造两个真相来源。相位探针钉住了这个继承关系（phase32 的 "spawn env"），将来重构无法悄悄破坏它。
+
+旧的固定预留在 64K 窗口下约 74% 触发，在 1M 窗口下却要到 ~98%；比例默认值在两种窗口下都留有余量。长团队会话中，成员报告加任务板会很快填满窗口——想更早压缩就调低 `triggerRatio` 或设 `tokenLimit`。
+
+## `.topo/` 与落盘加密（v0.4.0）
+
+**`.topo/` 是什么**：插件在你**当前工作目录**下的工作目录。首次激活时自动创建（插件默认关闭，因此未激活的会话不会在你目录里留任何东西），并把 `.topo/` 追加进**已存在的** `.gitignore`——若没有 `.gitignore` 则**不会替你创建**。目前里面只放一个文件：`team.key`（加密密钥，32 字节 base64，权限 0600）。
+
+**加密什么**：团队注册表 `registry.json`——它的 `tasks[].title/detail/result` 承载成员完整报告，是最敏感的载荷。算法 AES-256-GCM，信封带 `iv/tag/data` 与明文头 `teamId`/`cwd`（cwd 不敏感，读回时用它定位密钥文件）。`encryption.enabled = false` 时写明文。
+
+**必须知道的边界（不要夸大）**：
+- 防的是**其他用户读取**该文件，以及它被**误提交/误备份**；
+- **不防同 uid 的攻击者**——他能连 `.topo/team.key` 一起读；
+- **不覆盖宿主写出的成员会话 JSONL**（权限 0644，插件无权改写）——那仍是最大的真实暴露面，加密不解决它；
+
+**卸载后 `.topo/` 会留在原地**：`step remove` 只移除插件本身，不清除你工作目录里的 `.topo/`。这是刻意为之——那里装着团队密钥与协作记录，属于你的数据，插件无权替你删。要彻底清除，请自行 `rm -rf .topo/`（**这会永久失去团队密钥，已加密的协作记录将无法解密**）。`.gitignore` 里的 `.topo/` 条目也会一同失效，若你不再使用本插件可顺手删掉那一行。
+- **丢密钥 = 数据不可恢复**；
+- 旧版本写的明文 `registry.json` **仍可正常读取**（读到信封走解密，否则按明文）。
+
+**降级路径**：`.topo` 已存在但是文件、是符号链接（不跟随——避免把密钥写到链接指向的任意路径）、父目录只读、路径过长——全部降级：插件照常运行，只是不做落盘加密，并在 stderr 留一行说明。
+
+### 协作记录（`.topo/records/`）
+
+每次团队协作任务结束后（整队解散 `team_disband`、或 `/topo off` 停用；会话结束时团队仍活跃则补一份），插件向 `.topo/records/<teamId>-<UTC时间戳>.json` 写一份记录，并附同名 `.md` 人读摘要。内容：成员名册（角色/模型/effort/工具/状态/轮次/花费）、任务板全量（状态/负责人/依赖）、拓扑终态、累计花费与汇总计数。**幂等**：同一 teamId 不重复生成。
+
+是否加密**按你的加密选项**：`encryption.enabled` 开启且有密钥 → 与 registry 同一套 AES-256-GCM 信封；否则明文。`records.enabled = false` 可完全关闭。降级原则与上面相同：记录写不进去只在 stderr 留一行，**绝不阻断解散或停用**。
+
 ## 环境变量覆盖
 
 | 变量 | 作用 |
@@ -129,10 +217,16 @@ debug = false                        # 调试日志
 | `STEPCODE_TEAM_COST_WARN=<usd>` | 覆盖 `cost.warnThreshold`（非法值忽略） |
 | `STEPCODE_TEAM_MAXDEPTH=<n>` | 覆盖 `members.maxRecursionDepth`（1–4，非法值忽略）；队长按生效值注入子成员进程 |
 | `STEPCODE_TEAM_SOCK` | 由队长自动注入成员进程，指向团队服务 socket（无需手动设置） |
+| `STEPCODE_TOPO_SEARCH_URL` / `STEPCODE_TOPO_FETCH_URL` / `STEPCODE_TOPO_FETCH_KEY` / `STEPCODE_TOPO_SEARCH_KEY` / `STEPCODE_SEARCH_API_KEY` / `STEPCODE_TOPO_SEARCH_SCRIPT` | 由队长按 `[stepcodeAgentTeam.searcher]` 注入成员进程（searcher 角色按名取用；见 `docs/ROLES_CN.md`）。配置的 key 会以两个名字到达——`STEPCODE_TOPO_SEARCH_KEY`（脚本自己读的名字）与 `STEPCODE_SEARCH_API_KEY`（宿主 `search_web` 工具的名字）；脚本路径仅在 searcher 配置非空时才注入。仅在直接测 `bin/topo-search.mjs` 时才需要手工设置 |
+| `STEPCODE_SEARCH_API_KEY` | searcher 的 `searchApiKey` 非空时由队长注入；也是宿主 `search_web` 自带的凭证键 |
 
 ## 说明
 
 - **首次激活种子化**：插件在会话中首次激活时，若你的全局配置中没有 `stepcodeAgentTeam` 表，会向 `config.toml` 追加一段注释默认值块。全部为注释（默认值照常生效）——取消注释即可覆盖，或整块删除。
+- **`default` 标记**：写成 `"default"` 的键表示*使用内置默认值*，加载器会把它解析为默认值。这正是种子化配置能扛住升级的原因：写字面量会把种子化那一刻的值钉死，并在此后永远压过新版本的默认值；而 `DEFAULT` 会跟着默认值走，且对数字、布尔、数组、字符串一律有效（已对全部 27 个键逐一实证）。省略该键效果相同，所以 `DEFAULT` 是"可以放心取消注释"的文档。
+- **`"default"` 是保留 token——务必带引号。** 裸 `default`（不加引号）不是合法 TOML 标量：step 的配置读取器会**丢弃整表**，并静默带走你在该表里的全部真实设置。插件无法检测到这一点——表在我们的代码运行之前就已消失，且配置告警只在 debug 下输出——所以不会有任何提示。引号正是让它成为加载器可识别字符串的关键。已对 step 自己的读取器实证：`max = "default"` 可解析并解析为内置默认值、同表其余键不受影响；而 `max = default`（裸写，大小写皆然）会丢弃整表。
+- **引号约定适用于所有键类型，且加载器承认它。** 因为 `"default"` 标记必须是 TOML 标量，种子块把每个默认值都写成带引号——所以你取消注释时很自然会保留引号。数值、布尔与列表因此以字符串形式到达，而加载器会做 coererce：`max = "6"`、`enabled = "false"`、以及 `keywords = "team, squadup"`（逗号分隔字符串是本约定下写列表的方式）都会生效。在 plan-131 之前它们**不生效**——值被静默重置为内置默认，唯一通知进 debug-only 日志。
+- **升级后会补上新选项**：块中每个段都带有所文档化它的插件版本。安装新版本后，下次激活只会追加新增或变更过的段——不会重复整块，也不会覆盖你写过的任何内容。你已经有的段（无论是注释参考还是你自己配的活动表）都算"已文档化"，因此旧安装不会被复制一份；标记为旧版本的段会被刷新，使其内部新增的键出现。在你取消注释之前，一切始终是注释。
 - **已知妥协**：注册时固化的工具描述串（如模型列表）与本进程的深度门（`maxRecursionDepth`）不随项目级配置刷新；生效深度上限经 `STEPCODE_TEAM_MAXDEPTH` 向子成员传播，描述变化下一会话生效。
 - **管辖范围**：本组设置仅管辖团队插件。内置 subagent 扩展（`subagent` / `agent_send` 工具）有各自的设置与生命周期；team 角色预设与 subagent agent 定义从同一批目录发现但独立解析。个人会话内 checklist 请用内置 `task_*` 工具——团队任务板是跨成员共享板。
 - **沙箱隔离**：`STEP_CODING_AGENT_DIR` 同时移动 agentDir 与全局配置根，沙箱因此绝不触碰你的真实配置。

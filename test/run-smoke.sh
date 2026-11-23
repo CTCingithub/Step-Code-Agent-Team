@@ -20,12 +20,44 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/sandbox/step-bin.sh"
 STEP_BIN="$(resolve_step_bin)" || exit 2
 
-AGENT_DIR="$(mktemp -d)"
+# The agent dir must sit under a throwaway ROOT, not be the mktemp dir itself.
+# The plugin resolves its unified config at dirname(agentDir)/config.toml — the
+# host's own convention (settings-manager.ts) — and seeds it on every
+# activation. With AGENT_DIR as the mktemp dir, that path is /tmp/config.toml:
+# the gate would write into a shared directory and then READ it back on the
+# next run, where it overrides the plugin's own JSON config (it is applied last
+# in the global tier). Nested one level keeps the whole thing inside the tree
+# the EXIT trap removes.
+AGENT_ROOT="$(mktemp -d)"
+AGENT_DIR="$AGENT_ROOT/agent"
 SESSION_DIR="$AGENT_DIR/sessions"
 mkdir -p "$SESSION_DIR"
-trap 'rm -rf "$AGENT_DIR"' EXIT
+COUNTS_NOW="$AGENT_DIR/assertion-counts.txt"
+: > "$COUNTS_NOW"
+COUNTS_BASELINE="$ROOT/test/smoke/assertion-counts.txt"
+trap 'rm -rf "$AGENT_ROOT"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# ---- type check first ----
+# Without this, a probe carrying a type error looks like a `fails=0` mystery
+# failure: the runner's own verdict code treats "no FAIL line" as a failure, but
+# the probe never got far enough to print DONE, so the log tail is empty and the
+# only clue is a missing line. tsc costs ~3.5s and turns that into the actual
+# compiler message. The type config covers the whole import graph, so this also
+# catches a probe that stopped compiling against a changed product signature.
+if [ -f "$ROOT/tsconfig.typecheck.json" ]; then
+  TSC_BIN="$(ls "$ROOT"/sandbox/step/node_modules/.bin/tsc 2>/dev/null | head -1)"
+  if [ -n "$TSC_BIN" ]; then
+    if ! tsc_out="$("$TSC_BIN" -p "$ROOT/tsconfig.typecheck.json" 2>&1)"; then
+      echo "typecheck: FAILED"
+      echo "$tsc_out" | grep -E "error TS" | head -20
+      echo "run-smoke: FAILED (typecheck) — fix the errors above before running probes"
+      exit 1
+    fi
+    echo "typecheck: OK"
+  fi
+fi
 
 # Phase list derives from disk so a newly added phaseN.ts runs automatically;
 # OPT_OUT_PHASES (empty by default) is the only deliberate exclusion. Explicit
@@ -43,10 +75,10 @@ fi
 # which makes step stage the repo package into the agent dir and load a second
 # copy of index.ts: a fatal tool-name conflict. These probes don't need the
 # team extension, so don't load it.
-STANDALONE_PHASES="15 16 23 24"
+STANDALONE_PHASES="15 16 23 24 28 30 31 32 33 42 44 45"
 # Phases that make a real (1-token) model call and need a test key; skipped
 # explicitly when STEP_API_KEY is absent so the suite stays green offline.
-KEY_PHASES="5"
+KEY_PHASES="5 36"
 # Test key: the environment wins; otherwise fall back to sandbox/TEST-KEY.md
 # (gitignored — see that file). Keeps phase5 runnable without exporting.
 if [ -z "${STEP_API_KEY:-}" ] && [ -f "$ROOT/sandbox/TEST-KEY.md" ]; then
@@ -73,18 +105,35 @@ run_phase_attempt() {
   fails="$(echo "$probe_log" | grep -cE 'FAIL |FAILED' || true)"
   skips="$(echo "$probe_log" | grep -cE 'SKIP ' || true)"
   done="$(echo "$probe_log" | grep -cE 'DONE' || true)"
+  # Every check() logs one "PASS <name>" or "FAIL <name>" line, so this is the
+  # phase's real assertion count. Without a floor on it, deleting every check()
+  # in a probe leaves it printing DONE with no FAIL line — the verdict below
+  # passes it, and the suite goes green with nothing tested.
+  asserts="$(echo "$probe_log" | grep -cE 'PASS |FAIL ' || true)"
   if [ "$rc" -eq 124 ]; then
     # A 240s SIGTERM kill is a hang, not an assertion failure — say so instead
     # of the indistinguishable "(fails=0)".
     echo "phase$p: FAILED (timed out after 240s — the probe hung before DONE)"
     echo "$probe_log" | tail -20
     return 1
-  elif [ "$done" -ge 1 ] && [ "$fails" -eq 0 ]; then
-    echo "phase$p: OK (fails=0, skips=$skips)"
+  elif [ "$done" -ge 1 ] && [ "$fails" -eq 0 ] && [ "$skips" -eq 0 ]; then
+    # skips counts too: a probe that SKIPs its cases and still logs DONE used to
+    # pass here, which is the false green docs/TESTING.md:164 records for phase11
+    # run against the default agentDir. No probe emits "SKIP " on its normal path
+    # (grep-verified), and the runner's own key-gated skip happens outside this
+    # function, so requiring zero is safe.
+    echo "phase$p: OK (fails=0, skips=$skips, asserts=$asserts)"
+    # Recorded on the OK branch only: a failed phase's count is not a baseline.
+    echo "phase$p $asserts" >> "$COUNTS_NOW"
     return 0
   else
     echo "phase$p: attempt1 FAILED (fails=$fails) — retrying once with a fresh session id"
-    echo "$probe_log" | grep -E 'FAIL |FAILED' | head -20
+    # The whole tail, not just the FAIL lines. A probe that dies mid-stage (a
+    # hang, a throw before its first check) leaves no FAIL line at all, and
+    # "fails=0" with nothing else printed is the least actionable output the
+    # suite can produce — diagnosing phase34/35/36 each needed a temporary
+    # patch here first.
+    echo "$probe_log" | tail -25
     return 1
   fi
 }
@@ -112,6 +161,26 @@ for p in $PHASES; do
   # fails twice deterministically.
   run_phase_attempt "$p" "-retry" || FAILED+=("$p")
 done
+
+# ---- assertion-count ratchet ----
+# A probe that silently loses checks is worse than one that fails: it looks
+# green while testing less. Counts may rise freely; falling needs a deliberate
+# edit to the baseline, which is exactly the point.
+if [ ! -f "$COUNTS_BASELINE" ]; then
+  sort -n -k1.6 "$COUNTS_NOW" > "$COUNTS_BASELINE"
+  echo "assertion-counts: recorded baseline for $(wc -l < "$COUNTS_BASELINE" | tr -d ' ') phases"
+else
+  while read -r p want; do
+    got="$(awk -v key="$p" '$1==key {print $2; exit}' "$COUNTS_NOW")"
+    # A phase that did not run (key-gated skip, or absent from this
+    # invocation's PHASES) has no observation to compare — that is not a drop.
+    [ -z "$got" ] && continue
+    if [ "$got" -lt "$want" ]; then
+      echo "phase$p: FAILED (assertion count dropped $want -> $got — did a check() get deleted?)"
+      FAILED+=("$p")
+    fi
+  done < "$COUNTS_BASELINE"
+fi
 
 # ---- package manifest sanity ----
 # A `pi` manifest suppresses convention-directory discovery for the resource
@@ -189,9 +258,18 @@ rm -rf "$PKGDIR"
 # happened but its toast was coalesced away, and the verbatim request was then
 # completed solo — zero team tool calls), and since 0.2.0 the request is
 # forwarded VERBATIM as a real user message — what lands in the transcript is
-# exactly what the user typed (asserted on the delivered user-message event);
-# the team-usage instruction is injected request-locally through the context
-# event and never appears in the transcript.
+# exactly what the user typed. The verbatim guarantee itself is asserted by
+# phase44, which drives the real command handler through a fake ExtensionAPI and
+# reads the exact string handed to sendUserMessage; that is stronger than any
+# host-side grep and does not depend on the host echoing anything.
+#
+# It used to be asserted HERE, by grepping the RPC stream for the request text.
+# Upstream #318 ("write a session record of facts, not replayed progress")
+# removed that echo: a plain prompt with a distinctive string now leaves no trace
+# in RPC output at all, with no plugin involved — verified before changing this.
+# So this check was asserting an upstream emission detail, and it failed for a
+# reason unrelated to this plugin. What it still owns is the real-host half:
+# the command activates, announces the forward, and the host accepts it.
 LIVE3="$(mktemp -d)"
 mkdir -p "$LIVE3/sessions"
 fwd_out="$(cd "$LIVE3" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo ping-forward-check"}\n' \
@@ -205,8 +283,11 @@ elif ! echo "$fwd_out" | grep -q 'forwarding your request to the agent'; then
   echo "live-args-forward: FAILED (no forwarding announcement on the team board)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
-elif ! echo "$fwd_out" | grep -q '"text":"ping-forward-check"'; then
-  echo "live-args-forward: FAILED (request was not forwarded verbatim as a user message)"
+elif ! echo "$fwd_out" | grep -q '"command":"prompt","success":true'; then
+  # The forward is a queued user message; a throw inside sendUserMessage would
+  # surface as a warning notify and a failed prompt, so host acceptance is the
+  # observable proof that the forward was delivered rather than dropped.
+  echo "live-args-forward: FAILED (the host did not accept the forwarded prompt)"
   echo "$fwd_out" | tail -5
   FAILED+=("live-args-forward")
 else
@@ -214,17 +295,19 @@ else
 fi
 rm -rf "$LIVE3"
 
-# /topo review: the command activates and forwards the target verbatim (the
-# review-protocol instruction is injected request-locally and never logged).
+# /topo review: the command activates and the host accepts the forwarded target
+# (the review-protocol instruction is injected request-locally and never logged).
+# Same upstream-echo caveat as live-args-forward above; the verbatim half lives
+# in phase44.
 LIVE5="$(mktemp -d)"
 mkdir -p "$LIVE5/sessions"
 rev_out="$(cd "$LIVE5" && printf '{"id":"1","type":"get_state"}\n{"id":"2","type":"prompt","message":"/topo review ping-review-check"}\n' \
   | STEP_CODING_AGENT_DIR="$LIVE5/agent" timeout 45 "$STEP_BIN" -e "$ROOT/extensions/index.ts" \
     --mode rpc --session-id live-review --session-dir "$LIVE5/sessions" -a 2>&1)" || true
-if echo "$rev_out" | grep -q 'Topology Agent Team activated' && echo "$rev_out" | grep -q '"text":"ping-review-check"'; then
+if echo "$rev_out" | grep -q 'Topology Agent Team activated' && echo "$rev_out" | grep -q '"command":"prompt","success":true'; then
   echo "live-review: OK"
 else
-  echo "live-review: FAILED (the /topo review command did not activate and forward verbatim)"
+  echo "live-review: FAILED (the /topo review command did not activate and forward)"
   echo "$rev_out" | tail -5
   FAILED+=("live-review")
 fi
@@ -284,6 +367,13 @@ if [ -f "$AGENT_DIR/orphan.pid" ]; then
     echo "orphan-check: FAILED (member pid $orphan_pid still alive 15s after leader exit)"
     FAILED+=("orphan-check")
   fi
+elif echo " $PHASES " | grep -q " 17 "; then
+  # phase17 ran but wrote no pid file, so the leak protection above silently
+  # disappeared: a gutted probe passed, the check degraded to SKIPPED, and the
+  # suite stayed green with no orphan coverage at all. Only a genuinely
+  # un-run phase17 (an explicit subset like `run-smoke.sh 9`) may skip.
+  echo "orphan-check: FAILED (phase17 ran but wrote no orphan.pid — the probe is gutted)"
+  FAILED+=("orphan-check")
 else
   echo "orphan-check: SKIPPED (phase17 did not run — no orphan.pid)"
 fi

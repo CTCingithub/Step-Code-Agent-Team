@@ -1,7 +1,7 @@
 # 开发历程（Development History）
 
 > 按时间顺序罗列截至目前用户的每条 prompt、对应的开发思路决策、agent 实际所做工作与验证结果。
-> 最近更新：2026-10-19（plan-63，种子配置块补全为完整默认值清单（v0.1.4）；此前为 plan-62）。
+> 最近更新：2026-11-23（plan-138，0.1.8 接口审计与缺口补齐轮；此前为 plan-137）。
 
 ## 总览
 
@@ -806,6 +806,1002 @@
 
 **发布执行**（用户授权）：develop→main `--no-ff` 合并 → `scripts/release.sh 0.3.0`：冒烟门全绿（20 phase + manifest + 7 live + orphan-check）→ bump `0.3.0-preview`→`0.3.0` → `chore: release v0.3.0` → 附注 tag `v0.3.0` → push main + tag → **`latest` 移动到 v0.3.0**（正式版才会移动）→ hermetic 实测（throwaway agentDir 安装该 tag 并 RPC 激活）。
 
-**发布后状态**：`main` = 发布提交；`latest` = v0.3.0；`develop` 从 main 尖端继续（下一版开发按约定先 `git checkout main && git checkout -b develop`）；`v0.3.0-preview` tag 保留为历史预览线；npm 从未发布（git-only 分发）。
+**发布后状态**：`main` = `latest` = `develop` = 发布提交 `8bcdf44`（`chore: release v0.3.0`，package.json `0.3.0`）；附注 tag `v0.3.0` = `a4baac8`；`v0.3.0-preview`（73fdb81）保留为历史预览线；npm 从未发布（git-only 分发）。**hermetic 实测**：脚本内在推送后立即执行时撞上瞬时竞态失败（与 v0.3.0-preview 同一现象），手动重跑成立——一次性 agentDir 安装 `@v0.3.0` 成功，RPC 会话返回 `Topology Agent Team activated (/topo command). Team tools are now available.`。**环境注记**：本轮 SSH 到 github.com:22 被本地代理（198.18.0.8）拦截超时，`git push origin` 全部失败；HTTPS 读写正常但非交互推送缺凭据。改用 `gh auth setup-git` 让 gh 的 token 充当 credential helper 后推送成功——后续会话若遇同类网络问题可按此处理。
 
 **留给下一版**：① 六项纯人工测试（M1 真实 install/remove、M2 信任弹窗 + K6 项目级角色层、M3/M4 TUI 像素与按键、M5 英文审阅、M6 可选 8 成员性能）；② ring 巡游上限的演示目标需在同一次派发内连续嵌套中继才能触发（MANUAL-TESTING 场景 4 已写明）；③ deferred：P2-8e/9 测试加固、settle 超时自动 harvest（评估后不做）、宿主 select 倒计时不响应按键（上游缺口）、派发机制间歇性退化（根因未定位，队长接管可兜底）。
+### 73. v0.4.0 功能轮：`.topo/` 初始化、默认落盘加密、searcher 角色（plan-111）
+
+**用户 prompt**：确认性能档实际方案（Lead_Architect / Dev_Init_A / Dev_Init_B / Dev_Search / Dev_Docs，custom 拓扑，T1 接口规范→T2/T3 初始化竞速→T5 searcher→T4 择优集成→T6 文档→T7 联调）后「1.我需要让用户在工作空间中，首次使用本插件时，agent自动在目录下创建.topo/路径，并将该路径加入 .gitignore中（如果有），该路径用于辅助本插件的工作；2.添加默认打开的加密选项，加密保证安全性；3.添加一个默认角色searcher，专门用于search和fetch，配置文件中可设置使用的Search和Fetch的url和API key，若用户不填写则默认使用stepfun自带的。请创建合理的计划后执行，并同步修改或更新文档」。
+
+**思路**：三项功能一个共同底座——`.topo/` 既是工作目录也是密钥归宿，因此先定接口契约再动代码。**派发机制本轮每次尝试都 settle 超时**（架构 + 两个初始化竞速 + searcher 开发，共 4 次），按既定模式由队长单写全程；成员唯一落成物是 `phase25` 探针（49 断言，测试先行），被直接用作实现 A 的验收测试——这是本轮"先契约"决策的直接收益。
+
+**关键设计决策（均附读码依据）**：
+- **`.topo/` 创建时机 = 激活时**，不是 session_start：插件默认关闭，未激活会话不该在用户目录留东西（`index.ts` `tryActivate` 成功路径）。
+- **`.gitignore` 只追加不创建**：忠实于用户原话"如果有"；接受 `.topo/`/`.topo`/`/.topo`/`/.topo/` 四种拼写；保留 CRLF 与用户原有字节（appendFileSync，不读全量写回）。
+- **符号链接不跟随**：把我们没创建的链接当写入目标，会把 0600 密钥泄到任意路径——报错交由调用方决策。
+- **加密范围只说真话**：只加密插件自己的 `registry.json`（其 `tasks[].result` 承载成员完整报告）。文档明写**不防**同 uid 攻击者（能连密钥一起读）、**不覆盖**宿主写出的会话 JSONL（0644，插件无权改——上一轮安全评估确认的最大暴露面）、丢密钥不可恢复。**没有虚构能力**。
+- **信封带明文 `cwd` 头**：读回方要靠它定位 `.topo/team.key`；cwd 不敏感。最初设计引用了一个并不存在的 `cwd` 标记文件，自查发现后立即改正——这是本轮唯一的设计返工。
+- **searcher 给 `run_command`**：生态内无专用 fetch 工具（grep `fetchUrl|webfetch` 零命中），这是真实抓取能力的代价，写进文档而非隐瞒；`searchUrl` **不能**改宿主 `search_web` 的端点（只能经 options/login profile），故只作提示词指引值注入——同样如实写明。
+- **`searcher` 加进默认 `presets.effort`**：合并只认默认键集合里的键，不加则该角色 effort 无法配置（探针当场抓到）。
+
+**测试**：phase25（49 断言：目录/密钥 0600/幂等/四种拼写/CRLF/空文件/无换行/文件型/符号链接/超长路径）、phase26（信封往返、篡改与错钥拒绝、**明文 registry 仍可读**、enabled=false 写明文、缺密钥降级）、phase27（预设五字段、effort 覆盖、配置面+种子块、四个 env 键）。**门禁抓到真实回归**：phase24 报 `paths[0] must be of type string`——脚本化 ctx 无 `cwd`；加守卫后复跑全绿。
+
+**验证**：零 token 全量门全绿（23 phase + manifest + 7 live + orphan-check）；tsc 全导入图零错误。
+
+**遗留**：① 竞速对比未实际发生（派发故障），实现 B 未写——`.topo/` 初始化目前只有实现 A，其健壮性已由 49 条断言覆盖，但"性能与健壮性"维度的竞速择优仍是一个未完成的计划项；② searcher 的 fetch 只能经 curl，若后续要一等公民能力需在 member-messaging.ts 注册 `topo_fetch` 工具（成员默认只加载该扩展，注册在 index.ts 的工具成员拿不到）；③ 加密未覆盖宿主会话 JSONL（需宿主侧改 mode 或 umask，已在上一轮安全评估中立项）。
+### 74. v0.4.1 轮：searcher 脚本、协作记录、测试流程刷新（plan-112）
+
+**用户 prompt**：确认性能档实际方案（Planner 架构择优 / ScripterA·B 脚本竞速 / Recorder 记录加密 / QA 测试优化，star 拓扑，T1 接口规范→T2/T3 竞速→T5 searcher→T4 记录→T6 文档→T7 联调）后「1.给searcher角色写一个配套的脚本，让它直接调用脚本去search或fetch，请参考deepseek的search和fetch接口的使用方式；2.在每次使用插件团队协作任务后，在.topo/路径内生成协作工作的记录，这个记录是否加密要根据使用者的加密选项；3.检查工作空间，优化更新测试流程」。
+
+**思路**：先检索 DeepSeek Search/Fetch 的真实接口（本地无此资料，`search_web` 检索得：端点、参数、鉴权、计费、限速五类事实），再定接口契约，后落实现。**派发机制本轮 5 次 settle 超时**（Planner + 两个 Scripter + Recorder + QA），按既定模式由队长单写全程；竞速因此未实际发生（实现 B 未写），已在遗留中记录。
+
+**DeepSeek 接口事实（检索所得，非臆测）**：`POST https://api.deepseek.com/v1/tools/search` 收 `{query,count,need_content}`；`POST /v1/tools/fetch` 收 `{url}` 返 `{title,content}`（Markdown）；Bearer 复用 DeepSeek key；query ≤128 字符且支持 `site:`/`-site:`/`"phrase"`/`-word`/`lang:`/`after:`/`before:` 操作符；**仅成功请求计费**（Search 非空结果 / Fetch 200 且有正文），失败、空结果、超时不计费；Search 与 Fetch 各 5 QPS **独立计数**，Fetch 另有按域名限制，超限 429。
+
+**实现要点与取舍**：
+- **计费诚实是硬约束**：脚本只对 429/5xx/超时退避重试，**其他 4xx 一律不重试**——重试一个坏请求会花用户额度却什么也得不到。phase28 用假端点把这条钉死（429 重试后成功；400 只发一次）。
+- **退出码把"缺 key"归为用法错误（2）而非请求失败（1）**：这是调用方的配置问题，不该被误读成 API 故障，也不该被重试逻辑碰。
+- **为什么给 searcher `run_command`**：生态内无 fetch 工具（已 grep 实证），把抓取收拢到一个可审计的脚本，比让成员各自拼 curl 更安全也更好 review。
+- **记录钩子选在两处**：整队 `team_disband`（tools.ts）与 `/topo off`（index.ts）——前者是正常结束，后者是误激活的出口，两者都是"一次协作任务"的边界；会话结束仍活跃则由 shutdown 兜底。**幂等按 teamId 前缀判断**，同一团队不重复生成。
+- **拓扑只记终态**：完整声明时间线需要在每次 set_topology 记账，审计价值有限，故记录取 registry 快照里的终态——不做无用抽象。
+
+**两个设计级发现（都有实证）**：
+1. **探针不能用 `spawnSync`**：假端点在本进程内，同步 spawn 会阻塞事件循环，子进程的连接堆在 listen backlog 里直到超时——表现是"每个请求都超时"而脚本本身完全正常（用独立 node 脚本复现确认）。改为异步 `spawn` 后 32 条断言全过。
+2. **`process.execPath` 在 step RPC 会话里是 bun 编译的 `step` 二进制，不是 node**：用它 spawn 并传 `--query` 会让宿主解析我们的参数（报 `Unknown options: --query, --count`）。探针改为显式解析真实 node（env 覆写 → PATH → 常见路径）。
+
+**测试流程优化**：`STANDALONE_PHASES` 增加 28 与 30；phase 清单磁盘派生故新探针自动入库；TESTING(_CN) 补 phase28/30 两行；sandbox/README(_CN) 探针清单补 `bin/topo-search.mjs`。**工作空间检查**（QA 范围，队长执行）：演示项目 11/12 种子基线、submodule 干净、`.topo/` 700 且 `team.key` 600 且被 ignore、沙箱残留仅限 gitignore 路径（cfg-conc/cfg-deadlock/cfg-deep2 与 sandbox/agent 的 sessions/teams/live-context，不影响版本库，未清理）。
+
+**验证**：零 token 全量门全绿（25 phase + manifest + 7 live + orphan-check）；tsc 全导入图零错误；live 探针 5a/5b/5c/7/8/9 全部 PASS（5a 抖动一次、复跑通过）。
+
+**遗留**：① 脚本竞速未实际发生（派发故障），`bin/topo-search-b.mjs` 未写——契约中 B 的差异化项（批量已有、`--stdin-jsonl` 已实现；令牌桶与退避已在 A 中实现）大部分已被 A 覆盖，剩余差异是 stderr 可观测细节，价值有限；② 协作记录的拓扑只记终态（见上）；③ 宿主会话 JSONL 仍未覆盖加密（需宿主侧 mode/umask，已在安全评估中立项）；④ 派发机制间歇性退化根因仍未定位。
+### 75. searcher 实测方案：配置驱动的真实 search/fetch（plan-113）
+
+**用户 prompt**：「请检查并调整测试方案，我希望在sandbox测试searcher功能时，使用我的deepseek api key实现search和fetch」→ 修正为「我的要求是searcher使用的key是在配置文件中设置的，不局限于任何一家厂家」。
+
+**思路**：用户的修正推翻了最初方向（原打算把 key 放进 `sandbox/TEST-KEY.md` 这类厂家 key 文件）。正确设计是：端点与密钥一律来自 `[stepcodeAgentTeam.searcher]` 配置文件，沙箱实测探针读该配置并经**与队长注入成员完全相同**的 `STEPCODE_TOPO_*` 变量驱动脚本——这样测的就是成员真正走的那条路，且不绑定任何厂家。
+
+**实现**：
+- **`sandbox/probe-searcher.mjs`（新，Layer C，会计费）**：读 `sandbox/config.toml` 的 `[stepcodeAgentTeam.searcher]` 表（自写的极简 TOML 段解析：去引号、剥行内注释、未知键报告而非静默忽略），注入为 `STEPCODE_TOPO_*` 后跑真实 search（含 `need_content`）、两次 fetch（一为恒定页面，一为本项目 README 并对内容断言）、batch 扇出。**开头声明本次计费调用上限（最多 6 次）**；未配置 key 时 exit 2 并打印应添加的配置且**零调用**；`TOPO_PROBE_MAX_CALLS=0` 只做配置干跑。
+- **脚本加固（`bin/topo-search.mjs`）**：① `resolveKey` 的文档注释重写为"配置注入键优先 → `DEEPSEEK_API_KEY` 仅为默认端点的便捷回退"，明确 key 的正路是配置；② 响应信封不匹配时**不再静默返回空结果**——`meta.shape` 报告实际键名，否则换个厂家的端点会被误读成"没搜到"而白跑一轮。
+- **文档**：TESTING(_CN) Layer C 表加 `probe-searcher` 行；sandbox/README(_CN) 新增「searcher 实测（会计费）」专节（配置怎么写、怎么跑、计费与零调用语义、如何端到端测角色）；CONFIGURATION(_CN) 的 searcher 段重写为"配置驱动、厂家无关"，并补明四个键与脚本 JSON 契约的对应；TEST-KEY.md 行说明改为"searcher 自己的 key 应写在配置里，那才是与厂家无关的正路"。
+
+**验证（无真实 key 下的三条路径）**：
+1. 未配置 key → exit 2、打印应添加的配置、**零调用**（不计费）
+2. 临时假 key → 全链路走通：配置文件 → 探针读取 → `STEPCODE_TOPO_*` 注入 → 脚本 → 真实端点 → **401 干净失败，`attempts=1` 不重试**（失败不计费），断言如预期 FAIL；测后配置已还原
+3. `TOPO_PROBE_MAX_CALLS=0` → 只打印配置，零调用
+4. 另用独立 node 脚本复现确认 `process.execPath` 在 step RPC 会话里是 bun 编译的 step 而非 node（探针因此显式解析真实 node）
+
+**门禁**：全量零 token 门全绿（25 phase + manifest + 7 live + orphan-check）；tsc 零错误；phase28 复跑通过（脚本加固未改契约）。
+
+**待用户执行**：把真实 key 写进 `sandbox/config.toml` 的 `[stepcodeAgentTeam.searcher]`，然后 `node sandbox/probe-searcher.mjs`——届时 6 条断言应全 PASS。**该文件已 gitignored，key 不会入库。**
+### 76. 团队方案轮：searcher 配置链路收口（plan-114）
+
+**用户 prompt**：「[团队方案·性能] …成员名单 A(队长·仲裁)/B(需求分析)/C(系统架构)/D(后端实现)/E(前端实现)/F(测试验证)/G(安全·性能)，拓扑 mesh，任务拆解 T1–T8…请创建合理的计划，全面检查我希望实现的功能」。
+
+**团队组建**：按用户方案创建 b-requirements / c-architect / d-backend / e-frontend / f-test / g-security 六名成员（均 `model: step-5-preview`、`effort: high`），设 mesh 拓扑（30 条边），建 T36–T43 任务板（T1 需求→T2 架构→T3/T4 并行实现→T5/T6 并行验证→T7 集成→T8 队长终审）。**A 队长由本会话担任**，未建第七个成员（避免与我角色重复）。
+
+**执行降级（须记录）**：T1 派发即 `timeout waiting for member to settle`——本会话累计第 21 次。按既定模式由队长在干净进程亲自完成 T1–T7；B–G 六名成员与任务板保持就绪但未被使用。这是**执行方式的降级，不是范围的缩减**：每项工单仍按原验收标准完成并验证。
+
+**T1 全面检查的发现（5 项缺口）**：
+- **A【阻塞】** `extensions/members.ts:594-598` 只把 `searchApiKey` 注入成 `STEPCODE_SEARCH_API_KEY`（宿主 search_web 的名字），而 `bin/topo-search.mjs` 读 `STEPCODE_TOPO_SEARCH_KEY`——**配置里配的 search key 根本到不了脚本**，fetch 却有 key。这直接违背用户「searcher 使用的 key 是在配置文件中设置的，不局限于任何一家厂家」。
+- **B【高】** `agents/searcher.md` 通篇没提 `bin/topo-search.mjs`，只让角色用 `search_web` + `curl`；而 sandbox/README、docs/CONFIGURATION 三处都称该脚本是「searcher 角色的检索脚本」——配置驱动的路在角色侧是死代码。
+- **C【高】** `test/smoke/phase27.ts:117-129` 的 `envProbe` 是 `buildSpawnArgs` 注入逻辑的**手抄副本**（118 行注释自认 Mirrors），「四个键都注入」数的是副本自己的键，所以缺口 A 必然逃过门禁。这是「测试镜像实现」反模式的实案。
+- **D【中】** plan-113 我写进 CONFIGURATION(_CN) 的两处不准确：`_SEARCH_KEY` 并未被注入；「空 = 内置 DeepSeek 默认」只对脚本成立，角色路径下空值是宿主凭证解析 + 普通 curl（`config.ts:180-185` 才是准确描述）。
+- **E【中】** 脚本 key 链漏了 `STEPCODE_SEARCH_API_KEY`——恰恰是队长从同一配置字段注入的那个名字。
+
+**修复**：
+- `extensions/config.ts` 新增导出纯函数 `searcherSpawnEnv(cfg, searchScript?)`：key 以**两个名字**同时注入，脚本路径仅在 searcher 配置非空时注入（未配置团队的环境保持干净）；
+- `extensions/members.ts` 的 `buildSpawnArgs` 改调该函数（删四行内联 if）；`extensions/presets.ts` 新增 `searchScriptPath()`；
+- `bin/topo-search.mjs` key 链 = `STEPCODE_TOPO_SEARCH_KEY` → `STEPCODE_SEARCH_API_KEY` → `DEEPSEEK_API_KEY`，缺 key 文案按此链列名；
+- `agents/searcher.md` 规则 1 改为「leader 配了厂家就用 `$STEPCODE_TOPO_SEARCH_SCRIPT`」，含三条命令、stdout JSON 契约、退出码 0/1/2 语义（缺 key 是 2 不是 1）、batch 用法；`search_web`/`curl` 降为兜底；规则 6 增加绝不明文回显 key；
+- `docs/CONFIGURATION(_CN).md` 区分两条路径的空值语义，注入名清单与代码一致，环境变量表补两个新名字；
+- `test/smoke/phase27.ts` 删镜像、改为对真函数断言（3→9 条，含「只配 searchApiKey 脚本也能拿到 key」「空字符串绝不变成变量」「脚本路径仅在配置非空时注入」）；`test/smoke/phase28.ts` 缺 key 文案断言收紧为覆盖新链首要名字。
+
+**验证**：全量零 token 门 `all phases passed`（GATE_EXIT=0）；tsc 0 errors；phase27/28 复跑 OK；缺 key exit 2 且文案含三个变量名；实测仅设 `STEPCODE_SEARCH_API_KEY=dummy` 即可驱动 search 到达端点（401 → 凭证已送达，失败不计费）。
+
+**仍未闭环**：① searcher 真实 search/fetch 实跑仍待用户把真实 key 写入 `sandbox/config.toml`；② v0.4.x 发版待用户同意；③ 派发机制退化根因仍未定位（本会话 21+ 次 settle 超时）。
+
+**教训（可复用）**：探针绝不能手抄被测逻辑——抄本会与原版共享盲区，使「断言」退化为恒真。凡是生产里有一段纯映射，就应提成导出函数让探针直接测它。
+### 77. 全量文档检查与更新轮：测试线对齐与中英成对（plan-115）
+
+**用户 prompt**：「[团队方案·性能] …成员：Leader(统筹,high)、TestDoc(测试文档,high)、DevDoc(开发文档,high)、Integrator(整合,high)、Reviewer(竞速评审,high)；拓扑 mesh；任务 T1全量文档盘点(Leader) / T2测试文档更新(TestDoc) / T3开发·API文档更新(DevDoc) / T4并行竞速修订 / T5交叉验证择优 / T6终审合并发布(Leader)…请给我检查更新所有的文档，尤其是测试相关的」。
+
+**团队组建**：建 test-doc / dev-doc / integrator / reviewer 四名成员（均 `model: step-5-preview`、`effort: high`），设 mesh 拓扑（12 条边），建 T44–T49 任务板；Leader 由本会话担任（不另建同名成员）。
+
+**执行降级（第 22 次）**：T2 派发即 `timeout waiting for member to settle`，T2–T5 由 Leader 亲自执行。范围未缩：每项工单按原验收标准完成。
+
+**T1 盘点结论**：入库文档 18 份，其中测试线 10 份、开发线 8 份。发现 12 项滞后（D1–D12），测试线 4 项为高优先。
+
+**修复的滞后项**：
+- **测试线（用户重点关注）**：① TESTING(_CN) phase27 行原写"四个文档化的 env 键"——实际五个外加按需的脚本路径变量，且未反映"改为断言导出函数 `searcherSpawnEnv` 而非其手抄副本"这一关键变化；② 门禁规模"20 phases"实际 25，共 8 处（TEST-PLAN 头注+A1 行、MANUAL-TESTING runbook 指令、sandbox/README 双语、HANDOFF 两处），另抓到 TEST-PLAN_CN 头注还写着更旧的"19 个"；③ sandbox/README 的 standalone 清单漏 28/30；④ TEST-PLAN(_CN) 缺 R20 行，已补（plan-113 + plan-114 两轮）；⑤ MANUAL-TESTING(_CN) 追加当期基线；⑥ TESTING-OPTIMIZATION-PLAN(_CN) 加历史存档标注。
+- **开发线**：⑦ ARCHITECTURE(_CN) §1 组件总览整体重写——原文档滞后两轮，缺 `collab-record.ts`、`crypto.ts`、`topo-init.ts`、`tasks.ts`、`plan.ts`、`forward.ts` 六个模块，`bin/` 缺 `topo-search.mjs`，`agents/` 缺 `searcher`；⑧ ARCHITECTURE(_CN) §3 持久化布局补 `.topo/` 子树（原文档完全没有 v0.4.0 新增的工作目录）；⑨ ROLES(_CN) 新增 `searcher` 角色专节（此前仅第 6 行一句）；⑩ PROTOCOL(_CN) §5 成员环境变量表补 searcher 全部变量与 `STEPCODE_TEAM_REPLY_TIMEOUT_MS`。
+
+**交叉验证中抓到「本轮自己引入的错误」**：给 TESTING-OPTIMIZATION-PLAN 加存档标注时写"现在 extensions/ 有 17 个模块"，实际 **18** 个——已在双语改回。教训：声明与代码的比对必须在改完后**再跑一次**，盘点时跑过不算数。
+
+**未改动项及理由**：DEVELOPMENT-HISTORY 与 TEST-PLAN 的 R9–R19 历史行、MANUAL-TESTING 的 2026-10-29 基线中的"20 phase"——那是当时的准确记录，改写历史会破坏执行日志的可信度；已在 R20 行与当期基线中说明现为 25。
+
+**验证**：本回合**纯文档改动**（16 份入库文档 + 2 份 gitignored），代码零改动；无探针读取 `docs/` 内容（仅 phase5/phase15 注释提及路径）；manifest 检查只校验 package.json。仍按惯例实跑全量门禁取证。另做了三轮机械核查：25 个 phase 在中英 TESTING 中逐一对上无缺失；文档声明的 12 个 `STEPCODE_*` 与代码注入完全一致；中英关键词计数对称性扫描（差异经逐条核实均为翻译措辞，非内容缺失）。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
+### 78. config.toml 初始化轮：DEFAULT 标记与升级增量（plan-116）
+
+**用户 prompt**：「请初始化config.toml，并保证安装新版本插件后也会出现新的选项。如果是默认选项，请使用DEFAULT字段」。
+
+**先修一个既有缺陷（阻塞）**：`seedBlock()` 里 searcher 四行是整块中**唯一没有 `# ` 前缀**的行——它们以真实 TOML 键落在**根表**，而段头是注释。后果：用户一旦按块首说明取消段头注释，就得到重复键错误（`searchUrl` 等在根表已存在）。**这个块正是在诱导用户做出那个会损坏文件的编辑。**已改为与其他行一致的注释行。
+
+**三项需求的实现**：
+
+1. **初始化 config.toml**：种子块重写为分节结构（`seedSections()`），17 个段覆盖全部配置表（含 v0.4.0/v0.4.1 新增的 searcher/encryption/records）。根级 `debug` 键单独一段，段名为空串以免渲染成 `[stepcodeAgentTeam.stepcodeAgentTeam]`。
+
+2. **DEFAULT 字段**：新增导出常量 `DEFAULT_SENTINEL = "DEFAULT"`；`mergeSection()` 见到该值即**跳过该键**——由于合并从 `defaultConfig()` 起步，"跳过"就是"用内置默认值"，于是对数字、布尔、数组、字符串**一律生效**，无需按类型特判。种子块中所有默认值键都写成 `"DEFAULT"`，实际值移进行尾注释（块仍可读，标记仍可升级）。省略该键效果相同，所以 DEFAULT 是"可以放心取消注释"的文档。
+
+3. **升级后出现新选项**：每个段头带版本标记 `# [stepcodeAgentTeam.<name>] (v<pluginVersion>)`。`readDocumentedSections()` 区分三种情况——**无标记**（旧安装或用户自己写的活动表）→ 视为已文档化，跳过，避免整块复制；**标记版本旧于当前** → 追加刷新，使段内新增的键出现；**缺失** → 追加。版本从包自身 `package.json` 读取。全程只追加、不改写，用户的任何行都不会被覆盖。
+
+**测试中发现的关键陷阱**：裸 `DEFAULT`（不加引号）**不是合法 TOML 标量**，step 的读取器会**静默丢弃整表**——连同用户在该表里的真实设置一起（对照组 `max = hello` 表现相同）。因此哨兵必须加引号，并新增 phase31 断言「把每条 DEFAULT 行取消注释后仍得默认值」，正是这类 bug 的守门测试。这一条是调试过程中抓到的：探针自建的 fixture 一开始也写了裸 `DEFAULT`，于是整表被忽略、显式值全部失效。
+
+**新增 `test/smoke/phase31.ts`**（独立运行、零 token，26 条断言）：块全为注释、无根表污染、每个配置表都有文档、DEFAULT 对四类类型一致、取消注释全部 DEFAULT 行仍得默认值、旧标记触发刷新且不重复、无标记旧块不复制、活动表不复制、显式值压过 DEFAULT、幂等。
+
+**验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误。门禁规模声明已从 25 同步到 26（8 处，含 standalone 清单补 31）。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
+### 79. DEFAULT 合法性实证与 sandbox 配置初始化轮（plan-117）
+
+**用户 prompt**：「[团队方案·均衡] …勘察员A(0.6)/规划员B(0.7)/执行员C(0.8)/审查员D(0.7)，拓扑 custom（勘察→规划→执行→审查线性，审查可向执行回派）…DEFAULT字段不合法的话，请修改为合适的字段，并重新全面检查。此外，请给我把sandbox/config.toml也初始化字段」。
+
+**组建与执行降级**：建 scout-a / planner-b / worker-c / reviewer-d 四成员（`model: step-5-preview`，effort 按 0.6/0.7/0.8 映射为 low/medium/high），设 custom 四边线性拓扑，建 T50–T55 任务板。T1 派发即 settle 超时（本会话第 23 次），T1–T5 由 Leader 亲自执行，范围未缩。
+
+**T1 实证勘察（不靠推理）**：对 `defaultConfig()` 的 **27 个配置键** × **4 种书写形态** × 各配置层逐一写 fixture，且**每个用例都带一个真实兄弟键**——兄弟键是否生效直接说明"整表是否被丢弃"。
+
+| 形态 | 该键 | 兄弟键 | 判定 |
+|---|---|---|---|
+| `max = "DEFAULT"` | 回到默认 | **生效** | ✅ 合法且正确 |
+| `max = DEFAULT`（裸） | 回到默认 | **被丢弃** | ❌ 整表静默丢失 |
+| `max = "default"`（小写） | 变成字面量 `"default"` | 生效 | ⚠️ 不是哨兵 |
+| `max = "SENTINEL"` | 类型校验回落默认 | 生效 | ⚠️ 普通字面量 |
+
+**结论：字段合法，保留。** 带引号的 `"DEFAULT"` 对全部 27 个键（含 null 默认键、数组键、布尔、数字、字符串、嵌套 `presets.effort`）都正确。不需要改成别的字段。
+
+**但发现一个我们无法处置的危害形态**：裸 `DEFAULT` 不是合法 TOML 标量，step 的读取器会**静默丢弃整表**，且损害发生在我们的代码之前——`mergeSection` 根本看不到该表，无法识别、无法回落、无法警告；而 `logWarnings()`（config.ts:841）是 debug-only，普通用户也看不到。两点叠加意味着**既无法检测也无法警告**。因此加固只能走"预防"路线。
+
+**T3 实施**：
+- 种子块头部新增 `KEEP THE QUOTES` 三段说明，把后果写清（整表被丢弃、插件看不见、告警不可见）；
+- phase31 新增两条守门断言：**块中每条 DEFAULT 行都带引号**（这样取消注释不可能产生裸形态）、块内含该警告；
+- CONFIGURATION(_CN) 把 `"DEFAULT"` 记为**保留 token**，并写明小写 `"default"` 不是标记、会被当字面值（`storage.dir = "default"` 会悄悄把团队数据送到名为 `default` 的目录）；
+- **sandbox/config.toml 已初始化**：补齐缺失的三个 v0.4.x 段 `searcher`/`encryption`/`records`（默认值活动键，searcher 段附注释），step 自己的键（theme/defaultProvider/defaultModel/mcp_import/recentModels）与用户已设的每个值**逐字节未动**（diff 只有新增行）。
+
+**T4 复查**：先以一次性绝对路径断言对**真实** sandbox/config.toml 实测 10 条（三段齐全、step 键完好、加载不回落、searcher 未被钉值、encryption/records 正确、用户原值 preserved、presets.effort 完好）全部通过；随后**把这些断言从提交的探针中移除**，因为该文件被 gitignore、在新克隆上不存在，留著会让门禁依赖环境。改为可移植的 fixture 断言（活动配置携带三个 v0.4.x 段能正确加载）。另在门禁首跑中抓到自己引入的一处语法错误（字符串误用反引号收尾）并立即修复。
+
+**验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误；phase31 扩到 **45 条断言全部通过**。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key（现在 `sandbox/config.toml` 里已有 `searchApiKey` 空位可填）；v0.4.x 发版待用户同意。
+### 80. 标记改名轮：DEFAULT → "default" 合法 TOML 标量（plan-118）
+
+**用户 prompt**：「[团队方案·经济] …成员名单：执行者（角色：TOML 配置修改，effort：低）；通信拓扑：star；单人节点，队长即执行者，零协作开销；任务拆解：T1 将 DEFAULT 改为合法 TOML 标量 "default" 并验证 step 读取器可解析…请把DEFAULT改为合法TOML标量，比如"default"之类的，方便step读取器读取配置」。
+
+**组建与执行降级**：按经济方案建单成员 `executor`（`model: step-5-preview`、effort low）、star 拓扑、单任务 T56（无 blockedBy）。派发即 settle 超时（本会话第 24 次），由 Leader 亲自执行，范围未缩。
+
+**对"是否合法"的实证回答**（用 step 自己的读取器，不靠推理）：
+
+| 写法 | step 读取器行为 |
+|---|---|
+| `max = "default"` | ✅ 可解析，该键回到内置默认值，同表 `defaultRole="scout"` **不受影响** |
+| `max = "DEFAULT"` | ✅ 同上 |
+| `max = default`（裸） | ❌ **整表被丢弃**，`defaultRole` 回落默认 |
+| `max = DEFAULT`（裸） | ❌ 同上 |
+
+结论：**带引号的标记值本就合法**；不合法的是裸写形态，与大小写无关。因此本轮不是"修正非法值"，而是按用户要求改成约定俗成的小写拼写，并让常量名与值一致。
+
+**实施**：
+- `DEFAULT_SENTINEL` → `DEFAULT_MARKER`，值 `"default"`（41 处引用同步；名字不再与值矛盾）；
+- 种子块头部说明文字统一为 `"default"`，`KEEP THE QUOTES` 段保留（引号要求不变，且现在有读取器实证佐证）；
+- phase31 头部与行内注释同步改名；
+- CONFIGURATION(_CN)、TESTING(_CN) 的标记表述统一为 `"default"`，并把读取器实证写进文档。
+
+**途中抓到两个真实缺陷（重要）**：`test/smoke/phase20.ts:69` 与 `phase30.ts:159` 仍在断言 `tier = "DEFAULT"` / `dir = "DEFAULT"`——上一轮把值改成小写时**漏改的硬编码字符串**，两个探针当时都在失败（我上一轮的门禁跑在漏改之前，属我的验证疏漏）。已修到新标记。
+
+**教训**：常量值变更后，必须全仓搜一次硬编码的旧值字符串——`grep -rn '"DEFAULT"'` 这类搜索比"我记得改过了"可靠。探针里出现与实现不一致的硬编码，本质是让断言悄悄失效。
+
+**验证**：全量零 token 门 **26 phase + manifest + 7 live + orphan-check 全绿**；tsc 0 错误；phase20/30/31 复跑全绿。
+
+**仍未闭环**：searcher 真实 search/fetch 待用户提供真实 key；v0.4.x 发版待用户同意。
+### 81. searcher 首次真实运行轮：阻塞级 URL 契约缺陷（plan-119）
+
+**用户 prompt**：「[团队方案·性能] …成员：队长(Coordinator·high)、安全审计(Security·high)、配置工程(Config·high)、测试A(TestA·high)、测试B(TestB·high)、测试分析(Analyst·high)；拓扑 star，理由：集中管控 api key 与测试中间产物，杜绝成员直连造成密钥扩散…我已经修改了 sandbox/config.toml，使用deepseek的search和fetch服务，并粘帖了api key（注意只调用别暴露），请给我创建合理的计划，做功能测试以及其他工作」。
+
+**组建**：建 security / config-eng / test-a / test-b / analyst 五成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T57–T62（T1 安全审计、T2 配置校验 → T3/T4 并行测试 → T5 队长竞速择优 → T6 分析出报告）。**队长由本会话担任**——这正好兑现了用户选 star 的理由：key 全程只在队长进程。
+
+**执行降级**：T1 派发即 settle 超时（本会话第 25 次），T1–T6 由队长亲自执行，范围未缩。
+
+**阻塞级缺陷 D1（本轮核心产出）**：用户把 `searchUrl` 填成**完整端点** `https://api.deepseek.com/v1/tools/search`，而 `bin/topo-search.mjs` 的 `resolveBase()` 把它当 base 又拼一次 `/v1/tools/search`，实际请求 `.../v1/tools/search/v1/tools/search` → 裸 **404**。阻塞性在于：404 的表象是"服务端故障"，用户不可能联想到是自己 URL 的填法；而文档从未说明该填 base 还是完整端点，两种填法都看似合理——**首次使用必然撞上**。修复为两种填法都接受（剥掉重复后缀与尾部斜杠），并给 phase28 补 3 条零成本回归断言。
+
+**安全审计结论：零泄漏，必须修无**。文件 0600、`.gitignore:8`、git 历史从未跟踪；以配置 key 为模式扫描 git 跟踪文件 / `.topo/` / `sandbox/logs/` / `sandbox/archive/` **四路命中均为 0**。脚本无任何 `console.*`，key 只进 `Authorization` 头；`collab-record.ts` 只写任务快照不含环境变量。唯一有条件风险是"成员若把 key 回显进任务结果会被写进 `.topo/records/`"，已由 `agents/searcher.md` 规则 6 禁止。
+
+**功能测试**：search 13/13、fetch 8/8。覆盖操作符矩阵（`"phrase"`/`-word`/`lang:`）、count 边界、128 字符 query 上限（exit 2 且 **stdout 0 字节**）、batch、假 key→401 且 attempts=1、缺 key→exit 2、404→retryable=false、退出码 0/1/2。三个 ⚠️ 均非缺陷：`raw.githubusercontent.com` 本机网络被重置（curl 直连亦 `HTTP 000`）、`example.com/index.html` 确不存在、未找到 >2MB 页面触发截断（该逻辑已由 phase28 零成本覆盖）。
+
+**计费**：18 次成功请求，约 ¥0.09。失败/401/404/缺 key 均不计费。
+
+**竞速择优**：同 query 下 `--need-content` 正文 4398 字符 vs 基础 208 字符（**~21 倍**），延迟反从 0.74s 降至 0.58s。结论：需要引用具体内容时默认加 `--need-content`，仅需 URL 列表时用基础模式省 token。
+
+**一个值得记录的方法论错误**：首轮测试看似两处违约——超限报错与 batch 进度行"污染 stdout"。实为探针用 `2>&1` 把 **stderr** 并进了 stdout。脚本的 stdout 确实是单行 JSON，诊断确实走 stderr。**测 stdout 契约时绝不可合并流**，否则会把正确的分流误判成违约（反之亦然）。
+
+**验证**：全量零 token 门 26 phase 全绿；tsc 0 错误；phase28 复跑含新断言全绿。
+### 82. URL 原样使用轮（plan-120）
+
+**用户 prompt**：「url不要改动，直接用config.toml里面的，然后给我解释--need-content选项是干什么的」。
+
+**背景**：上一轮（plan-119）为修复"完整端点被双拼成 `.../v1/tools/search/v1/tools/search` → 裸 404"，把 `resolveBase()` 改成"已带后缀则剥掉再拼回"。功能正确，但代码确实**改写了配置里的 URL 字符串**（先剥后拼），用户明确要求不要改动。
+
+**修正**：删掉 `resolveBase`，改为单一的 `resolveEndpoint(kind)`——配置值**已是以 `/v1/tools/<kind>` 结尾的完整端点时就原样返回**；只有裸 base 才追加后缀。调用处从 `resolveBase` + 三元拼接两行收敛为一行 `const endpoint = resolveEndpoint(kind)`。
+
+**实测确认**（stderr 的 attempt 行会打印实际请求 URL）：配置的 `https://api.deepseek.com/v1/tools/search` 与 `.../v1/tools/fetch` 被**逐字符原样**用于请求；两种子命令均 `ok:true`。`phase28` 的断言名同步改为"a configured endpoint URL is used verbatim"，语义未变（完整端点不得双后缀、仍成功、尾部斜杠不双分隔符）。
+
+**文档**：ROLES(_CN) 改写为"配置的 URL 原样使用；填完整端点就按该地址请求，填 base 也可以——只有这时才追加后缀"；`config.ts` 种子块的 searcher 示例行同步。
+
+**验证**：全量零 token 门 26 phase 全绿；tsc 0 错误；phase28 复跑通过。
+
+**关于 `--need-content` 的实证解释**（同 query、两种模式各 1 次真实调用，字段逐个对比）：
+
+| 字段 | 基础模式 | `--need-content` |
+|---|---|---|
+| `content`（网页正文） | **0 字符（空）** | **1442 字符** |
+| `snippet`（短摘录） | 69 字符 | 69 字符（**不变**） |
+| `summary`（AI 摘要） | 1373 字符 | 1373 字符（**不变**） |
+| 其余字段 | authority/date/rerank_score/site_icon/site_name/title/url | 完全相同 |
+
+结论：**`--need-content` 只控制一件事——是否把目标网页的完整正文抓下来填进 `content` 字段**。不加该选项时 `content` 为空字符串，但你仍有 `snippet` 与 `summary` 可读。两种模式的字段集合完全一致，不会因缺少该选项而丢字段。计费上按成功请求计费，故单次调用价格相同；差别只在响应体更大（调用方要处理更多 token）。
+### 83. 项目全面检查与优化轮（plan-121）
+
+**用户 prompt**：「[团队方案·性能] …成员：队长-Alpha(协调,high)、架构-Beta(架构审查,high)、性能-Gamma(性能剖析,high)、安全-Delta(安全审计,high)、测试-Epsilon(质量验证,high)、优化-Zeta(实施A,high)、优化-Eta(实施B,high)；拓扑 star；任务 1全面检查与上下文收集(队长+全体,无) / 2架构与代码审查(Beta,1) / 3性能瓶颈剖析(Gamma,1) / 4安全与依赖审计(Delta,1) / 5测试覆盖与质量验证(Epsilon,1) / 6优化方案A(Zeta,2,3,4,5) / 7优化方案B(Eta,2,3,4,5) / 8竞速评审与择优(队长,6,7) / 9优化实施与回归(队长+Zeta+Eta,8)…请创建合理的计划，全面检查项目，进行优化」。
+
+**组建**：建 beta/gamma/delta/epsilon/zeta/eta 六成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T63–T71 带完整 blockedBy。**队长 Alpha 由本会话担任**。
+
+**执行降级**：T2 派发即 settle 超时（本会话第 26 次），T1–T9 由队长亲自执行，范围未缩。
+
+**四专家审查结论**：
+- **Beta 架构**：`docs/ARCHITECTURE(_CN)` §1 的 18 模块清单与实际**完全一致**；26 处 catch 无空块；发现 **14 个零引用导出**（疑死代码）；`members.ts`/`config.ts`/`index.ts` 三个超大文件关注点已模糊。
+- **Gamma 性能**：门禁 76s；**phase28 异常 19.2s**（其他 standalone 仅 8s）；插桩定位到 13 个 spawn 中 10 个 ≤113ms，慢的 3 个（6262/2440/1569ms）全是**真实退避等待**；registry atomic write 0.101ms、read+parse 0.256ms、脚本冷启动 5ms——**均无瓶颈**。
+- **Delta 安全**：**发现 1 项高级问题**——`sandbox/TEST-KEY.md` 权限 **664**（含真实 step CLI key，组/其他用户可读），而另两处密钥均 600；注入面防护良好（`MEMBER_NAME_RE` 强校验、`sanitizeTeamId`、脚本零 shell 调用）；依赖面零 npm 依赖、无已知恶意包；成员 `--no-extensions` 隔离有效。
+- **Epsilon 测试**：**18 个扩展模块 + 2 个 bin 脚本全部有探针覆盖，零遗漏**；无恒真断言、无镜像实现、debug 变量正确保存恢复、tsc 覆盖全部导入图；但发现**两个已被文档承认却未修的假绿路径**——Q1 runner 的 `skips` 不参与判定、Q2 本地 `config.toml` shadow fixture（后者在用户机器上**当前活跃**）。
+
+**T8 择优**：采纳 A-1/A-2/A-3，否决不 B-1～B-4。理由是 A 组低风险且有实测收益，B 组收益均为可读性而成本是回归风险与不可逆 API 收窄——在"18 模块零遗漏 + 门禁全绿"的基线上做结构性重构是净负。
+
+**已实施**：
+- **A-1**（T5-Q1）：runner 判定加 `skips -eq 0`。**双向验证**：构造输出 `SKIP` 的临时探针 → 判 FAILED；去掉 → 判 OK。
+- **A-2**（T2-A3）：`resetConfigCache` 补"漏调会静默读到上一个用例配置"的陷阱注释。
+- **A-3**（T3-P1）：`bin/topo-search.mjs` 新增 `backoffMs()` 与 `STEPCODE_TOPO_BACKOFF_CAP_MS`，并把完整环境变量清单写进脚本头部（此前调用方无据可查）。
+
+**实测收益**：phase28 **19214ms → ~13.5s（−30%）**；全量门禁 **76s → 71s**；本地假 429 三次重试的等待 **6308ms → 275ms（23 倍）**，而重试次数两种情况下**均为 3**（策略未变）。
+
+**本轮抓到并修正自己的两个错误**：
+1. **并行化 phase28 收益微乎其微**：先按"spawn 多就并行"改了三组，插桩后发现慢的全是真实退避，并行只覆盖 3 个 ~70ms 用例，**已撤销**。教训：先测量再优化。
+2. **`envInt` 拒绝 0 导致新 cap 完全失效**：`STEPCODE_TOPO_BACKOFF_CAP_MS=0` 不生效（仍等 2s/4s），因为 `envInt` 用 `parsed > 0` 把 0 当未设置——**恰好把调用方最可能设成 0 的值静默忽略**。已加 `envIntAllowZero()` 专用于此。这是"新增配置项要测 0 值"的实证理由。
+
+**留给用户决策的四项**（成本 > 收益故未做）：拆分三个超大文件、删除 13 个零引用导出、消除 `cached` 隐式单例、runner 防本地 config.toml shadow fixture（**此项风险在用户机器上当前活跃**）。另：`sandbox/TEST-KEY.md` 权限 664 建议改 600，但属用户资产操作，需用户确认。
+
+**验证**：全量零 token 门 26 phase 全绿（71s）、tsc 0 错误、phase28 含新断言通过。
+### 84. 死代码删除轮：并纠正上一轮的错误结论（plan-122）
+
+**用户 prompt**：「我同意删除多余的死代码死功能，请给我解释要决策的124事项」。
+
+**先纠正自己的错误结论**：上一轮（plan-121）的 T2 架构审查报告称发现"14 个零引用导出（疑死代码）"，**这是我误读了自己的 grep 输出**。当时对每个函数跑 `grep -rn "\b<name>\b"` 得到"总命中=2"，我把它读成"只有定义处、无调用"；实际那 2 次是**定义 + 本模块内调用**。逐个复核后：
+
+| 函数 | 实际命中 | 真实情况 |
+|---|---|---|
+| `configFilePath`/`projectConfigFilePath`/`settingsFilePath`/`projectSettingsFilePath`/`projectUnifiedConfigFilePath`/`keywordMentionSuppressed`/`hasCjk`/`isSettleTimeoutError`/`extensionDir`/`packageRoot`/`presetsDir`/`meshTopology`/`customTopology` | 各 2–4 次 | **在本模块内被调用，不是死代码**——删了会直接破坏构建 |
+| `listTeamIds`、`readyTasks` | 各 **1 次** | **真正死代码**（只有定义行） |
+
+**教训（可复用）**：判断"是否死代码"不能看命中数，必须看**命中的位置**——`grep -c` 的数字要把定义行本身扣掉，且要确认其余命中不在同一模块内。本次若按错误结论执行，会在 tsc 阶段炸出十几个错误。
+
+**已删除（用户同意后）**：
+- `extensions/registry.ts` 的 `listTeamIds()`——注释称"List known teams (most recent first) for diagnostics"，无任何调用者；
+- `extensions/tasks.ts` 的 `readyTasks()`——只是个 `status === "ready"` 的 filter；真正的就绪计算是 `recomputeReady()`（它会 mutate 状态，是所有调用方实际用的那个）。
+
+**未动的 13 个**：它们是另一个轻得多的问题——**被 export 但模块外无人 import**（过度导出，非死代码）。收窄成非导出是纯 cosmetic 且安全，但我不擅自塞进这次删除（用户同意删除的前提是我的错误结论）。已列为待用户决策。
+
+**留给用户决策的三项**（已在回复中逐条解释）：
+1. `sandbox/TEST-KEY.md` 权限 **664** → 600（含真实 step CLI key，组/其他用户可读；另两处密钥均 600）。属用户资产操作，未擅动。
+2. runner 防本地 `config.toml` shadow 探针 fixture。用户机器上 `sandbox/config.toml` **当前已存在**，故该风险**活跃**（2026-10-25 实测过一次假绿：phase10 走了 Branch A 而非 B）。方案 A 根治（临时空 agentDir）/ 方案 B 告警。
+3. 三个超大文件是否拆分（`members.ts` 1288、`config.ts` 1012、`index.ts` 817）。建议不拆或只拆 `members.ts`。
+
+**验证**：tsc 0 错误；全量零 token 门 26 phase 全绿。提交 `a4ee34b` 已推送 develop。
+### 85. 沙箱升级 0.1.7 与 CLI 契约探针（plan-123）
+
+**用户 prompt**：「[团队方案·性能] …成员：队长/统筹与择优/high；环境工程师/沙箱更新/high；版本分析师/0.1.7特性提取/high；兼容工程师A/核心插件API冲突扫描/high；兼容工程师B/外围插件行为与配置冲突扫描/high；适配优化工程师/实施与调优/high；拓扑 star；任务 T1 沙箱更新至0.1.7 / T2 提取0.1.7新特性 / T3 核心API冲突扫描 / T4 外围行为与配置冲突扫描 / T5 执行适配优化 / T6 回归验证…step code已经发布了0.1.7版本，你在终端中step --version就能看到」。
+
+**组建与执行降级**：建 env-eng / ver-analyst / compat-a / compat-b / adapt-eng 五成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T72–T77 带完整 blockedBy。**队长由本会话担任**。T1 派发即 settle 超时（本会话第 27 次），T1–T6 由队长亲自执行，范围未缩。
+
+**先纠正我上一轮的错误结论（重要）**：我上轮据 `git ls-remote --tags` **超时**得出"Step Code 不存在 0.1.7"，并建议改更新到 origin/main。用户指出 `step --version` 就能看到，**用户是对的**：PATH 上的 `~/.stepcode/bin/step` 报 **0.1.7**（11-06 构建），而沙箱本地构建产物报 0.1.6（10-24，源为锁定的 `81e79bc`）。
+
+**错在哪**：把"网络命令超时"当成了"空结果"。同一个 `ls-remote --tags` 后来重试是能跑通的（251 个 ref）。**教训：网络类命令的超时不是空结果；必须重试或换通道（GitHub API）交叉验证后才能下结论。** 这也解释了我此前的困惑——版本是**构建时注入**的（`scripts/build-binaries.sh:45`，:106-109 剥 `refs/tags/`/`step-v`/`pi-v`/`v` 前缀），仓库 `package.json` 全历史只有 `0.1.0`，GitHub API 也确认 0 tag / 0 release，所以在仓库里永远搜不到 0.1.7。
+
+**T1 沙箱更新**：子模块 `81e79bc`(10-23) → **`29eb4607`**(11-03，`origin/main` 尖端，领先 22 提交；更晚的 `feat/extension-market`(11-06) 与 `feat/desktop-cron-core`(11-04) 是 feature 分支，非发布线）。以 `STEPCODE_BUILD_VERSION=0.1.7` 重建：增量构建 **19 秒**，本地产物 109,725,824 字节、报 **0.1.7**，与已安装一致。更新前后门禁均全绿。
+
+**T2–T4 冲突扫描（22 提交）**：**无阻塞、无高级冲突**。
+- tsc 全导入图 **0 错误**；插件传入的 9 个 CLI 参数全部仍被接受；
+- `--approval-mode` 词汇表收窄为 `confirm`/`auto`（档位改为 Ask / Approve for Me / Full Access），插件用的正是 `auto`，仍合法；
+- `enter_plan_mode` 被移除（只能 `/plan` 或 `--plan` 进入），但插件的 plan 体系**自包含**（`forward.ts:80 teamPlanPrompt()` 自有提示词 + `planConfirmDialogOpts` 自有对话框），从未调用它；
+- subagent 委派门控实现在 `features/subagent/tool-description.ts` 的**提示词层**，无代码级阻断，扩展注册的 `team_*` 工具不受影响；
+- 会话文件命名未变（`session-manager.ts` 仅被 #344 改 3 行，diff 无命名变更；phase22 覆盖 `teamIdForSession` 且门禁通过）；
+- **#333 是净改善**：非零退出码过去被 `throw` 成工具错误、JSON 被埋进错误文本；现在作为普通结果携带 `details.execution`，`bin/topo-search.mjs` 的 exit-1 契约得以完整抵达模型。
+
+**T5 适配优化**：真正该做的不是改行为（没有冲突），而是补上扫描暴露的**覆盖缺口**——插件向 `step` 传 9 个 CLI 参数，却没有任何探针测试这个契约，上游静默移除只会在 live 轮暴露。新增 `test/smoke/phase32.ts`（standalone、零 token）：断言 `step --help` 记录全部九个参数、解析到的二进制报告版本号、`--approval-mode` 仍拒绝已退役的 `strict` 并提示 `confirm, auto`、`-e`/`--extension` 仍是扩展拼写。**反向验证**：临时注入一个不存在的 flag，探针指名失败；恢复后全绿。另修掉 TESTING 双语里被追加两次的 phase31 行（上轮失误）。
+
+**T6 回归**：全量零 token 门在新 0.1.7 二进制上 **27 phase 全绿（65s）**；tsc 0 错误。
+
+**留给用户的可选项**（不阻塞）：是否把上游 #326 的"可配置 context 比例自动压缩"暴露给插件配置；tui markdown 流式渲染（#315/#319）对 `render.ts` 观感的影响需人工目验（门禁不测视觉）。
+### 86. 两个可选项交付与全量排查轮（plan-124）
+
+**用户 prompt**：「[团队方案·性能] …成员名单：Captain（队长/高effort）、Evaluator（高effort）、Fixer（高effort）、Tester（高effort）；通信拓扑：star，所有消息经Captain中转，依赖仅用任务板blockedBy表达，成员间零直连；任务拆解：1 评估并同意两个可选项→Evaluator / 2 全量排查问题与根因定位→Fixer(1) / 3 实施修复并完成自验→Fixer(2) / 4 测试与回归验证→Tester(3) / 5 汇总交付与质量复盘→Captain(4)…同意两个可选项，然后排查修复所有问题并测试」。
+
+**组建与执行降级**：建 evaluator / fixer / tester 三成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T78–T82 带完整 blockedBy。**队长 Captain 由本会话担任**。T1 派发即 settle 超时（本会话第 28 次），T1–T5 由队长亲自执行，范围未缩。
+
+**T1 两个可选项的判定**：
+
+**① 暴露 #326 自动压缩比例——同意价值，但不加插件键。** 上游能力在 Step Code 统一配置的 `[compaction]` 表（`trigger-policy.ts`：`triggerPolicy` v2/legacy、`triggerRatio` 默认 **0.9** 上限 0.95、`modelTriggerRatios` 按 provider/model、`tokenLimit`、`contextProjection`、`autoClm`；非法值回落默认并进 diagnostics）。关键前提经代码链证实：`rpc-client.ts:118` 的 `{...process.env, ...env}` 使成员继承队长 `STEP_CODING_AGENT_DIR`，而该变量决定全局配置位置（`config.ts:280` + `dirname(agentDir)/config.toml`）——**队长与成员读同一份文件，该表已然同时对二者生效**。加插件键只会造成双来源与优先级争议，收益为零。改为交付「文档 + 继承性探针」，因为继承是**隐式契约**：一旦重构破坏，成员的 searcher 密钥、`[compaction]`、模型配置会与队长**静默分叉**。为使契约可断言，把 env 合并从 `spawn` 内的展开提取为导出的 `memberSpawnEnv()`。
+
+**② markdown 渲染目验——同意，且完全可自动化。** `render.ts` 只用 `Text`（我们自己的渲染由 phase15 覆盖），但宿主会把工具返回的**单行 JSON** 交给 0.1.7 重写过的流式 markdown 渲染器（#315/#319）。`Markdown` 类导出且有 `render(width): string[]`，可被探针直接驱动——不需要人眼。
+
+**T2 全量排查（5 项发现，其中 2 项真实缺口）**：
+- **F1【中】** phase32 漏 `--no-session`——`members.ts` 的 `buildSpawnArgs` 传它，探针未列入 → 上游移除将无人察觉；
+- **F2【中】** 无探针覆盖宿主如何渲染我们的 JSON 输出（即可选项②的缺口）；
+- **F3【中】** 沙箱 LLM 探针无告警：本地 `sandbox/config.toml` 优先级高于 fixture 的 `settings.json`（2026-10-25 实测过的假绿，**风险当前活跃**）；
+- **F4【低】** 文档未记载 submodule 锁定 commit 与 step 版本；
+- **F5【低→误判】** 我报"phase15 仅 2 条断言"，**实际 24 条**（22 条经 `has()` 包装 + 2 条 `check()`），六工具全覆盖——我信的那次 grep 数错了调用。已在记录中纠正。
+
+**正面结论**：18 模块 + 2 脚本零探针遗漏；配置层一致；**0.1.7 成员路径确被测到**（`MemberRpc.spawn` → `getStepInvocation`，门禁里队长是编译后的 step 二进制，故成员是同一 0.1.7 的真实 `step --mode rpc` 进程，phase17/18 覆盖握手与拓扑消息）；成员完整回合属 LLM 层（零 token 门内不可能，属设计分工）。
+
+**T3 实施**：F1 补 flag；F2 新增 phase33；F3 探针入口加 shadow 告警（低风险，不改行为）；F4 两份 sandbox README 记载锁定 `29eb4607` 与构建版本 0.1.7；F6 提取 `memberSpawnEnv()`；F7 CONFIGURATION(_CN) 增 `[compaction]` 节。
+
+**F2 探针查出的真实行为（值得记住）**：宿主把工具文本当 Markdown 渲染——长行按 80 列**折行并填充空格**，故 4000 字符单行 JSON 回来时 token 中间被插入空格；`*` `_` `` ` `` `[` `]` `<>` 等标记字符被解析器消费。**词与 URL 全部幸存**，属渲染而非丢失（对所有工具一视同仁）。据此把断言改为「空白归一化 + 断言信息幸存」，并反向验证（删掉状态码 → 探针指名失败）。
+
+**T4 验证**：全量零 token 门 **28 phase 全绿（91s）**；tsc 0 错误；phase32 补 `--no-session` 与继承性断言后全绿；phase33 全绿且反向验证有效。
+
+**留给用户**：HANDOFF §5 的四项待决策仍未拍板（TEST-KEY.md 权限 664、runner 根治 fixture shadow、三个超大文件是否拆、13 个过度导出是否收窄）——本轮只做了低风险的告警版缓解。
+### 87. 安全加固、架构拆分与派发根因轮（plan-125）
+
+**用户 prompt**：「[团队方案·性能] …成员名单：队长（统筹集成，effort=high）、安全审计员（权限与密钥安全，high）、架构师（拆分与机制分析，high）、代码优化员A（代码竞速，high）、代码优化员B（代码竞速，high）、文档工程师（文档优化，high）；通信拓扑：star…任务1 安全加固（chmod 600 并验证）→安全审计员 / 2 架构拆分（按角色拆 members.ts 并统合至单一路径）→架构师 / 3 根因分析（定位派发机制退化原因并收窄非导出）→架构师 / 4 代码竞速A / 5 代码竞速B / 6 文档优化 / 7 汇总集成（blockedBy 1-6）→队长…同意执行 chmod 600，同意按角色拆 members.ts 并放在一个路径下，要根治问题，收窄成非导出，查找优化派发机制退化的原因，全面优化项目的代码和文档」。
+
+**组建与执行降级**：建 sec-auditor / architect / optimizer-a / optimizer-b / doc-engineer 五成员（均 `model: step-5-preview`、effort high），star 拓扑，任务板 T83–T89 带完整 blockedBy。**队长由本会话担任**。T1 由安全审计员**成功完成**并经队长独立验证；T2 起派发 settle 超时（本会话第 29/30 次），T2–T6 由队长亲自执行，范围未缩。
+
+**T1 安全加固（唯一按方案由成员完成的任务）**：`sandbox/TEST-KEY.md` 664 → **600**。验证：owner 未变、字节数 103、行数 3、sha256 与改前一致（内容未动）、另两处密钥（`sandbox/config.toml`、`.topo/team.key`）本已 600 且未擅动、git 侧干净（status 不出现、`.gitignore:21` 覆盖、历史从未跟踪）。**记录未修**：umask 0002，重建该文件会回到 664——已在报告中给建议，未改系统设置。
+
+**T2 架构拆分**：`extensions/members.ts` **1288 → 1043 行**，规则外移到新建的 `extensions/team/`（单一路径）：
+- `naming.ts`（31 行）：`MEMBER_NAME_RE`、`teamIdForSession`、`sanitizeTeamId`（收窄为非导出）；
+- `errors.ts`（98 行）：`isRetryableSpawnError`、`isSettleTimeoutError`、`augmentDispatchError`、`resumeIgnoredParams`、`currentDepth`、`wouldCycle`；
+- `spawn.ts`（205 行）：`buildSpawnArgs`（原类私有，现为**纯函数**，可直接单测）、`resolveMemberModel`、`spawnableModel`、`resolveEffort`、`writeMemberPrompt`。
+
+**关键技术约束**：TypeScript **无 partial class**，class 不可拆跨文件。故只搬"类之外的自由函数与纯逻辑"，TeamManager 类保留但变薄；四个已委托的私有方法（`resolveMemberModel`/`spawnableModel`/`resolveEffort`/`writeMemberPrompt`）整体删除，调用点改为模块函数。`members.ts` 以**薄桶**形式 re-export 这些符号，使 `tools.ts` 与 `phase18` 的 import 站点**零 churn**——这是"放在一个路径下"与"不炸 14 个引用方"之间的折中，已在文档中写明"新代码应直接从 ./team/* 导入"。
+
+顺带消除一处重复：`forSession()` 里原来手抄了一遍 `teamIdForSession` 的 strip 逻辑，现改为直接调用（两份实现必然漂移）。
+
+**T3 派发退化根因（本轮最有价值产出）**：
+
+链路（全部有代码证据）：
+1. `rpc-mode.ts:429-447`：`prompt` 命令的 `output(success(id,"prompt"))` 在 **preflight 成功时**就发出，远早于回合结束——docs/TESTING.md 早已记载此事实；
+2. `agent-session.ts:1386-1392`：`agent_settled` **只在一次 agent run 真正结束**（或带 failure）时发射；
+3. `rpc-client.ts:223-225` + `promptAndSettle():336-346`：插件**正确地**只等 `agent_settled`（Promise executor 同步执行，`settleDone` 在发 prompt 前已入队，**无注册竞态**——我先前怀疑此处，被代码推翻）。
+
+**结论**：成员进程加载正常、preflight 通过（所以 ack 到达、派发方认为"已受理"），但**从未进入 agent run** → 永不发射 `agent_settled` → 队长等满 `dispatch.timeoutMs`（默认 10 分钟）→ `timeout waiting for member to settle`。而成员"确实活着、确实能写文件"（它完成了启动工作）——与观察完全一致。
+
+**结构性盲区（这才是"根治"的真正对象）**：**没有任何零 token 探针走过 prompt→settle 路径**，因为它需要模型调用（花钱）。门禁的 phase17/18 只验握手与拓扑消息，`live_*` 只发 `/topo` 命令。所以这条路径的退化在门禁里**结构性地不可见**。
+
+**已实施的修复（诊断优先，不改行为）**：`dispatchWithSettleGuard` 在 usage delta 为零的 settle 超时下，现在给出可操作诊断——明说"成员应答了 prompt preflight 但没有回合运行（usage delta 0），因此从未发射 agent_settled"，并指向成员的搭建问题（models.available 之外的模型永不 settle、扩展未绑定），同时警告"用同样设置 respawn 很可能再次超时"。
+
+**留给后续的根治方向**（已写入根因报告）：用本地假模型端点驱动一次真实 prompt→settle，把该路径纳入零 token 门禁（可复用 phase28 的假端点机制）。
+
+**收窄非导出**：仅 members.ts 自用的六个 helper 已模块私有化或移入 team/ 按需导出；`searcherSpawnEnv`/`memberSpawnEnv`/`packageRoot`/`extensionDir` **保持导出**（分别被 phase31/32 与 presets.ts 内部依赖）。
+
+**T4/T5 优化**：phase28 的 fixture 构造消除 6 处重复响应体 + 7 处重复响应头（收敛为 `SEARCH_BODY`/`okJson`/`searchFake` 三个 helper）。另：我怀疑"整队 `disband()` 漏 `save()`"，**读码后证伪**（`save()` 出现 2 次，覆盖两条路径），未改——记录此过程以说明"先查证再改"。
+
+**T6 文档**：ARCHITECTURE(_CN) 补 `team/` 三模块并把模块数 18→21；TESTING(_CN) phase18 行补错误分类器的新位置；HANDOFF §3 文件索引补 team/ 行并记录拆分约束。
+
+**验证**：全量零 token 门 **28 phase 全绿（62s）**；tsc **0 错误**；phase28 去重后复跑通过。
+### 88. `--need-content` 设为默认轮（plan-126）
+
+**用户 prompt**：「默认加--need-content，然后更新所有文档特别是HANDOFF和DEVELOPMENT HISTORY，我即将压缩上下文」。
+
+**先把 flag 的事实测准**（同 query、两种模式各一次真实调用，逐字段对比）：
+
+| 字段 | 不加 | 加 |
+|---|---|---|
+| `content`（网页正文） | **0 字符** | **1442 字符** |
+| `snippet` | 69 | 69（**相同**） |
+| `summary` | 1373 | 1373（**相同**） |
+| 其余 7 字段 | authority/date/rerank_score/site_icon/site_name/title/url | 相同 |
+
+**结论：它只改 `content` 一个字段**；不加不丢字段，只是去掉可引用的正文；**单次调用同价**（服务方按成功请求计费，不按响应大小）；唯一该省它的场景是"只需判断点开哪条"、想缩小响应。
+
+**改动**：`agents/searcher.md` 规则 1 改为"**默认传 `--need-content`**"，并把上述事实写进角色指引——这样角色的引用不再带空正文，且模型知道什么时候可以省。
+
+**守门（本轮真正重要的部分）**：该 flag 只在花钱的 live 轮里被 exercising，所以"预设被重写时丢掉默认"在门禁里**不可见**。phase27 因此新增三条针对 `searcher.systemPrompt`（即预设文件正文，`presets.ts` 的 `parseFrontmatter` 直接给出，**无需猜路径**，故无论哪一层级胜出都被测到）的断言：
+1. 正文提到检索脚本（`STEPCODE_TOPO_SEARCH_SCRIPT`）；
+2. 声明 `--need-content` 为默认；
+3. 解释该 flag 改了什么（提到 `content`）。
+
+**反向验证**：把规则改成"不加默认"→ 探针**指名失败**（`FAIL preset: --need-content is the default in the guidance`）；恢复后全绿。第一轮反向验证没抓到（因为文件里还有第二处提及），修正注入方式后才真正验证了断言的有效性——记录此事是因为"反向验证必须真的破坏被测属性"本身就是要点。
+
+**文档同步**：TEST-PLAN(_CN) 补 R28；DEVELOPMENT-HISTORY 追加本条目；HANDOFF §1 轮次、§5 移除已闭环的该决策项、§3 预设行注明默认 flag 与守门断言。
+
+**验证**：零 token 全量门 28 phase 全绿；tsc 0 错误；phase27 全绿且经反向验证。
+### 89. 门禁"绿得虚假"修复轮（plan-127）
+
+**用户 prompt**：「[团队方案 · 性能] …成员名单：凌（Leader·现状检查/择优整合，high）、衡（Architect·架构优化，high）、锋（Backend·服务优化，high）、UX（Frontend·体验优化，high）、验（QA/DevOps·测试与部署，high）；通信拓扑：mesh…T1=现状检查与问题清单（凌）；T2=架构优化方案（衡）blockedBy T1；T3=后端深度优化（锋）blockedBy T1；T4=前端性能与体验优化（UX）blockedBy T1；T5=测试覆盖与CI/CD优化（验）blockedBy T1；T6=交叉验证与集成测试（全员）blockedBy T2,T3,T4,T5；T7=竞速择优与最终整合（凌）blockedBy T6…请检查项目现状，然后创建合理的计划，进行全面的修改优化」。
+
+**组建与降级**：按方案建 ling/heng/feng/ux/yan 五成员（均 `model: step-5-preview`、effort high，中文角色写入 systemPrompt——成员名只接受 ASCII），mesh 拓扑收窄到 5 人（首次设置误把 43 个历史成员全圈进 mesh），任务板 T90–T96。
+
+**派发结果**：`oneshot` 短回合**成功 settle 一次**（"只回复两个字：OK"），但 5 路并行实质回合**全部超时**。累计失败 **36 次**（本轮前 31 次）。**这一轮的增量证据**：短回合能成、长回合不成 → 失效点不在成员机制，而在需要多次工具调用的回合。与既有根因一致（成员进了 run 才发射 settle，而这里连 run 都进不去）。按既定模式由队长亲自执行 T1–T5，范围未缩。
+
+## 核心发现：门禁会在"测得更少"时依然全绿
+
+runner 的判定是 `DONE 存在 && fails=0 && skips=0`，**没有断言数下限**。而 phase2/phase3/phase17 三个探针用临时的 `log()` + `fail()` 组合上报，**一条 PASS 行都不发**。后果：某条检查可以被弱化成恒真、或被整条删掉，phase 仍打 DONE 且无 FAIL → 门禁全绿，而实际测得更少。
+
+**实测证实（非推测）**：把 phase2 的环拒绝日志行改成常量，`bash test/run-smoke.sh 2` 仍报 `phase2: OK (fails=0, skips=0)`。
+
+## 修复
+
+**① 断言数棘轮**（test/run-smoke.sh）：`check()` 本来就打一行 PASS/FAIL，故 runner 现在计数、写基线 `test/smoke/assertion-counts.txt`（28 phase 共 **643** 条，原 611），任何 phase 计数下降即判 `FAILED (assertion count dropped N -> M)`。上升自由、下降必须故意改基线。
+
+**② 三个探针转标准 `check()` 形态**：phase2 **0→14**、phase3 **0→15**、phase17 **0→2**。转换逐条保持条件等价、控制流不变；顺带把原先"只记录不断言"的 2 条 registry 断言与 2 条孤儿探针断言补成真断言。
+
+**③ 同族第二个洞**：被掏空的 phase17 不写 `orphan.pid` → runner 自己的 `orphan-check` 降级为**静默 SKIPPED**，而 SKIPPED 不计入 FAILED → 孤儿泄漏保护凭空消失且无人知晓。现改为：phase17 跑过却没写 pid 文件即判失败；真正的子集运行（如 `run-smoke.sh 9`）仍 SKIPPED。
+
+**④ UX：缺 key 报错指向了错误的杠杆**。原文只列 4 个**队长自动注入**的 env 名，用户真正该动的是配置表。改为以 `[stepcodeAgentTeam.searcher]` 的 `searchApiKey` 开头，env 路径保留给直接跑脚本的场景，并由 phase28 两条新断言钉住（防回归）。
+
+## 反向验证（两次救场，值得记录）
+
+1. **棘轮第一版从不触发**：基线行首已是 `phase2`，查找时又拼了一次 `phase$p` → `phasephase2`，永远匹配不到。靠"注入删两条断言、看门禁是否失败"才发现——若不反向验证，这个棘轮会被当成已交付的保护，实际毫无作用。
+2. **往 phase3 注入恒真却没失败**——这是**正确的**（底层行为仍对，恒真只在行为被破坏时才显形）。真正的测法是破坏 `extensions/presets.ts` 的信任门禁（不再要求 `trusted`）→ phase3 **指名失败 4 处**（含两条信任断言），恢复后全绿。这证明新断言真能抓住安全回归。
+3. 缺 key 文案回退为只列 env 名 → phase28 指名失败；恢复后全绿。
+4. 子集运行（不含 17）→ orphan-check 仍 SKIPPED，无误报。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **28 phase + manifest + 7 live + orphan-check 全绿**（69s） |
+| tsc | **0 错误** |
+| 断言总数 | 611 → **643** |
+| phase2/3/17 断言数 | 0 → **14 / 15 / 2** |
+| 反向验证 | 棘轮、phase3 信任断言、phase28 文案断言、orphan-check 均实测有效 |
+### 90. 派发退化根治轮（plan-128）
+
+**用户 prompt**：「请把派发退化的问题根治，并修改或更新相关文档」。
+
+## 根治方案：本地假模型端点进零 token 门禁
+
+**为什么这是根治**：退化的结构性盲区是「没有任何零 token 探针走过 prompt→settle 路径」，因为那条路要花模型钱。把模型换成本地假端点，整条路径就能免费真实执行——退化从此在每次门禁里可见，而不是只在花钱的 live 轮暴露。
+
+**机制（全部已证实）**：
+- step provider 的 API 是 `openai-completions`（`step-provider/index.ts`），chat base 派生为 `{apiBaseUrl}/v1`；
+- `STEP_PROVIDER_API_URL` / `STEP_API_URL` / `STEP_BASE_URL` 按此优先级覆写端点（`:153-160`）；
+- 成员经 `memberSpawnEnv` 的 `{...process.env, ...overrides}` **继承队长 env**，故探针改自己的 env 即可把子进程的回合导向假端点——**无需改插件**；
+- 客户端发 `stream: true`，解析 `choices[0].delta.content`、`finish_reason`、`usage`。假端点据此回三段 SSE。
+
+**注意**：宿主虽内置假模型 provider（`providers/faux.ts` 的 `fauxProvider`），但它是**测试 harness 设施**（仅 `compat.ts:143` 与 `agent-core/test/harness/*` 使用），**未注册进运行时模型表**，实测 `--model faux-1` 无输出——**不可用**。故走本地 HTTP 端点。
+
+## 新探针 phase34（10 条断言）
+
+**Part A——happy path 被覆盖**：成员指向正常应答的假端点 → 真实进入 agent run、真实调"模型"、真实结束回合、真实发射 `agent_settled`。断言：settle 成功、usage delta > 0、成员文本是假模型的回复、`/v1/chat/completions` 真被调用、调用带凭证、请求体带成员的 model id。
+
+**Part B——复现并检测退化本身**：端点接收请求后永不应答 → 成员留在永不结束的 run 里 → 无 settle。断言：sendMessage 确实失败、失败前**已进入 run**（证明 preflight 通过却无回合）、超时被诊断为"卡住的成员"而非"跑得慢"、诊断警告 respawn 会重复。
+
+实测：Part A 45ms settle；Part B 在 `dispatch.timeoutMs=1000` 下约 2s 完成。
+
+## 首跑即抓到的真 bug（诊断被丢弃）
+
+`dispatchWithSettleGuard` 为这个场景构造了完整的零 usage delta 诊断，但重试分支是：
+
+```ts
+throw retryErr === err ? cause : retryErr;
+```
+
+两次分别抛出的错误对象**永远不相同**，于是增强诊断**几乎永远不会被抛出**——为这个失效写的唯一一条消息，谁也收不到。已改为：总是透出诊断，并在重试错误不同时附上其文本。
+
+**这个 bug 在 36 次派发失败里每次都发生了**，只是没人看见消息。
+
+## 第二个真 bug：门禁在写 /tmp，并读回它
+
+插件每次激活都调用 `seedGlobalConfigExample(agentDir())`（`index.ts:177`，幂等、只加注释），而统一配置路径是 `dirname(agentDir)/config.toml`（宿主的约定，`settings-manager.ts`）。runner 原来把 `mktemp -d` 的结果**直接当 agentDir**，于是该路径 = `/tmp/config.toml`：
+
+- 门禁**写**进一个共享目录；
+- 下一轮**读**回它，而它在全局层**最后应用**，压过插件自己的 JSON 配置 → 门禁非 hermetic。
+
+**修复**：runner 把 agentDir 嵌在一性根目录下一层（`AGENT_ROOT=$(mktemp -d); AGENT_DIR=$AGENT_ROOT/agent`），EXIT trap 清整个 root。`/tmp/config.toml` 不再产生；既有的那个（16 段、无凭证，删除前已扫描）已清掉。
+
+这正是我此前标记为「runner 根治 fixture shadow 未闭环」的**确切机制**——现在闭环了。
+
+## 第三个发现（实施细节）
+
+`dispatch.timeoutMs` **没有 env 覆写**，且配置在加载时缓存，故 Part B 需要：写真配置文件 + `resetConfigCache()`。且 legacy 专用文件（`<agentDir>/stepcode-agent-team.json`）是**把段本身放在顶层**（`applyFile` 直接 `mergeSection(config, raw)`），不同于 `settings.json` 的 `CONFIG_SECTION` 键——第一版多包了一层，导致超时仍是 600s、探针挂死。
+
+## 反向验证（三种，全过）
+
+| 注入 | 结果 |
+|---|---|
+| 回退 members.ts 的修复 | `FAIL degradation: the timeout is diagnosed as a stuck member, not a slow run` |
+| hang 期间让端点正常应答 | 3 条 Part B 断言失败（含 `a member stuck inside a run never settles`） |
+| 模型端点返回 500 | `FAIL dispatch: the member's text is the fake model's reply` |
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **28 phase + manifest + 7 live + orphan-check 全绿**（87s） |
+| tsc | **0 错误** |
+| 断言总数 | 643 → **653** |
+| `/tmp/config.toml` | 门禁跑完后**不存在**（hermetic） |
+| 反向验证 | 3 种，均指名失败 |
+### 91. 派发退化定位轮（plan-129）
+
+**用户 prompt**：「请启动拓扑智能体团队，设计合理的工作计划，尝试修复这个问题，并全面检查所有代码进行简化和优化，调整测试流程使其更合理。工作的同时请修改或更新对应文档」。
+
+**团队与执行**：建 ling/heng/feng/ux/yan 五成员（`model: step-5-preview`、effort high，中文角色写入 systemPrompt——成员名只接受 ASCII），mesh 拓扑收窄到 5 人，任务板 T98–T101（T1 派发退化结论整合 / T2 代码简化 / T3 测试流程 / T4 文档同步）。
+
+**执行结果**：一次派发中成员真实启动并被沙箱的 heredoc 规则拦截（其 bash 无法校验 heredoc 边界、且无交互式审批可用）；补充"禁用 heredoc"后再次派发，**超时**（本会话第 39 次）。T1–T4 由队长亲自执行，范围未缩。
+
+## 核心发现：派发退化不在本仓库
+
+五种配置全部实测，产品插件的成员派发**都正常 settle**：
+
+| 配置 | 结果 |
+|---|---|
+| 假模型端点（phase34） | 45ms settle |
+| 真实提供方 · 短提示 | 2.4s，1 回合 |
+| 真实提供方 · 长提示（真用工具） | **10.2s，5 个回合** |
+| bare 成员（无扩展） | 864ms |
+| **加载我们整个插件的成员** | 880ms |
+
+因此本会话累计 **39 次** settle 超时**全部来自 harness 的团队成员机制**（`team_send`/`team_task`），不是本仓库代码。此前"短回合成、长回合不成"的观察曾让人怀疑工具调用路径——phase35 证明那也正常。
+
+**两个支撑事实**：
+1. `buildSpawnArgs` 发出的是 `--no-extensions -e <member-messaging.ts>`：成员**只加载消息 shim，从不加载完整插件**。所以在成员内激活整个插件从来不是超时的原因——这一点现在有 phase37 钉住。
+2. 成员的 stderr 此前被 `proc.stderr?.on("data", () => {})` **整体丢弃**。成员是唯一知道自己为何没跑的进程，而它的答案被扔掉了——**这就是 38 轮超时查不出原因的直接原因**。
+
+## 会发布的修复（观测能力）
+
+`extensions/rpc-client.ts`：`MemberRpc` 现保留**有界 stderr 尾部**（8KB，`stderrLines(limit)` 按整行返回）。`extensions/members.ts` 的零 usage delta settle 超时诊断改为**引用成员自己的遗言**（`The member's own last output: "..."`），成员完全沉默时也明说"它在 stderr 上什么也没说"——沉默本身就是信息。
+
+下一次真实的 harness 派发失败，将第一次带上原因。
+
+## 测试流程优化
+
+**新增三个探针**（均经反向验证）：
+- **phase35**（5 断言，零成本）：**多轮回合 + 工具调用能 settle**。假模型第一轮返回 tool_call、第二轮返回最终文本，强制 agent loop 走第二轮。这守住"长回合"这一类。*实现坑*：假端点同时服务 `/v1/models` 发现请求，分支必须按** chat 请求计数器**判断——按总请求数判断会让唯一一次 chat 请求走"最终文本"分支，探针静默地什么都没测。
+- **phase36**（6 断言，**key-gated**，见 runner `KEY_PHASES="5 36"`）：唯一打**真实提供方**的成员派发探针，短提示与长提示各一次（声明计费：两次短提示）。
+- **phase37**（9 断言，零成本）：成员 spawn 契约（rpc 模式 / 自有 session / **不加载项目扩展** / 只加载 member-messaging / model 由 argv 指定 / 团队连线走 env 不走 argv）+ bare 成员 settle + **带我们插件的成员也 settle**（洗清本仓库）+ stderr 尾部可达。
+
+**runner 改动**：失败时输出探针日志的**尾部 25 行**，而非只有 FAIL 行。在自己的第一个 check 之前就死掉的探针（挂死、提前抛错）过去只留下 `fails=0` 和一片空白——这是套件能产出的最不可操作的输出，phase34/35/36 每个都得先临时给 runner 打补丁才能诊断。
+
+## 代码简化与优化的结论
+
+用**正确方法**（对每个候选符号找全部命中位置、扣掉定义行、再看剩余命中在本模块内/被测试用/真无人用）审计死导出：**未发现真死代码**。9 个"零外部引用"候选全是与函数导出配对的**导出类型**（`CollabRecord`/`SearcherConfig`/`SpawnPlan` 等，描述导出值的形状，是良好实践），加一个常量。**没有为了改而改。**
+
+真正的优化是上面那项观测能力修复——它把一类长期不可诊断的失效变成可诊断。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **32 phase + manifest + 7 live + orphan-check 全绿**（107s） |
+| tsc | **0 错误** |
+| 断言总数 | 653 → **673** |
+| 新增探针反向验证 | phase35 ×2、phase37 ×2、phase36 ×1，均指名失败 |
+| `/tmp/config.toml` | 不存在（hermetic） |
+### 92. 全量审查与风险交叉验证轮（plan-130）
+
+**用户 prompt**：「[团队方案 · 性能] …成员：队长·统筹/汇报(高)、架构师·代码审查(高)、测试专家·测试分析(高)、产品专员·需求梳理(高)、QA·风险验证(高)；拓扑：star…任务1 系统代码与配置全量审查、缺陷及技术债识别（架构师）；任务2 测试覆盖率分析、手动测试项及边界清点（测试专家）；任务3 待决策事项、遗留需求与开放问题梳理（产品专员）；任务4 跨维度遗漏与风险交叉验证（QA）；任务5 汇总汇报及待办/待测清单生成（队长，blockedBy 1,2,3,4）…请给我检查后汇报总结，还有哪些事项待决策或者待完成，是否还有需要我手动测试的内容」。
+
+**组建与执行**：建 lead/arch/tst/prod/qa 五成员（`model: step-5-preview`、effort high，中文角色写入 systemPrompt——成员名只接受 ASCII），star 拓扑，任务板 T102–T106（T5 blockedBy T1–T4）。**prod（产品专员）成功交付完整报告**（`sandbox/logs/review-t3-product.md`，112 行，含三张清单 + 8 处文档矛盾的实证）；arch/tst/qa 三路**派发超时**（本会话第 40/41/42 次），由队长按各自维度亲自执行（`sandbox/logs/review-t1-arch.md`、`review-t2-test.md`、`review-t4-qa.md`）。
+
+## T1 代码审查：未发现阻塞级或高级缺陷
+
+逐项核查均无问题：资源泄漏（extensions/ 内零 `mkdtempSync`；6 处 `setTimeout` 全部正确清理或 `.unref()`）、空 catch（3 处全是有意的安全默认值：读不到=不存在、损坏=不可加载、版本失败=0.0.0）、`settleWaiters` 三条清空路径均无"清空未 resolve"的悬挂、并发（23 处 `reg` 改写全在 `memberLocks`/`spawning` 串行化内）、配置 precedence 链、密钥位置与权限、trust 门禁、命令注入面（无 `shell:true`）、路径穿越（`registry.ts:70` 相对路径锚定 agentDir）。
+
+技术债结论：三个大文件（1085/1023/817 行）**不建议再拆**（TS 无 partial class，类不可跨文件；可拆的已拆到 `team/`）；13 个"过度导出"**不建议收窄**（均在本模块内被调用或被探针导入）。
+
+**本轮自查发现并修掉自身缺陷**：phase37 有一条**过窄断言**——"成员只加载 messaging shim"依赖 `maxRecursionDepth=1`（默认值）。`buildSpawnArgs` 实际有分支：能编排时加载 `extensionEntryPath()` + messaging 并注入 `STEPCODE_TEAM_AUTOACTIVATE=1`，不能时才 `--no-extensions`。后果：用户配 `maxRecursionDepth=2..4` 会让该断言**误报失败**，且编排分支此前**完全无覆盖**。已改为不变量表述并新增编排分支三条断言（phase37 9→**12**），双向反向验证指名失败。
+
+## T2 测试覆盖：无零覆盖模块，手动项只剩 4 项
+
+覆盖矩阵：config 22 / members 18 / registry 9 / presets 7 / team-server 4 / tools 3 / topo-init 3 / rpc-client 3 / 其余 1-2。`team/` 三模块显示 0 是薄桶导致的**误判**——按符号名 grep 会漏掉它们经 `TeamManager` 的行为性覆盖（`isSettleTimeoutError` 由 phase34 Part B 依赖、`MEMBER_NAME_RE` 由 phase2 的 `Bad_Name` 拒绝实证、`resolveEffort`/`spawnableModel` 由 phase18 实证）。CLI 参数全覆盖。恒真断言零命中。
+
+**仍需用户本人执行的手动项只剩 4 个**：M1 真实安装/卸载（写真实 settings）、M2 信任弹窗交互、M3 TUI 像素/按键观感、M5 英文译文审阅。可选：M6 八成员性能。ring 巡游上限演示受 harness 派发退化阻塞（机制已由 phase18/24 覆盖）。
+
+## T3 需求梳理（prod 交付）
+
+三张清单 + **8 处文档矛盾的实证**，全部经队长命令复核后修复：HANDOFF submodule pin `81e79bc`→`29eb4607`、三个大文件行数、模块数 18→21、`ARCHITECTURE_CN` 重复列项、**`CONFIGURATION_CN:69` 说 storage.dir 按 cwd 解析（与 `:134` 和 `registry.ts:70` 的 agentDir 相反，会误导排障）**、`TEST-PLAN_CN:24` 25→32 phase、`MANUAL-TESTING_CN:29` 25→32 phase 且"searcher 未实跑"→已于 plan-119 跑通、`ROLES_CN:46` "四个角色名"→五个。
+
+## T4 风险交叉验证
+
+**发布风险：无破坏性契约变更。** `buildSpawnArgs` 的参数向量在 main 与 develop 上**逐字相同**（`git show main:extensions/members.ts:592-602` 对照 `team/spawn.ts:182-194`），plan-125 的拆分类重构是行为保持的。配置键名未增删改；唯一用户可见行为变更是 `--need-content` 成默认（plan-126，已同意）与缺 key 报错改指配置表（plan-127）。
+
+**QA 发现的新遗漏**：文档从未声明**平台支持范围**。成员间通信走 Unix domain socket，Windows 上不可用——失败表现为一个 socket 错误而非"平台不支持"。已在 README(_CN) 的「平台约束」节补明（团队功能需 Linux/macOS，其余部分平台无关）。
+
+其余遗漏（升级路径无探针、多项目并发、registry 半写状态、卸载残留）已列入清单，未擅自实施。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **32 phase + manifest + 7 live + orphan-check 全绿**（102s） |
+| tsc | **0 错误** |
+| 断言总数 | 673 → **676** |
+| phase37 新断言反向验证 | 2 次（破坏编排分支 → fails=2；去掉 auto-activate → fails=1） |
+| 文档矛盾修复 | 8 处，逐处命令实测取证 |
+### 93. 待完成事项清零轮（plan-131）
+
+**用户 prompt**：「[团队方案 · 性能] …成员：队长（统筹/择优，high）、执行者甲（执行路径A，high）、执行者乙（执行路径B，high）、执行者丙（执行路径C，high）；拓扑：star；任务：1.事项拆解与分派（队长）；2.执行路径A（甲）；3.执行路径B（乙）；4.执行路径C（丙）；5.竞速比对与择优（队长，blockedBy 2,3,4）；6.终审交付（队长，blockedBy 5）…请把待完成的事项都做了」。
+
+**组建与执行**：建 chief/exec-a/exec-b/exec-c 四成员（`model: step-5-preview`、effort high，中文角色写入 systemPrompt），star 拓扑，任务板 T107–T112。三路并行派发**全部超时**（本会话第 43/44/45 次），三条路径由队长亲自执行。产出 `sandbox/logs/pend-a-llm.md`、`pend-b-searcher.md`、`pend-c-hardening.md`。
+
+## 路径 A：LLM 层 4 探针复跑 — 20/20 全过
+
+隔离 agentDir（mktemp 根目录，父目录无 config.toml）下复跑 phase4/10/11/12：4/4、2/2、1/1、4/4、9/9。
+与历史基线 22/22 的差是 phase10 的断言数随并发样本数浮动，**FAIL 计数为 0**。**develop 在 LLM 层是「合入就绪」的**，v0.4.x 发版前置已满足。
+
+## 路径 B：searcher 收尾 — 抓到并修掉两个真 bug
+
+把 `STEPCODE_TOPO_MAX_BYTES` 调到 4096 跑真实 search（同一代码路径的等价验证，不需真找 >2MB 页面），第一轮 **4/7 失败**暴露两个 bug：
+
+1. **截断标记对 search 丢失**：`data = {...body, _truncated, _note}` 刚设好，search 分支却 `return { data: { results, needContent } }` 重建 data，把标记扔掉。只读 `data` 的调用方看到完全普通的结果，永远不知道响应被截过；`_note` 那行对 search 是死代码。
+2. **`MAX_BYTES=0` 被静默忽略**：`envInt` 的 `parsed > 0` 把 0 当未设置，回退 2 MiB。脚本里**已有** `envIntAllowZero`（backoff cap 在用），MAX_BYTES 却没用——正是文档里反复记载的那个坑，只是这次栽在早期就有的键上。
+
+修复后 7/7。phase28 新增 6 条零成本断言（37→43），双向反向验证指名失败。
+
+## 路径 C：deferred 加固 — 又抓到一个高层级真 bug
+
+**P2-8b 闭环**（新探针 phase38，7 断言）：假模型返回不带 content 的 assistant 消息，驱动 socket 走完"空回复"路径。断言回合仍 settle（空回合是完成的回合，不是挂死）+ 队长侧框成 `Delivered to X.`。
+
+**升级路径闭环**（新探针 phase39，23 断言）：构造 v0.3.0 配置 → 种子化 → 三层（文件/解析/加载）核对用户值幸存。
+
+**phase39 第一版就抓到高层级 bug**：文件级断言全过、宿主 TOML 读取器也能解析出用户值，但 `loadConfig()` 返回**默认值**。
+
+根因：种子块按 `KEEP THE QUOTES` 约定把**每一个**默认值写成带引号字符串（`"default"` 标记必须是 TOML 标量且 `mergeSection` 按字面匹配）。用户照着指令取消注释改成 `max = "6"` 后，TOML 交出字符串 `"6"`，`expectIntRange` 的 `typeof value !== "number"` 把它**静默重置为默认值**，唯一通知进 debug-only 的 `logWarnings`。
+
+**也就是说：文档教用户做的事，对任何非字符串键都不生效。**
+
+**修复**：新增 `scalarNumberOf` / `scalarBooleanOf` / `stringArrayOf` 三个助手，接入 `expectIntRange`/`expectNumberRange`/`expectBoolean`/`activation.keywords`，合法时把 coerced 值写回。反向验证：退回严格检查 → phase39 指名失败 2 处。
+
+**P2-9 重新审计**（原细节不可恢复）：扫全部 phase 四类问题，未发现新的恒真/过窄断言；phase37 那条过窄断言已于 plan-130 修掉。
+
+**附带发现（非 bug）**：测试最初用 `"team, 组队"` 作关键词，加载得 `["team"]`——因为「组队」本就在 `DEPRECATED_KEYWORDS` 里，被剥离是 0.2.0 的刻意设计。记录此事是因为"加载结果与文件不一致"有两种完全不同的原因，排查时必须先排除设计行为。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **34 phase + manifest + 7 live + orphan-check 全绿**（101s） |
+| tsc | **0 错误** |
+| 断言总数 | 676 → **712** |
+| 新增探针 | phase38（7）、phase39（23）；phase28 +6 |
+| 反向验证 | phase28 ×2、phase37 ×2、phase38 ×1、phase39 ×1 |
+| **修复的产品缺陷** | **3 个**（截断标记丢失、MAX_BYTES=0 被忽略、带引号数值/布尔/列表被静默重置） |
+| LLM 层复跑 | 20/20（约 16 次 token，已声明） |
+### 94. U2-U5 清零轮（plan-134）
+
+**用户 prompt**：「[团队方案 · 均衡] …成员名单：队长-张衡(20%)、勘察-李明(25%)、规划-王芳(20%)、执行-赵磊(25%)、审查-陈静(10%)；通信拓扑：star…T1 U2-U5需求勘察与确认（李明），blockedBy：无；T2 技术方案与计划设计（王芳），blockedBy：T1；T3 U2-U5开发与部署（赵磊），blockedBy：T2；T4 质量审查与集成验收（陈静），blockedBy：T3；T5 终审与交付（张衡），blockedBy：T4…请创建合理的计划后做u2 u3 u4 u5事项」。
+
+**组建与执行**：建 zhangheng/liming/wangfang/zhaolei/chenjing 五成员（`model: step-5-preview`；effort 按占比映射为 medium/medium/medium/medium/low），star 拓扑，任务板 T122–T126（blockedBy 链完整）。**李明成功交付**勘察报告（`sandbox/logs/u2u5-t1-survey.md`，155 行，本会话第 3 次成功的成员派发）；王芳派发**超时**（第 49 次），T2–T5 由队长亲自执行。
+
+## 李明的勘察结论（决定了实施范围）
+
+| 项 | 结论 |
+|---|---|
+| U2 plan 档位 live | 机械路径**本可就零成本覆盖**，但 phase24 的脚本 ctx 没有 `modelRegistry`，`generateTeamPlan` 直接放弃 → 「模型返回方案→展示→Accept 注入」**在任何成本下都无覆盖**。真实顺从度才需 key（~4k-8k token） |
+| U3 depth≥3 | 进程级已覆盖（phase8 深度2 / phase37 深度4），但 **phase37 只从深度 0 触发 `canOrchestrate`**，「深度 3 是否可达」这个边界从未被测。真实三层链需 key（~10k-25k）且正是 harness settle 超时高发路径 |
+| U4 多项目并发 | 完全可零成本：socket=`<teamsRoot>/<teamId>/sock`，teamId 由会话文件派生，**与 cwd 无关** |
+| U5 registry 半写 | 完全可零成本：写路径是 `tmp-<pid>`+`renameSync`，target 永不被半写 |
+
+李明还纠正了一点我交给他的前提：他说「假模型不发 tool_call」不准确——phase35 已证明能发。真正的原因是脚本化模型无法在嵌套链里于正确时机选出正确的 spawn 调用。**他是对的**，我按正确理由重述。
+
+## 实施：四个新探针，36 条断言，全部双向反向验证
+
+**phase40（11 断言）— U5 registry 崩溃存活**。孤儿 `.tmp-<pid>` 被加载器忽略、tmp 名按 pid 命名空间、二次 save 整体胜出、截断/空注册表加载为 null。**关键设计**：单线程下 `write tmp; rename` 与 `write target` 终态不可区分——所以第一版探针在有人把 rename 换成 copyFile 后**依然全绿**（反向验证没抓住）。改为用「只读 target」制造可观测差异：rename 能越过 0444 的 target（目录可写），直接写不能。uid 非 root 这条也写成断言而非假定。另明确「损坏→null→静默重建空团队」是**重置不是恢复**，防止绿勾被读成数据回来了。
+
+**phase41（8 断言）— U4 多项目并发**。两会话→两 teamId→两 socket；socket 是 teamId 的纯函数；两个 TeamServer 并发 listen 无 EADDRINUSE 且均 0600；嵌套 team id 在父之下命名空间隔离。
+
+**phase42（6 断言）— U2 plan 档位 happy path**。给脚本 ctx 一个会应答的 `modelRegistry.complete`，追踪固定方案直到 Accept 时进入注入，并验证 Cancel 时不泄漏。**只主张 plumbing**——真实模型是否产出符合档位的方案仍需 key，断言名与头注都写清了这条界线。
+
+**phase43（11 断言）— U3 深度边界**。用真实子进程携带的深度 env 驱动 `buildSpawnArgs`：bound=3 时深度 2 成员可编排（**深度 3 可达**）、深度 3 成员不可，故树有限。真实三层 LLM 链**刻意不覆盖**且无法廉价覆盖，头注明说。
+
+## 过程中修掉的自己的两个错
+
+1. **phase40 第一版的反向验证没抓住注入缺陷**——因为原子性在单线程下不可观测。已用只读 target 修好，两条反向验证（rename→copyFile、catch 返回空团队）现均指名失败。
+2. **phase43 的深度语义 off-by-one**——`planAt(p)` 是「深度 p 的进程的子嗣」，我一度把「深度 N 可达」写成 `planAt(N-1)`，恰好反意。修正后把映射关系写进注释，防止再错。
+
+## 验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **38 phase + manifest + 7 live + orphan-check 全绿**（109s） |
+| tsc | **0 错误** |
+| 断言总数 | 712 → **748**（+36） |
+| 新探针反向验证 | **8 次**（每探针 2 次），均指名失败 |
+| `/tmp/config.toml` | 不存在（hermetic） |
+| 真实 key 花费 | **0**（四项全部零成本闭环） |
+
+## 仍未闭环
+
+- **U2 的真实顺从度**（真实模型按档位产出合格方案，~4k-8k token）与 **U3 的真实三层链**（~10k-25k token/条）——二者本质需 key，且 U3 真链正是 harness 派发退化高发路径。**建议在派发退化解决前不做**，已在探针头注与 HANDOFF 中注明，避免绿勾被过度解读。
+### 95. 付费测试轮：真实三层派发链与档位顺从度（plan-135）
+
+**用户 prompt**：「[团队方案 · 性能] …成员名单：队长（统筹/高）；策略师A（测试设计/高）；策略师B（测试设计/高）；执行员（环境与执行/高）；审计员（结果验证/高）。通信拓扑：custom…任务1 需求确认（队长）；2 测试方案V1（策略师A，blockedBy 1）；3 测试方案V2（策略师B，blockedBy 1）；4 环境搭建（执行员，blockedBy 1）；5 方案择优（队长，blockedBy 2,3）；6 测试执行（执行员，blockedBy 5）；7 结果验证（审计员，blockedBy 6）；8 报告与确认（队长，blockedBy 4,7）。同意测试付费测试项目」。
+
+**组建与执行**：建 captain/strategist-a/strategist-b/runner/auditor 五成员（`model: step-5-preview`、effort high），**custom 拓扑**（队长统一对外；strategist-a↔b 竞速互通；runner↔auditor 验证回路），任务板 T127–T134（blockedBy 链完整）。三路派发**全部超时**（本会话第 50/51/52 次），T2–T8 由队长亲自执行。
+
+**总计费 48,029 token**（预算 ≤60k）：U2 八次 `modelRegistry.complete` 14,492；U3 两条链 20,081 + 13,456。密钥泄漏扫描 5 份报告**零命中**；4xx 未重试（DeepSeek chat 401 直接记为未通过，符合计费诚实）。
+
+## U3 真实三层派发链：通过
+
+`leader → tier1 → tier2 → tier3` 真实成立：
+
+- **进程链**：`teams/paidu3b` → `teams/team-paidu3b-tier1` → `teams/team-team-paidu3b-tier1-tier2`，前两者 registry+sock 均落盘
+- **tier3 真实跑回合并真实回复**：宿主记录的 `team_send` toolResult 含 `usage:{input:3793,output:8,turns:1}` 与 `fullText:"THREETIER-7"`
+- 23.8s、tier1 3 turns、13,456 token；**未触发 settle 超时**
+- 深度语义正确：tier3 无自己的 team 目录——`maxRecursionDepth=3` 时 `3<3` 为假，tier3 是 `--no-extensions` 的隔离叶节点，与 phase43 断言一致
+
+**方法论（本轮最值得留传的）**：特征串会同时出现在**指令参数**、**tier3 的 prompt 文件**、**顶层回复**三处，所以「顶层回复含特征串」**不能**作为判据——它可能只是指令在层间转述。唯一可靠的观测点是**宿主记录的 toolResult**（`details.usage.turns` + `details.fullText` + `details.member`），模型无法伪造那一层。本轮靠它排除了过度声称；现场也确实**没有 tier3 的会话文件**（隔离叶节点不建 team），若只采信顶层回复就会误判。
+
+## U2 真实顺从度：实质通过，但不可机械门禁化
+
+8 样本成员数单调递增，且只有 performance 自发引入 racing：
+
+| 档位 | 样本1 | 样本2 | 拓扑 |
+|---|---|---|---|
+| economic | 2 | 2 | star |
+| fast | 3 | 3 | star |
+| balanced | 5 | 4 | star |
+| performance | 7 | 6 | **mesh/custom + 竞速** |
+
+**但机械判据三轮都不稳**：① 正则「N 个成员」——balanced 写法是 `Roster: Lead Mira (coordinator, 20%); …`，提得 0 误判 FAIL；② 任务行去重负责人——输出格式变（`— Ravi`/`Fixer:`/`（探路者）`/`[SmokeTestAnalyst]`）仍提不满；③ 放宽——第二轮四档全变短只 2/4 判对。
+
+**根因**：plan 输出是自由文本，句式逐次不同，轮间方差极大（同档 999 → 277 字符）。**结论：实质通过（人工阅卷），不可机械门禁化**；门禁能守住的只有 plumbing（phase42 已覆盖）。这与「不加插件键、用文档+探针覆盖」的既有决策一致，且多一层证据：**即便加探针也没有稳定判据**。
+
+## 对既有结论的修正
+
+1. **U3 真实链可行**（此前标记"建议延后，高风险"）——实际 13k–20k token、24–49s，且未触发 settle 超时，因为走的是产品插件的 TeamManager 而非 harness 的 team_send。进一步印证「退化在 harness 不在本仓库」。
+2. **U2 不可机械门禁化**是新结论，记入 HANDOFF 以免后人再花 token 尝试。
+
+## 附带确认（非缺陷）
+
+第一版直接 `fetch` DeepSeek `/v1/chat/completions` 得 **401**：`sandbox/config.toml` 里那个 key 是 search/fetch 工具的凭证而非 chat 凭证。真实路径必须经宿主 `ctx.modelRegistry.complete`（step provider + STEP_API_KEY）——那才是 `generateTeamPlan` 实际走的路。
+
+## 仍未闭环
+
+- 样本量小（U3 n=2、U2 n=2 轮）；要统计显著性需多跑，成本线性增长
+- U3 的 tier3 只有宿主 toolResult 一手证据，无会话级证据
+- harness 侧派发退化（累计 52 次 settle 超时）——外部，不在本仓库
+### 96. 两项架构决策定案轮（plan-136）
+
+**用户 prompt**：「先不发版，请给我解释umask问题，大文件不拆，过度导出不收窄」。
+
+本轮**无代码改动**，是三项目标状态收敛：用户明确「先不发版」，并拍板两项长期挂着的架构决策。
+
+## 一、umask 问题（解释了，并修正了我原来的判断）
+
+`umask=0002` → 新建文件得 **664（同组可读）**、新目录 775。五个含凭证的文件现在都是 600，但**保护程度不同**，我原来的说法有一处不准确：
+
+| 文件 | 保护程度 | 证据 |
+|---|---|---|
+| `.topo/team.key` | **真保护** | `topo-init.ts:106` 写时带 `mode:0o600`，`:109` 又显式 `chmodSync(0o600`（双保险）；目录 `mkdirSync(mode:0o700)` |
+| `registry.json` | **真保护** | `registry.ts:135` `mode:0o600` |
+| `sandbox/config.toml` | **半保护** | `config.ts:360` 追加时带 `mode:0o600`，但**实证发现 `appendFileSync` 的 mode 只在创建文件时生效**——该文件是用户先手写建的，所以那个参数从未作用过 |
+| `sandbox/TEST-KEY.md` / `sandbox/auth.json` / `local/test-api-key.md` | **无保护** | 分别由用户手写、step 宿主登录态写入，不在插件管辖内 |
+
+**实证**（本轮新增，比原判断准）：手写创建 664 → 插件 `appendFileSync(mode:0600)` 仍是 664 → 显式 `chmodSync(0600)` 才变 600。
+
+**实际影响面**：五处均已 gitignore、git 历史从未跟踪、四路扫描零命中；单用户机器下**风险接近零，属卫生问题而非正在发生的泄露**。只有文件被**重新创建**才会踩坑（临时文件式编辑器改写、新克隆后 `cp`、`step login` 重写 auth.json）。
+
+**给用户的四个选项**：A 什么都不做（可接受）／B 改全局 umask（波及整个系统，不建议）／C 项目内 shell 封装（要维护）／D 给 `config.ts:360` 后补一次显式 `chmodSync(0o600)`（三行，把半保护变真保护）。**建议 A 或 D**——等用户拍板。
+
+## 二、三个大文件不拆（用户拍板）
+
+`members.ts` 1085 / `config.ts` 1075 / `index.ts` 817 保持原状。理由：
+1. **TypeScript 没有 partial class，类不可跨文件**——`members.ts` 剩余部分是 TeamManager 类本体；可拆的自由函数/纯逻辑已在 plan-125 全部移到 `extensions/team/`（naming/errors/spawn 三模块 334 行），再拆只剩类本身；
+2. `config.ts` 的 schema/校验/种子化/迁移/env 五块**共享同一份 `PluginConfig` 类型**，拆开要复制类型或造循环依赖；
+3. `index.ts` 是激活/命令注册/工具注册三类，拆开要动 14 个 import 站点。
+
+**判断依据**：这三处的长度来自「一个类 / 一个 schema / 一个注册点」的天然内聚，不是堆积——拆分的回归风险超过可读性收益。
+
+## 三、13 个过度导出不收窄（用户拍板）
+
+对外 API 面保持不变。理由：
+1. 那 13 个符号**全部有真实使用者**——一部分被本模块内部调用（`configFilePath`/`settingsFilePath`/`hasCjk`/`meshTopology` 等），一部分被探针直接导入（`searcherSpawnEnv`/`memberSpawnEnv`/`packageRoot`/`extensionDir`），**不是死代码**；
+2. 收窄是纯 cosmetic，却有真实风险——plan-125 收窄 members.ts 自用的 6 个 helper 时，差点因 grep 计数误判而误删 13 个函数（靠「看命中位置并扣掉定义行」才避开）；
+3. 保持导出面对下游更友好。
+
+## 四、状态
+
+用户明确「先不发版」，故 **v0.4.x 发版继续挂着**（前置已全部满足：LLM 层 20/20、38 phase 全绿、tsc 0、无破坏性契约变更）。
+
+**验证**：本轮无代码改动，`tsc 0`、全量门禁 38 phase 全绿（101s）复跑确认无回归。
+### 97. 沙箱升级 0.1.8 与上游能力比对轮（plan-137）
+
+**用户 prompt**：「step code已经更新，请创建合理的计划，更新沙箱环境，检查接口是否更新，是否有官方已经实现的功能要避免重复，是否可以进一步优化。完成修改后，告诉我那些项目需要手动测试」。
+
+**执行**：队长按五步执行（更新沙箱 → 接口扫描 → 官方功能比对 → 优化 → 汇报）。**总计费 0 token**（全零成本闭环）。
+
+## 一、沙箱升级：29eb4607 → 414416e2f（构建 0.1.7 → 0.1.8）
+
+上游领先 **34 提交 / 177 文件**（2026-11-03 → 11-21）。以 `STEPCODE_BUILD_VERSION=0.1.8` 重建（19s 增量），`resolve_step_bin` 解析到本地构建、版本 0.1.8；PATH 上的全局 step 亦为 0.1.8（11-23 安装，与"已更新"吻合）。submodule 指针已提交（`3ba6ec7`）。
+
+## 二、接口扫描：完全兼容
+
+| 面 | 结论 |
+|---|---|
+| tsc 全导入图 | **0 错误** |
+| CLI flag | 我们传入的 9 个全部仍被 `--help` 记录；`--approval-mode` 仍只有 `confirm`/`auto`（phase32 的"strict 被拒"断言仍有效） |
+| RPC 事件 | `agent_settled`/`message_end`/`entry_appended`/`extension_ui_request`/`session_start`/`session_shutdown` 全部仍发射 |
+| 扩展 API | `registerTool`/`registerCommand`/`setUnavailableTools`/`getActiveTools`/`setActiveTools`/`sendUserMessage` 全部在位 |
+| 新 UI 方法 | `setStatus`/`setWorkingMessage` 为 fire-and-forget，无需响应，探针不用改 |
+
+## 三、唯一影响到我们的上游行为变更：#318 移除 RPC 用户消息回显
+
+升级后 `live-args-forward` 与 `live-review` 失败。**先证明是上游变更而非我们的回归**：不经插件、直接 prompt 一个独特字符串（`PLAINPROBE-xyz`），新宿主的 RPC 输出里**同样零痕迹**（只有 1 个 `step.activity_capabilities` entry_appended）。根因是 #318「写会话事实记录而非回放进度」。
+
+runner 原来靠 grep 该回显断言"逐字转发"——那是在断言一个上游已不再发射的细节。
+
+**修法（比原来更强）**：新增 **phase44**（8 断言，standalone），用假 ExtensionAPI 驱动**真实命令 handler**，直接读传给 `sendUserMessage` 的字符串。覆盖：裸参数逐字、空格保留、tier token 消耗其余作为 request、无参数不乱发、`off` 不转发。live 检查只保留它本该管的真实宿主半边（激活 + 转发宣告 + 宿主接受 prompt）。
+
+**反向验证**：把转发时的空格压掉 → phase44 指名失败 2 处（"spaces are preserved"、"tier token is consumed"）。
+
+## 四、官方已实现功能比对：search 有交集但**差集正是我们存在的理由**
+
+上游 #364 把 `search_web` 改成有序候选链（StepFun 端点 + tavily/tinyfish/exa/firecrawl/parallel 免费候选）：
+
+| 维度 | 上游 `search_web` | 我们 `bin/topo-search.mjs` |
+|---|---|---|
+| 参数 | **仅 `query`** | `--query --count(1-5) --need-content` |
+| 结果条数 | 固定 **10** | 可配 1–5 |
+| 摘要上限 | **400 字符** | 服务方给（DeepSeek 实测 ~1373） |
+| **网页全文** | **无**（全仓 `need_content` 零命中） | **有**（实测 0→1442 字符） |
+| **任意 URL 抓取** | **无独立 fetch 工具** | **有** `fetch --url` |
+| 端点 | StepFun MCP + 免费候选 | **厂家无关**，凭证用户自配 |
+
+**结论：不重复，保留。** #364 让无凭证会话也能搜索，但**不改变差集**——免费候选同样只给摘要。
+
+`[compaction]` 维持"不加插件键"决策，并把 0.1.8 的新默认值写进 CONFIGURATION(_CN)：`triggerRatio` 0.9→**0.85**、`contextProjection` `clm-v1`→**`off`**（原生摘要压缩成默认；上游实测 930K 会话上 CLM 47–72s vs 原生 16–19s）、提示估算改按 **UTF-8 字节**、新增 `retry.provider.streamIdleTimeoutMs`(300000) 与 `compaction.autoClm.coldMaxPrefillTokens`(262144)。
+
+**记录一处上游自身不一致**（不替其断言）：changelog 说 `contextProjection` 默认改 `off`，但 `settings-manager.ts` 的 `getContextProjectionMode()` 未显式设置时仍返回 `"clm-v1"`。实际行为以代码为准；本插件两值都不设，不受影响。
+
+其余上游新能力（`AgentSession.submit` #363、`/ps`+`/subagents` #351、subagent 批默认固定 8 #350、会话级定时任务 #352、执行轨迹、工具调用计时、git runtime-context、provider 流空闲看门狗）**均无重复，也无需对接**。
+
+## 五、优化：无可删的重复实现
+
+- 我们的工具输出截断已用 `Buffer.byteLength(text,"utf8")`（`tools.ts:51`），与上游新的字节算法一致，phase16 有"4 bytes omitted"断言；
+- 配置一律走宿主 `readStepConfig`，无自制 TOML 解析（phase31 的 minimal reader 是探针断言种子文本用，可接受）；
+- 上游虽导出 `textUtf8ByteLength`，但与 `Buffer.byteLength` 等价，为一个相同操作加 import 不划算；
+- 覆盖审计：21 个模块全部有探针引用（`team/errors.ts` 经 members.ts 薄桶间接覆盖），CLI 参数全覆盖，**无缺口**。
+
+**故本轮的优化实质是"消除一处脆弱断言 + 同步一处滞后文档"，而非删代码。**
+
+## 六、验证
+
+| 项 | 结果 |
+|---|---|
+| 全量零 token 门 | **39 phase + manifest + 7 live + orphan-check 全绿**（94s） |
+| tsc | **0 错误** |
+| 断言总数 | 748 → **756**（phase44 +8） |
+| 反向验证 | phase44 ×1（压空格 → 指名失败 2 处） |
+| 真实 key 花费 | **0** |
+| 文档同步 | sandbox/README(_CN) pin+版本、HANDOFF 架构地图、TESTING(_CN) phase33 宿主版本、CONFIGURATION(_CN) compaction 段 |
+### 98. 0.1.8 接口审计与缺口补齐轮（plan-138）
+
+**用户 prompt**：「[团队方案 · 性能] …成员名单：AgentLead（队长/集成，high）；EnvUpdater（环境，medium）；InterfaceAuditor（接口审计，high）；CodeRefactor（重构，high）；ParallelOptimizer（优化竞速，high）；QAAnalyst（测试，medium）。通信拓扑：star。任务1 EnvUpdater更新沙箱环境并验证依赖兼容性；2 InterfaceAuditor解析step code变更并输出接口影响报告；3 InterfaceAuditor比对官方功能与项目代码，输出去重与缺口清单（blockedBy 2）；4 CodeRefactor按清单执行去重并迁移至官方能力（blockedBy 3）；5 ParallelOptimizer基于新环境独立提交优化与性能方案（blockedBy 1）；6 AgentLead择优合并任务4与5成果并落地最终改动（blockedBy 4,5）；7 QAAnalyst执行全量回归，梳理并输出必须手动测试项清单（blockedBy 6）；8 AgentLead汇总更新报告、风险与手动测试清单（blockedBy 7）。step code已经更新，请创建合理的计划，更新沙箱环境，检查接口是否更新，是否有官方已经实现的功能要避免重复，是否可以进一步改进优化项目。完成修改后，告诉我那些项目需要手动测试」。
+
+**组建与执行**：建 agent-lead/env-updater/iface-auditor/code-refactor/par-opt/qa-analyst 六成员（`model: step-5-preview`；effort 按方案：high/high/high/high/high/medium），star 拓扑，任务板 T135–T142（blockedBy 链完整）。两路派发**超时**（本会话第 55/56 次），T1–T8 由队长亲自执行。
+
+## 一、环境复核（T1）：无需重装
+
+- submodule pin `414416e2f` 确为 `origin/main` 尖端、工作树干净、本地构建 0.1.8、`resolve_step_bin` 解析到本地构建；
+- **`pnpm-lock.yaml`/`package.json` 在两 pin 间无 diff**——上游 34 提交未改任何依赖；`node_modules` 时间戳（今天 14:06）新于源码最后改动（11-21）；
+- `@step-harness/coding-agent` 可导入 **479 个导出**，tsc 全导入图 **0 错误**；
+- 零成本预检：假模型端点 + TeamManager 派发 **36ms settle、0 token**。
+
+## 二、接口审计（T2）：无破坏性变更，一处语义需注意
+
+- 扩展 API 六方法、`ExtensionContext`、CLI 九 flag（含 `--approval-mode` 仍 confirm/auto）全部有效；
+- `ExtensionUI` 新增 `setStatus`/`setWorkingMessage`/`editor`——**`setStatus` 是 fire-and-forget**（`rpc-mode.ts:195-204` 注释明写），探针无需应答；
+- **`session_shutdown` 现有三种 reason**（`reload`/可变/`quit`，见 `agent-session-runtime.ts:258/534` 与 `agent-session.ts:4377`）——我们的 handler 对每种都会杀成员，**正确但此前无断言**；
+- 系统性排查"上游撤回的依赖"：除 #318 移除 RPC 回显外无其他。
+
+## 三、缺口清单（T3）：7 个候选全部不迁移
+
+| 候选 | 不迁移理由 |
+|---|---|
+| `--exclude-tools` | 是对 allowlist 的**过滤**，语义不等价；phase37 已钉住 `--tools` |
+| `--tool-override` | 改审批级别，与 `--approval-mode auto` 叠加出难推理组合 |
+| `setStatus` | 状态栏常驻 vs 团队板一次性快照 |
+| `AgentSession.submit` | 不提供 `agent_settled` 与 usage delta |
+| `streamIdleTimeoutMs` | 层次不同，我们的更严（10s vs 300s） |
+| `--no-builtin-tools` 等 4 个 | 无实测数据支持，标"未验证、暂缓" |
+| `--provider` | 不适用 |
+
+**但找到两个真实缺口**：C1 `session_shutdown` 多 reason 无覆盖；C2 `--tools` 空值时**不传**且 `topo_team_msg` 也不会进白名单（省略 `tools` 的调用方会得到无法通信的成员）。
+
+## 四、重构（T4）：零产品代码改动，只补探针
+
+新增 `test/smoke/phase45.ts`（12 断言，standalone）覆盖 C1/C2：
+- 空 tool list 不传 `--tools`、也拿不到 `topo_team_msg`（记为既定契约）；
+- 非空 list 构建 allowlist 且 `topo_team_msg` 必在其中、调用方 tools 保留；
+- 子队长团队工具只在可编排时加入（`canOrchestrate = childDepth < maxRecursionDepth`）；
+- `shutdown` 在 `reload`/`quit`/`new` 三种 reason 下都清空成员。
+
+**实施中修掉自己的一个错**：初版把"能编排的成员"设成 depth-0 队长子嗣，而默认 `maxRecursionDepth=1` 时 `1<1` 为假，队长子嗣本就不能编排——与 plan-134 的 phase43 off-by-one 同类，已把 `plan(p)` 语义写进注释。
+
+**双向反向验证**：空 tools 也构建 allowlist → 指名失败 2 处；allowlist 去掉 `topo_team_msg` → 指名失败 1 处。
+
+## 五、优化竞速（T5）：最大候选被自我推翻
+
+T5 假设"38 phase × 2s 退出等待 = 76 秒浪费"，A/B 实测只差 **59ms**——那 2s 绝大部分是 step 会话启动开销。**假设不成立，未改。** 若当时改 38 个文件，收益近零而 diff 噪音巨大。
+
+结构性优化亦无可做项：`index.ts` 全文只 1 处 `existsSync`、`getConfig()` 有缓存、三个大文件用户已拍板不拆。
+
+T5 另发现一个真实盲区：诊断探针漏写 `import type { ExtensionAPI }` 时，runner 报 `fails=0` 却判失败、`probe_log` 全空——**runner 不跑 tsc**，类型错误的探针会变成谜之失败。建议加一次前置 tsc 检查（门禁 ~100s→~110s），本轮未实施。
+
+## 六、择优合并（T6）：无冲突
+
+T4 与 T5 都**零产品代码改动**，且都诚实判定"无可迁移、无可删、无可优化"，并写明不改成理由。**两个独立方向用不同方法得出同一结论，比单一方向说"没问题"可信得多。**
+
+## 七、回归（T7）
+
+| 项 | 结果 |
+|---|---|
+| tsc | **0 错误** |
+| 全量零 token 门 | **40 phase + manifest + 7 live + orphan-check 全绿**（124s） |
+| 断言基线 | 756 → **768**（phase45 +12） |
+| 反向验证 | phase45 ×2，均指名失败 |
+| 探针质量 | 恒真零命中；**过窄断言发现并修掉 1 处**（如上）；覆盖缺口 C1/C2 已补 |
+
+## 八、结论
+
+**本轮的正确结论是"没有可做的迁移与优化"。** 五项独立工作指向同一结论，唯一实质增量是两个此前无覆盖的边界探针（phase45，12 断言）。
+
+---
+
+## plan-139：破坏性抽检抓出三个"在测空气"的探针（2026-11-23）
+
+用户需求：「请检查并优化测试项目，然后告诉我手动测试的流程」。按用户确认的四成员方案组建：林测/陈测（测试专家，high）、周文（技术文档师，medium）、郑维（队长/测试架构师，high），star 拓扑，T1/T2 双通道竞速后 T3–T7 串行依赖。六次派发全部超时，T1–T7 由队长亲自执行。
+
+### 方法：往产品代码注入真 bug，看探针是否指名失败
+
+这是唯一能回答"探针是否在测什么"的方法。三次注入抓出三个读代码看不出的缺陷：
+
+| 注入 | 修复前 | 修复后 |
+|---|---|---|
+| `spawn.ts` 的 `--tools` 守卫改成真值判断 | **未抓住** | 指名失败 2 条 |
+| `config.ts` 默认 `members.max` 8→7 | 抓住了但理由错误、信息误导 | phase9 正确地不失败，phase20 指名抓住 |
+| `members.ts` shutdown 跳过注册表清扫 | **未抓住** | 指名失败 3 条 |
+
+**注入1 的真相**：phase45 的"空 tool list"传的是 `{name, sessionId}`，`member.tools === undefined`，对真值判断仍为假。探针名字写"空"，实际测的是"缺失"——只覆盖一半输入空间。
+
+**注入2 的真相**：phase9 的"未授信时忽略"写成 `!== 7`，与默认值耦合。默认一改就失败并报 `got 7`，读起来像"项目配置泄漏了"，其实什么都没泄漏。改为与"无项目配置的干净加载"比对；改后同一注入正确地让 phase9 保持绿，由 phase20 的正面断言 `members.max === 8` 抓住——**无检测空洞，且每个测试只为正确的理由失败**。
+
+**注入3 的真相**：断言是 `before > 0 && after === 1`，在**重新创建成员之后**数个数，而 createMember 按名字 upsert。注册表于是可以留着 `status:"idle"`、指向已死 pid 的谎言条目。同段还发现 `check("the spawned member process is stopped", member.pid > 0)`——恒真，什么都没测。
+
+**我自己的失误（如实记录）**：注入3 的第一版只加了注释、什么都没禁用，phase45 全绿的理由与探针本身毫无关系。两处发现都是靠追问"为什么它还是绿的"而非接受绿灯才纠正的。
+
+### 采纳的 6 项优化
+
+| # | 优化 | 收益 | 反向验证 |
+|---|---|---|---|
+| 1 | runner 前置 tsc | 消灭 `fails=0` 谜之失败整类（约 3.4s） | 注入类型错误 → `typecheck: FAILED` + 打印 `error TS2322` |
+| 2 | phase45 补 `tools: []` | 消除半覆盖 | 注入真值守卫 → 指名失败 2 条 |
+| 3 | phase45 补注册表清扫断言 | 堵住"谎言条目"无覆盖 | 注入跳过清扫 → 指名失败 3 条 |
+| 4 | phase45 恒真断言改真实 pid 轮询 | 把永远通过的断言变成真断言 | — |
+| 5 | phase9 死亡轮询 1000→100ms | 少等约 0.8s，"10s 后仍存活"信息变诚实 | 探针仍绿 |
+| 6 | phase9 负断言改为默认值相对 | 失败信息不再误导 | 注入默认值 → phase9 正确地不失败、phase20 指名失败 |
+
+### 否决的 2 项（记录在案）
+
+| 项 | 收益 | 否决理由 |
+|---|---|---|
+| 并行化 7 个 live 检查 | 每次调用省约 20s | 判别真伪的唯一脚本上的大改；今天负载下（firefox/zcode/chrome 占 16 核约 150%）7 个并发会话会各自逼近自己的 `timeout 45`——同一脚本已随负载在 99s～276s 间波动 |
+| 单 phase 调用跳过 live 检查 | 省约 28s | 破坏"绿 = live 七项也过"这条性质 |
+
+### 验证
+
+tsc 0 错误；全量零 token 门 40 phase 全绿；断言 768 → **773**；六次注入全部还原（`git diff extensions/` 为空）；phase45/phase9 单跑复绿。
+
+### 交付：手动测试流程
+
+`docs/MANUAL-TESTING.md` / `_CN.md` 新增「The workflow — what you run yourself, in order」/「手动测试流程 — 需要你本人按序执行的部分」一节，把 M1（真实安装/卸载）、M2（信任弹窗 Accept+Cancel）、M3（TUI 像素与按键）、M5（英文译文审阅）、可选 M6（八成员性能）整合成单一有序流程，每项标注耗时、是否写真实 settings、是否花钱，并说明顺序为何有意义，外加 0.1.8 的两个观察点（#318 不再回显输入、压缩走原生摘要）。
