@@ -77,8 +77,8 @@ config, shared with your team, auto-installed once the project is trusted).
 From git — no packaging step needed, it is a standard step package:
 
 ```bash
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.3.0)
-step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.3.0           # this release, pinned
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@latest         # stable release (recommended; currently v0.4.0)
+step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.4.0           # this release, pinned
 step install git:github.com/CTCingithub/Step-Code-Agent-Team@v0.3.0-preview   # preview line (superseded by v0.3.0; latest never moves for a preview)
 ```
 
@@ -498,7 +498,7 @@ than as an unsupported-platform message.
 
 ## Status
 
-0.3.0 feature set (tagged `v0.3.0` — `@latest` follows it; the earlier `v0.3.0-preview` tag stays on the same code plus the preview-only install line):
+0.4.0 feature set (tagged `v0.4.0` — `@latest` follows it; the earlier `v0.3.0-preview` tag stays on the same code plus the preview-only install line):
 
 - **Command & activation**: `/topo` with plan tiers, `/topo review [target]`,
   and `/topo off`; plugin-specific activation keywords with forced migration
