@@ -596,6 +596,13 @@ function seedSections(): SeedSection[] {
  * absent/unreadable, the section is missing or malformed, or the running step
  * version does not export the reader.
  */
+/** Missing file is normal; a present-but-broken one is worth a trace. */
+function noteUnreadable(file: string, err: unknown): void {
+	if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+		configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
+	}
+}
+
 function readUnifiedSection(file: string): Record<string, unknown> | null {
 	const read = stepConfigExports.readStepConfig;
 	if (typeof read !== "function") return null;
@@ -603,10 +610,7 @@ function readUnifiedSection(file: string): Record<string, unknown> | null {
 	try {
 		doc = read(file);
 	} catch (err) {
-		// Missing file is normal; a present-but-broken one is worth a trace.
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
-		}
+		noteUnreadable(file, err);
 		return null;
 	}
 	if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return null;
@@ -748,10 +752,7 @@ function applyFile(config: PluginConfig, file: string): void {
 	try {
 		raw = JSON.parse(fs.readFileSync(file, "utf8"));
 	} catch (err) {
-		// Missing file is normal; a present-but-broken one is worth a trace.
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
-		}
+		noteUnreadable(file, err);
 		return; // unreadable file: defaults stand
 	}
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return;
@@ -777,10 +778,7 @@ function readSection(file: string): Record<string, unknown> | null {
 	try {
 		raw = JSON.parse(fs.readFileSync(file, "utf8"));
 	} catch (err) {
-		// Missing file is normal; a present-but-broken one is worth a trace.
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			configNote(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
-		}
+		noteUnreadable(file, err);
 		return null;
 	}
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
@@ -794,9 +792,15 @@ function legacyNote(file: string): void {
 	configNote(`legacy file ${file} still honored; prefer the "${CONFIG_SECTION}" table in the unified step config (config.toml)`);
 }
 
+/** The one predicate for "debug tracing is on" — it was written three ways. */
+function debugOn(): boolean {
+	const v = process.env.STEPCODE_TEAM_DEBUG;
+	return v === "1" || v === "true";
+}
+
 /** Debug-gated one-line config trace. */
 function configNote(message: string): void {
-	if (process.env.STEPCODE_TEAM_DEBUG !== "1" && process.env.STEPCODE_TEAM_DEBUG !== "true") return;
+	if (!debugOn()) return;
 	console.error(`[stepcode-agent-team] config: ${message}`);
 }
 
@@ -839,8 +843,7 @@ function mergeSection(target: Record<string, unknown>, source: Record<string, un
 }
 
 function applyEnvOverrides(config: PluginConfig): void {
-	const debug = process.env.STEPCODE_TEAM_DEBUG;
-	if (debug === "1" || debug === "true") config.debug = true;
+	if (debugOn()) config.debug = true;
 	const cost = process.env.STEPCODE_TEAM_COST_WARN;
 	if (cost !== undefined && cost.trim() !== "") {
 		const parsed = Number.parseFloat(cost);
@@ -854,7 +857,7 @@ function applyEnvOverrides(config: PluginConfig): void {
 }
 
 function logWarnings(warnings: string[]): void {
-	if (process.env.STEPCODE_TEAM_DEBUG !== "1" && process.env.STEPCODE_TEAM_DEBUG !== "true") return;
+	if (!debugOn()) return;
 	for (const warning of warnings) console.error(`[stepcode-agent-team] config: ${warning}`);
 }
 
@@ -877,19 +880,24 @@ function isStringArray(value: unknown): value is string[] {
  * Returns the coerced value, or undefined when the input is not a usable
  * scalar for that type.
  */
-function scalarNumberOf(value: unknown, kind: "int" | "number"): number | undefined {
-	if (typeof value === "number") return value;
+/** A quoted scalar is the only way to write a non-string value under KEEP THE QUOTES. */
+function scalarStringOf(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	const text = value.trim();
-	if (text === "") return undefined;
+	return text === "" ? undefined : text;
+}
+
+function scalarNumberOf(value: unknown, kind: "int" | "number"): number | undefined {
+	if (typeof value === "number") return value;
+	const text = scalarStringOf(value);
+	if (text === undefined) return undefined;
 	const parsed = kind === "int" ? Number.parseInt(text, 10) : Number.parseFloat(text);
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function scalarBooleanOf(value: unknown): boolean | undefined {
 	if (typeof value === "boolean") return value;
-	if (typeof value !== "string") return undefined;
-	const text = value.trim();
+	const text = scalarStringOf(value);
 	if (text === "true") return true;
 	if (text === "false") return false;
 	return undefined;
@@ -898,8 +906,9 @@ function scalarBooleanOf(value: unknown): boolean | undefined {
 /** A comma-separated string is the only way to write a list inside the quoting convention. */
 function stringArrayOf(value: unknown): string[] | undefined {
 	if (isStringArray(value)) return value;
-	if (typeof value !== "string") return undefined;
-	const items = value.split(",").map((s) => s.trim()).filter(Boolean);
+	const text = scalarStringOf(value);
+	if (text === undefined) return undefined;
+	const items = text.split(",").map((s) => s.trim()).filter(Boolean);
 	return items.length > 0 ? items : undefined;
 }
 

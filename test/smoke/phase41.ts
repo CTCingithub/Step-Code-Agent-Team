@@ -79,8 +79,14 @@ export default function (pi: ExtensionAPI) {
 			serverA.start();
 			serverB.start();
 			servers.push(serverA, serverB);
-			await new Promise((r) => setTimeout(r, 400));
-			const bothExist = fs.existsSync(mA.socketPath) && fs.existsSync(mB.socketPath);
+			// Poll for both sockets instead of a fixed wait: the two listens race,
+			// and a fixed sleep either wastes time when they are fast or flakes
+			// when the machine is loaded.
+			let bothExist = false;
+			for (let i = 0; i < 50 && !bothExist; i++) {
+				await new Promise((r) => setTimeout(r, 100));
+				bothExist = fs.existsSync(mA.socketPath) && fs.existsSync(mB.socketPath);
+			}
 			check("isolation: both sockets exist after a concurrent start", bothExist, "");
 			const modes = [mA.socketPath, mB.socketPath].map((p) => (fs.existsSync(p) ? fs.statSync(p).mode & 0o777 : 0));
 			check("isolation: both sockets are 0600", modes[0] === 0o600 && modes[1] === 0o600, modes.map((m) => m.toString(8)).join(","));

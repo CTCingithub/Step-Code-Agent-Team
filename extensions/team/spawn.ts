@@ -25,9 +25,6 @@ export interface SpawnPlan {
 	env: Record<string, string>;
 }
 
-/** A member name is safe as a file name and an RPC identity (see naming.ts). */
-export const MEMBER_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
-
 function debugNote(message: string): void {
 	if (getConfig().debug) console.error(`[stepcode-agent-team] ${message}`);
 }

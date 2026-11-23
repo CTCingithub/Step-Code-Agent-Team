@@ -11,7 +11,7 @@ phase14 25
 phase15 23
 phase16 37
 phase17 2
-phase18 16
+phase18 21
 phase19 11
 phase20 16
 phase21 34

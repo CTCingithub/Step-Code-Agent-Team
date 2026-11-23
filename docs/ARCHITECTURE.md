@@ -33,6 +33,7 @@ Leader session (step, loads this extension)
 ├── extensions/team/naming.ts   member-name and session→team-id rules (MEMBER_NAME_RE, teamIdForSession)
 ├── extensions/team/errors.ts   dispatch error classification: what may be retried, and why
 ├── extensions/team/spawn.ts    member spawn as pure functions: args, env, model and effort resolution
+├── extensions/team/framing.ts  newline-delimited framing shared by both ends of the team wire protocol (splitLines)
 ├── extensions/members.ts       TeamManager: member/task/topology orchestration (re-exports the team/ rules)
 ├── extensions/render.ts     TUI rendering (renderCall / renderResult)
 │

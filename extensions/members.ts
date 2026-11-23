@@ -38,6 +38,7 @@ import {
 } from "./team/errors.ts";
 import { MEMBER_NAME_RE, teamIdForSession } from "./team/naming.ts";
 import { buildSpawnArgs, resolveEffort, resolveMemberModel, spawnableModel, writeMemberPrompt } from "./team/spawn.ts";
+import { splitLines } from "./team/framing.ts";
 
 // The team/ modules own the rules; this file re-exports the ones its callers
 // (tools.ts, the smoke phases) import from here, so the split does not churn
@@ -952,13 +953,9 @@ export class TeamManager {
 			};
 
 			proc.stdout.on("data", (data: Buffer) => {
-				buffer += data.toString("utf8");
-				let idx: number;
-				while ((idx = buffer.indexOf("\n")) >= 0) {
-					const line = buffer.slice(0, idx).replace(/\r$/, "");
-					buffer = buffer.slice(idx + 1);
-					consumeLine(line);
-				}
+				const framed = splitLines(buffer + data.toString("utf8"));
+				buffer = framed.rest;
+				for (const line of framed.lines) consumeLine(line);
 			});
 			proc.stderr.on("data", (data: Buffer) => {
 				stderr += data.toString();
