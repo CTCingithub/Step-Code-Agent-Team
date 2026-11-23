@@ -26,6 +26,7 @@
 
 ## Status overview (2026-10-29)
 
+> Automation baseline re-verified **2026-11-23 (plan-138 round)**: full gate green at **40 phases** (+ manifest + 7 live checks + orphan-check, 109–124s); tsc zero across the whole import graph; assertion-count ratchet baseline 40 phases / 768 entries (`test/smoke/assertion-counts.txt`). Earlier baselines below are historical records and are left as they were.
 > Automation baseline re-verified **2026-10-30 (R17, the manual-round-driven round)**: full gate green; tsc zero; probes 5a/5b/5c/7/8/9 all PASS. The 2026-10-29/30 manual round's two wrong conclusions are corrected in the docs (the ring chain-length semantics and the config file location), the config now traces which file it read and the effective values under `STEPCODE_TEAM_DEBUG=1`, the topology denial names its shape, and a teammate's reply carries provenance framing.
 >
 > Automation baseline re-verified **2026-10-29 (R16, the leftover-closure round)**: zero-token gate green again; **tsc across the whole import graph is now zero errors** (was 17); new probe scenario **5c** automates the pinned-tier KEYWORD path (the last item that still needed a manual spot-check), and a relative `storage.dir` now resolves under the agent dir instead of the launch directory.
